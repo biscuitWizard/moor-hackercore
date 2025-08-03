@@ -1,0 +1,3 @@
+[submodule "vendor/moor"]
+	path = vendor/moor
+	url = git@github.com:rdaum/moor.git
