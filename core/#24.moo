@@ -234,8 +234,6 @@ object #24
     $player_db:delete2(victim.name, victim);
     for a in (victim.aliases)
       $player_db:delete2(a, victim);
-      "I don't *think* this is bad---we've already toaded the guy.  And folks with lots of aliases screw us. --Nosredna";
-      $command_utils:suspend_if_needed(0);
     endfor
     return 1;
     "Paragraph (#122534) - Sat Nov 5, 2005 - Remove any shared character registry listings for `victim'.";
@@ -354,7 +352,6 @@ object #24
             owner.owned_objects = setadd(owner.owned_objects, o);
           endif
         endif
-        $command_utils:suspend_if_needed(0);
       endfor
       player:tell("Done adding, beginning verification pass.");
       this:verify_owned_objects();
@@ -376,7 +373,6 @@ object #24
                 o.owner.owned_objects = setadd(o.owner.owned_objects, o);
               endif
             endif
-            $command_utils:suspend_if_needed(0, p);
           endfor
         endif
       endfor
@@ -456,16 +452,14 @@ object #24
     thresh = args ? args[1] | 5;
     strs = {};
     for i in [1..length(mhs)]
-      $command_utils:suspend_if_needed(0);
       if (cnt[i][1] + cnt[i][2] > thresh)
         strs = {@strs, $string_utils:right(tostr(cnt[i][1]), 5) + " " + $string_utils:right(tostr(cnt[i][2]), 5) + " " + mhs[i]};
       endif
     endfor
-    sorted = $list_utils:sort_suspended(0, strs);
+    sorted = $list_utils:sort(0, strs);
     len = length(sorted);
     player:tell(" miss ambig word");
     for x in [1..len]
-      $command_utils:suspend_if_needed(0);
       player:tell(sorted[len - x + 1]);
     endfor
     player:tell(" - - - - - - - - -");
@@ -486,7 +480,6 @@ object #24
     footnotes = {};
     nwidth = length("Player name");
     for u in (unsorted)
-      $command_utils:suspend_if_needed(0);
       if (u.programmer)
         pref = "% ";
         footnotes = setadd(footnotes, "prog");
@@ -511,8 +504,7 @@ object #24
       endif
       alist = {@alist, {@u3, where}};
     endfor
-    alist = $list_utils:sort_alist_suspended(0, alist, 3);
-    $command_utils:suspend_if_needed(0);
+    alist = $list_utils:sort_alist(0, alist, 3);
     headers = {"Player name", "Last Login", "From Where"};
     before = {0, nwidth + 3, nwidth + length(ctime(0)) - 11};
     tell1 = "  " + headers[1];
@@ -524,7 +516,6 @@ object #24
     who:notify(tell1);
     who:notify(tell2);
     for a in (alist)
-      $command_utils:suspend_if_needed(0);
       tell1 = a[1];
       for j in [2..3]
         tell1 = su:left(tell1, before[j]) + a[j];
@@ -564,7 +555,6 @@ object #24
         for domain in (s)
           "Temporary kluge until $site_db is repaired. --Nosredna";
           for b in ($site_db:find_exact(domain) || {})
-            $command_utils:suspend_if_needed(0, "..netwho..");
             if (typeof(b) == STR)
               sites = setadd(sites, b + "." + domain);
             else
@@ -589,7 +579,6 @@ object #24
                 st = tostr(st, comma ? ", " | "", p);
               endif
               comma = 1;
-              $command_utils:suspend_if_needed(0);
             endfor
           else
             st = st + (valid(who) ? "*** recreated ***" | "*** recycled ***");
@@ -605,7 +594,6 @@ object #24
       "User typed 'from'.  Go search for users from this site.  (SLOW!)";
       howmany = 0;
       for who in (players())
-        $command_utils:suspend_if_needed(0);
         matches = {};
         for name in (who.all_connect_places)
           if (index(where, "*") && su:match_string(name, where) || (!index(where, "*") && index(name, where)))
@@ -953,7 +941,6 @@ object #24
       endif
     endfor
     for prop in (properties(object))
-      $command_utils:suspend_if_needed(0);
       info = property_info(object, prop);
       if (!(index(info[2], "c") || (info[1] != object.owner && valid(info[1]) && is_player(info[1]))))
         same = same && info[1] == newowner;
@@ -1115,7 +1102,7 @@ object #24
       return E_PERM;
     endif
     sum = 0;
-    for x in ($object_utils:leaves_suspended($mail_recipient))
+    for x in ($object_utils:leaves($mail_recipient))
       this.expiration_progress = x;
       temp = x:expire_old_messages();
       if (typeof(temp) == INT)
@@ -1139,7 +1126,6 @@ object #24
       player:tell("Flushing ancient editor sessions.");
       for x in ({$verb_editor, $note_editor, $mail_editor})
         x:do_flush(time() - 30 * 86400, 0);
-        $command_utils:suspend_if_needed(0);
       endfor
     endif
   endverb

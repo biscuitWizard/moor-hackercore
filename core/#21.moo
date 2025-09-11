@@ -133,7 +133,6 @@ object #21
     if (prospectus)
       kids = 0;
       for k in (children(o))
-        $command_utils:suspend_if_needed(0);
         if (k.owner != o.owner)
           kids = 2;
           break k;
@@ -236,7 +235,6 @@ object #21
     count = bytes = 0;
     if (typeof(who.owned_objects) == LIST)
       for o in (who.owned_objects)
-        $command_utils:suspend_if_needed(0);
         if (!player:is_listening())
           return;
         endif
@@ -250,7 +248,6 @@ object #21
       endfor
     else
       for i in [start..end]
-        $command_utils:suspend_if_needed(0);
         o = toobj(i);
         if ($recycler:valid(o) && o.owner == who)
           didit = this:do_audit_item(o, match, pros);
@@ -308,7 +305,6 @@ object #21
         return " <1K";
       endif
       for entry in ($list_utils:slice(threshold, 1))
-        $command_utils:suspend_if_needed(0);
         i = $list_utils:iassoc(entry, threshold);
         if (size == entry)
           size = "1";
@@ -342,7 +338,6 @@ object #21
         endif
       endif
       for entry in ($list_utils:slice(threshold, 1))
-        $command_utils:suspend_if_needed(0);
         i = $list_utils:iassoc(entry, threshold);
         if (size == entry)
           size = "1";

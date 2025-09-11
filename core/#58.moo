@@ -432,7 +432,6 @@ object #58
         if (valid(t[5]) && t[5].wizard)
           tasks = {@tasks, t};
         endif
-        $command_utils:suspend_if_needed(1);
       endfor
     elseif ($command_utils:player_match_result(dobj = $string_utils:match_player(dobjstr), dobjstr)[1])
       return;
@@ -446,7 +445,6 @@ object #58
       player:notify("--------    ----------            -----         -----------------");
       now = time();
       for task in (tasks)
-        $command_utils:suspend_if_needed(0);
         {q_id, start, nu, nu2, owner, vloc, vname, lineno, this, ?size = 0} = task;
         if (typeof(start) == STR)
           time = start;
@@ -559,7 +557,6 @@ object #58
             this:_kill_task_message(task);
           endif
         endif
-        $command_utils:suspend_if_needed(3, "... killing tasks");
       endfor
     elseif (soon)
       now = time();
@@ -571,7 +568,6 @@ object #58
             this:_kill_task_message(task);
           endif
         endif
-        $command_utils:suspend_if_needed(3, "... killing tasks");
       endfor
     elseif (percent)
       for task in (queued_tasks)
@@ -582,7 +578,6 @@ object #58
             this:_kill_task_message(task);
           endif
         endif
-        $command_utils:suspend_if_needed(3, "... killing tasks");
       endfor
     elseif (colon || vrb || whatstr)
       for task in (queued_tasks)
@@ -593,7 +588,6 @@ object #58
             this:_kill_task_message(task);
           endif
         endif
-        $command_utils:suspend_if_needed(3, "... killing tasks");
       endfor
     else
       player:notify("Something is funny; I didn't understand your @kill command.  You shouldn't have gotten here.  Please send yduJ mail saying you got this message from @kill, and what you had typed to @kill.");
@@ -992,7 +986,6 @@ object #58
     endif
     blankargs = this:display_option("blank_tnt") ? {"this", "none", "this"} | #-1;
     for b in (vrb)
-      $command_utils:suspend_if_needed(0);
       where = b[1];
       q = b[2];
       short = typeof(q) == INT ? q | strsub(y = index(q, " ") ? q[1..y - 1] | q, "*", "");
@@ -1025,7 +1018,6 @@ object #58
     depth = length(all) < 4 ? -1 | 1;
     truncate_owner_names = length(all) > 1;
     for q in (all)
-      $command_utils:suspend_if_needed(0);
       inf = `property_info(it, q) ! ANY';
       if (inf == E_PROPNF)
         if (q in $code_utils.builtin_props)
@@ -1181,7 +1173,7 @@ object #58
       player:notify("You can't create a property on that object anyway.");
     elseif ($object_utils:has_property(object, prop = spec[2]))
       player:notify("That object already has that property.");
-    elseif (olist = $object_utils:descendants_with_property_suspended(object, prop))
+    elseif (olist = $object_utils:descendants_with_property(object, prop))
       player:notify("The following descendents have this property defined:");
       player:notify("  " + $string_utils:from_list(olist, " "));
     else
@@ -1334,14 +1326,14 @@ object #58
       player:notify($code_utils:dump_preamble(dobj));
     endif
     if ("props" in options)
-      player:notify_lines_suspended($code_utils:dump_properties(dobj, create, targname));
+      player:notify_lines($code_utils:dump_properties(dobj, create, targname));
     endif
     if (!("verbs" in options))
       player:notify("\"***finished***");
       return;
     endif
     player:notify("");
-    player:notify_lines_suspended($code_utils:dump_verbs(dobj, create, targname));
+    player:notify_lines($code_utils:dump_verbs(dobj, create, targname));
     player:notify("\"***finished***");
     $ansi_utils:remove_noansi();
   endverb
@@ -1621,7 +1613,6 @@ object #58
                 else
                   player:notify(code[i]);
                 endif
-                $command_utils:suspend_if_needed(0);
               endfor
             endfor
           endif
@@ -1690,7 +1681,6 @@ object #58
         if (valid(t[5]) && t[5].wizard)
           tasks = {@tasks, t};
         endif
-        $command_utils:suspend_if_needed(1);
       endfor
     elseif ($command_utils:player_match_result(dobj = $string_utils:match_player(dobjstr), dobjstr)[1])
       return;
@@ -1704,7 +1694,6 @@ object #58
       player:notify("--------    ----------            -----         -----------------");
       now = time();
       for task in (tasks)
-        $command_utils:suspend_if_needed(0);
         {q_id, start, nu, nu2, owner, vloc, vname, lineno, this, ?size = 0} = task;
         time = start >= now ? ctime(start)[5..24] | su:left(start == -1 ? "Reading input ..." | tostr(now - start, " seconds ago..."), 20);
         owner_name = valid(owner) ? owner.name | tostr("Dead ", owner);

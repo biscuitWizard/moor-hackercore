@@ -154,7 +154,6 @@ object #57
     suspendok = verb != "@grant";
     player:tell("Transferring ", toliteral(objlist), " to ", $string_utils:nn(newowner));
     for object in (objlist)
-      $command_utils:suspend_if_needed(0);
       same = object.owner == newowner;
       for vnum in [1..length(verbs(object))]
         info = verb_info(object, vnum);
@@ -305,7 +304,6 @@ object #57
     endfor
     player:notify(tostr("Chowning every saved object, verb and property to one of ", $string_utils:nn(owners_incore), "..."));
     for o in (saved)
-      $command_utils:suspend_if_needed(0, "... ", length(saved) - (o in saved), " to go");
       if (i = o.owner in owners_original)
         o.owner = owners_incore[i];
       elseif (valid(o.owner) && o.owner.wizard)
@@ -315,7 +313,6 @@ object #57
       endif
       old_verbs = {};
       for j in [1..length(verbs(o))]
-        $command_utils:suspend_if_needed(0, "... ", length(saved) - (o in saved), " to go");
         info = verb_info(o, j);
         if (i = info[1] in owners_original)
           info[1] = owners_incore[i];
@@ -333,7 +330,6 @@ object #57
         delete_verb(o, vname);
       endfor
       for p in ($object_utils:all_properties(o))
-        $command_utils:suspend_if_needed(0, "... ", length(saved) - (o in saved), " to go");
         info = property_info(o, p);
         if (i = info[1] in owners_original)
           info[1] = owners_incore[i];
@@ -348,7 +344,6 @@ object #57
     "----------------------------------------";
     player:notify("Removing all unsaved :recycle, :exitfunc, and :recycle verbs ...");
     for o in [#0..max_object()]
-      $command_utils:suspend_if_needed(0, "... ", o);
       if (valid(o) && !(o in saved))
         for v in ({"recycle", "exitfunc", "recycle"})
           while ($object_utils:defines_verb(o, v))
@@ -410,7 +405,6 @@ object #57
         for line in (msg)
           notify(p, line);
         endfor
-        $command_utils:suspend_if_needed(0);
       endfor
       suspend(announce_times[i] - {@announce_times, 0}[i + 1]);
     endfor
@@ -502,7 +496,6 @@ object #57
     player:notify("Compacting object numbers ...");
     old_oids = new_oids = {player};
     for o_ps in (saved_props)
-      $command_utils:suspend_if_needed(0);
       {o, o_props} = o_ps;
       "Oh geeze. 'o' could have already been renumbered!";
       if (ind = o in old_oids)
@@ -551,7 +544,6 @@ object #57
     player:notify("Performing miscellaneous cleanups ...");
     succeeded = 1;
     for o in [#0..max_object()]
-      $command_utils:suspend_if_needed(0);
       try
         move(o, #-1);
       except e (ANY)
@@ -561,7 +553,6 @@ object #57
       endtry
     endfor
     for o in (saved)
-      $command_utils:suspend_if_needed(0);
       if ($object_utils:has_callable_verb(o, "init_for_core"))
         try
           o:init_for_core(core_variant);
@@ -574,7 +565,6 @@ object #57
     endfor
     player:notify("Re-measuring everything ...");
     for o in [#0..max_object()]
-      $command_utils:suspend_if_needed(0);
       if (valid(o))
         $byte_quota_utils:object_bytes(o);
       endif
@@ -822,7 +812,6 @@ object #57
       unit = x[3];
       offset = x[4];
       for i in [1..length(pcounts)]
-        $command_utils:suspend_if_needed(0);
         j = i - offset;
         player:notify(tostr(su:left(tostr(j, " ", unit, j == 1 ? ":" | "s:"), col1), su:right(pcounts[i], col2), su:right(totalp = totalp + pcounts[i], col3), su:right(totalp * 100 / nump, col4), "%", with_objects ? tostr(su:right(ocounts[i], col5), su:right(totalo = totalo + ocounts[i], col6), su:right(totalo * 100 / numo, col7), "%") | ""));
       endfor
@@ -1089,10 +1078,8 @@ object #57
           footnotes = setadd(footnotes, "gray");
         endif
         alist = {@alist, u3};
-        $command_utils:suspend_if_needed(0);
       endfor
-      alist = $list_utils:sort_alist_suspended(0, alist, 3);
-      $command_utils:suspend_if_needed(0);
+      alist = $list_utils:sort_alist(0, alist, 3);
       headers = {"Player name", "Connected", "Idle Time", "From Where"};
       time_width = length("59 minutes") + 2;
       before = {0, w1 = nwidth + 3, w2 = w1 + time_width, w3 = w2 + time_width};
@@ -1106,7 +1093,6 @@ object #57
       player:notify(tell2);
       active = 0;
       for a in (alist)
-        $command_utils:suspend_if_needed(0);
         tell1 = a[1];
         for j in [2..4]
           tell1 = su:left(tell1, before[j]) + tostr(a[j]);
@@ -1485,14 +1471,12 @@ object #57
       slist = {@slist, "--- Temporary Subnets ---"};
       for d in (s)
         slist = {@slist, tostr(d[1], " until ", $time_utils:time_sub("$1/$3 $H:$M", d[2] + d[3]))};
-        $command_utils:suspend_if_needed(2);
       endfor
     endif
     if (s = $login.("temporary_" + which)[2])
       slist = {@slist, "--- Temporary Domains ---"};
       for d in (s)
         slist = {@slist, tostr(d[1], " until ", $time_utils:time_sub("$1/$3 $H:$M", d[2] + d[3]))};
-        $command_utils:suspend_if_needed(2);
       endfor
     endif
     if (slist)

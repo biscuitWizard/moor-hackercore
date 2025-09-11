@@ -54,7 +54,6 @@ object #62
       junk = {};
       while (1)
         for x in (junk)
-          $command_utils:suspend_if_needed(0);
           if (x in this.contents)
             "This is old junk that's still around five minutes later.  Clean it up.";
             if (!valid(x.owner))

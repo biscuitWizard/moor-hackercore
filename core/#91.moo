@@ -37,11 +37,9 @@ object #91
     lresult = max = length(args[1]);
     results = args[1];
     for n in [2..length(args)]
-      $command_utils:suspend_if_needed(0);
       if (type == "add")
         for m in [1..min(lcurr = length(args[n]), lresult)]
-          results[m] = results[m] + args[n][m];
-          $command_utils:suspend_if_needed(0);
+          results[m] = results[m] + args[n][m]
         endfor
         if (lcurr > lresult)
           results[lresult + 1..lcurr] = args[n][lresult + 1..lcurr];
@@ -49,18 +47,15 @@ object #91
       elseif (type == "sub")
         for m in [1..min(lcurr = length(args[n]), lresult)]
           results[m] = results[m] - args[n][m];
-          $command_utils:suspend_if_needed(0);
         endfor
         if (lcurr > lresult)
           for m in [lresult + 1..lcurr]
             results = {@results, -args[n][m]};
-            $command_utils:suspend_if_needed(0);
           endfor
         endif
       elseif (type == "mul")
         for m in [1..min(lcurr = length(args[n]), lresult)]
           results[m] = results[m] * args[n][m];
-          $command_utils:suspend_if_needed(0);
         endfor
         if (lcurr > lresult)
           results[lresult + 1..lcurr] = args[n][lresult + 1..lcurr];
@@ -68,12 +63,10 @@ object #91
       else
         for m in [1..min(lcurr = length(args[n]), lresult)]
           results[m] = results[m] / args[n][m];
-          $command_utils:suspend_if_needed(0);
         endfor
         if (lcurr > lresult)
           for m in [lresult + 1..lcurr]
-            results = {@results, typeof(foo = args[n][m]) == INT ? 1 / foo | 1.0 / foo};
-            $command_utils:suspend_if_needed(0);
+            results = {@results, typeof(foo = args[n][m]) == INT ? 1 / foo | 1.0 / foo}
           endfor
         endif
       endif
@@ -112,7 +105,6 @@ object #91
     result = {};
     for n in [1..j]
       result = {@result, this:column(mat, n)};
-      $command_utils:suspend_if_needed(0);
     endfor
     return result;
   endverb
@@ -335,7 +327,6 @@ object #91
     temp = this:vector_mul(v1, v2);
     result = typeof(temp[1]) == INT ? 0 | 0.0;
     for n in [1..l]
-      $command_utils:suspend_if_needed(0);
       result = result + temp[n];
     endfor
     return result;
@@ -410,7 +401,6 @@ object #91
     result = {};
     for m in [1..j]
       result = {@result, mat[m][i]};
-      $command_utils:suspend_if_needed(0);
     endfor
     return result;
   endverb
@@ -430,7 +420,6 @@ object #91
     for m in [1..i]
       sub = {};
       for n in [1..l]
-        $command_utils:suspend_if_needed(0);
         sub = {@sub, this:dot_prod(m1[m], this:column(m2, n))};
       endfor
       result = {@result, sub};
@@ -494,7 +483,6 @@ object #91
         flag = 0;
         break;
       endif
-      $command_utils:suspend_if_needed(0);
     endfor
     return flag;
   endverb

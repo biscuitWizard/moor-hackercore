@@ -181,54 +181,6 @@ object #99
     return line;
   endverb
 
-  verb "update_all" (this none this) owner: #36 flags: "rx"
-    if (!this:trusts(caller_perms()))
-      return E_PERM;
-    endif
-    codes = this.extra_codes;
-    "...we really don't need group regexps anymore, but I'm going to keep them around for a while just in case...";
-    for x in (this.groups)
-      this.(tostr("group_", x, "_regexp")) = tostr("%[%(", $string_utils:from_list(g = this.("group_" + x), "%|"), "%)%]");
-      codes = {@codes, @g};
-    endfor
-    this.all = codes;
-    this.all_regexp = tostr("%[%(b:%)?%(", $string_utils:from_list(codes, "%|"), "%|", this.xterm_256_regexp, "%|", this.truecolor_regexp, "%)%]");
-    this.terminate_regexp = tostr("%[%(b:%)?%(", $string_utils:from_list($set_utils:difference(codes, {@this.default_codes, @this.group_extra}), "%|"), "%|", this.xterm_256_regexp, "%|", this.truecolor_regexp, "%)%]");
-    this.notify_regexp = tostr("%[%(b:%)?%(", $string_utils:from_list(setremove(codes, "null"), "%|"), "%|", this.xterm_256_regexp, "%|", this.truecolor_regexp, "%)%]");
-    colors = {};
-    ccs = {};
-    for x in (this.group_colors)
-      if (!((a = this:get_code(x, "ESC")) in ccs))
-        colors = setadd(colors, x);
-        ccs = setadd(ccs, a);
-      endif
-    endfor
-    this.random_colors = colors;
-    this.replace_code_pointers = {};
-    index = 0;
-    leaves = $object_utils:leaves_suspended($ansi_pc);
-    data = {};
-    ll = length(leaves);
-    "...this will probably have to suspend on most large MOOs but you'll have to rewrite it so it can..";
-    while (index <= ll)
-      index = index + 1;
-      if (!is_player(leaves[index]))
-      elseif (typeof(x = this:update_player_codes(leaves[index])) != LIST)
-      elseif (!(i = $list_utils:iassoc(x, data, 2)))
-        data = listappend(data, {1, x});
-      elseif ((data[i][1] + 1) * length(x) / ll >= 6)
-        "Must be at least 25% of people for 25 element long lists...";
-        "                 50%               12...";
-        "                 12%               50... etc";
-        this.replace_code_pointers = listappend(this.replace_code_pointers, x);
-        index = 0;
-        data = {};
-      else
-        data[i][1] = data[i][1] + 1;
-      endif
-    endwhile
-  endverb
-
   verb "get_code" (this none this) owner: #36 flags: "rx"
     if (caller != this)
       return E_PERM;
@@ -247,11 +199,11 @@ object #99
     endif
   endverb
 
-  verb "cutoff*_suspended" (this none this) owner: #36 flags: "rx"
-    ":cutoff[_suspended] (STR string, NUM start, NUM end) => STR";
+  verb "cutoff*" (this none this) owner: #36 flags: "rx"
+    ":cutoff (STR string, NUM start, NUM end) => STR";
     "Acts like: string[start..end] but ignores ANSI codes.";
     args = {@args, 0}[1..4];
-    if (typeof(info = this:cutoff_locs(@args, verb == "cutoff_suspended")) == LIST)
+    if (typeof(info = this:cutoff_locs(@args, 0)) == LIST)
       return args[1][info[1]..info[2]];
     else
       return info;
@@ -964,7 +916,6 @@ object #99
         player:notify(tostr("Renaming $string_utils:redirect_ansi to \"", redirect, "\"."));
         set_verb_info(su, "redirect_ansi", listset(info, redirect, 3));
       endif
-      $command_utils:suspend_if_needed(0);
       !(length(vc = verb_code($login, "notify")) == 2 && index(vc[2], "$ansi_utils:delete")) && $command_utils:yes_or_no("Update $login:notify?") ? set_verb_code($login, "notify", {"(caller!=$ansi_utils)&&set_task_perms(caller_perms());notify(player,$ansi_utils:delete(args[1]));"}) || player:notify("$login:notify changed.") | (spiffy = 0) || player:notify("$login:notify left alone.");
       thatline = "line[1..min(width, length(line))]";
       newline = "$ansi_utils:cutoff(line,1,min(width,$ansi_utils:length(line)))";
@@ -980,14 +931,12 @@ object #99
         player:notify("Setting $login:@who...");
         set_verb_code($login, "@who", code);
       endif
-      $command_utils:suspend_if_needed(0);
       code = {};
       for x in (verb_code($guest, "do_reset", 0, 0))
         if ((m = match(x, "^for x in (%(%{.+%}%))$")) && (info = $string_utils:to_value(substitute("%1", m)))[1])
           x = tostr("for x in (", $string_utils:print($set_utils:union(info[2], $ansi_utils.reset_guest_props)), ")");
         endif
         code = {@code, x};
-        $command_utils:suspend_if_needed(0);
       endfor
       if (code != verb_code($guest, "do_reset", 0, 0))
         player:notify("Setting $guest:do_reset...");
@@ -1003,7 +952,6 @@ object #99
         else
           code = {@code, x};
         endif
-        $command_utils:suspend_if_needed(0);
       endfor
       if (code && code != verb_code($prog, "@list", 0, 0))
         player:notify("Setting $prog:@list...");
@@ -1015,7 +963,6 @@ object #99
         a[1] = a[1] || index(x, "$ansi_utils:add_noansi(");
         a[2] = a[2] || index(x, "$ansi_utils:remove_noansi(");
         code = {@code, x};
-        $command_utils:suspend_if_needed(0);
       endfor
       a[1] || (code = {"$ansi_utils:add_noansi();", @code});
       a[2] || (code = {@code, "$ansi_utils:remove_noansi();"});
@@ -1023,7 +970,6 @@ object #99
         player:notify("Setting $generic_editor:list_line...");
         set_verb_code($generic_editor, "list_line", code);
       endif
-      $command_utils:suspend_if_needed(0);
       if (!$object_utils:defines_verb($player_db, "insert"))
         player:notify("Adding $player_db:insert...");
         add_verb($player_db, {player, "rxd", "insert"}, {"this", "none", "this"});
@@ -1042,7 +988,6 @@ object #99
       endif
       "...ugh, I want to put $prog:@dump in here but the one I put on NestMOO is too big to search...";
       "----== Set the non-printable characters ==----";
-      $command_utils:suspend_if_needed(0);
       for x in ({{"escape", 27, "033"}, {"beep", 7, "007"}})
         chr = x[1];
         code = x[2];

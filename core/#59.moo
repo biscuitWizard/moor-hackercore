@@ -115,7 +115,6 @@ object #59
       if ("verbs" in what && (vs = verbs(object)))
         player:notify("Verb definitions:");
         for v in (vs)
-          $command_utils:suspend_if_needed(0);
           player:notify(tostr("    ", v));
         endfor
       endif
@@ -123,7 +122,6 @@ object #59
         if (ps = properties(object))
           player:notify("Property definitions:");
           for p in (ps)
-            $command_utils:suspend_if_needed(0);
             player:notify(tostr("    ", p));
           endfor
         endif
@@ -131,7 +129,6 @@ object #59
         if (all_props != {})
           player:notify("Properties:");
           for p in (all_props)
-            $command_utils:suspend_if_needed(0);
             strng = `toliteral(object.(p)) ! E_PERM => "(Permission denied.)"';
             player:notify(tostr("    ", p, ": ", strng));
           endfor
@@ -143,7 +140,6 @@ object #59
     if (object.contents)
       player:notify("Contents:");
       for o in (object.contents)
-        $command_utils:suspend_if_needed(0);
         player:notify(tostr("    ", o.name, " (", o, ")"));
       endfor
     endif
@@ -688,7 +684,6 @@ object #59
     help = 1;
     verb_help_match = 0;
     for db in (dblist)
-      $command_utils:suspend_if_needed(0);
       if ({what} == (ts = `db:find_topics(what) ! ANY => 0'))
         if (db == $help_db["verb"])
           "Verb help is considered a last resort. It's possible help files contain more relevant information (e.g. $login).";
@@ -911,7 +906,6 @@ object #59
     name_width = length(headers[1]);
     names = locations = {};
     for lst in ({@idles, @offs})
-      $command_utils:suspend_if_needed(0);
       p = lst[3];
       namestr = tostr(p.name[1..min(max_name, $)], " (", p, ")");
       name_width = max(length(namestr), name_width);
@@ -1187,7 +1181,6 @@ object #59
     for line in (match)
       output = {};
       for bit in [1..5]
-        $command_utils:suspend_if_needed(3);
         "bit == 2 below for verb: append line number.";
         output = {@output, su:left(typeof(word = line[bit]) == STR ? bit == 2 ? tostr(word, "(", `line[6] ! ANY => 0', ")") | word | tostr(word, "(", valid(word) ? lu:shortest({word.name, @word.aliases}) | (word == $nothing ? "invalid" | (word == $ambiguous_match ? "ambiguous match" | "Error")), ")"), -widths[bit]), " "};
       endfor
@@ -1277,7 +1270,6 @@ object #59
     endfor
     for a in ($object_utils:ancestors(dobj))
       for p in (`properties(a) ! ANY => {}')
-        $command_utils:suspend_if_needed(1);
         pquoted = toliteral(p);
         try
           value = dobj.(p);
@@ -1290,7 +1282,6 @@ object #59
           result = {@result, tostr(";;", targname, ".(", pquoted, ") = ", toliteral(value))};
         endif
       endfor
-      $command_utils:suspend_if_needed(1);
     endfor
     return result;
   endverb
@@ -1359,7 +1350,6 @@ object #59
       else
         v = v + 1;
       endif
-      $command_utils:suspend_if_needed(0);
     endwhile
     return result;
   endverb
@@ -1390,7 +1380,6 @@ object #59
         owner = verb_info(o, vnum)[1];
         player:notify(tostr(o, ":", verbs[vnum], " [", valid(owner) ? owner.name | "Recycled Player", " (", owner, ")]:  ", l));
         found = 1;
-        $command_utils:suspend_if_needed(0);
       endfor
       if (found)
         count = count + 1;

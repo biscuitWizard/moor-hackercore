@@ -55,7 +55,6 @@ object #12
             current = {@current, {c[1], last}};
           endif
         endif
-        $command_utils:suspend_if_needed(2);
       endfor
       su = $string_utils;
       player:notify(su:left(su:left(su:left("Guest", 20) + "Connected", 36) + "Idle/Disconn.", 52) + "From");
@@ -64,7 +63,6 @@ object #12
         on = l[3] ? (ct = ctime(l[3]))[1..3] + ct[9..19] | "earlier";
         off = l[4] > 0 ? (ct = ctime(l[4]))[1..3] + ct[9..19] | "  " + $string_utils:from_seconds(-l[4]);
         player:notify(su:left(su:left(su:right(tostr(strsub(l[1].name, "uest", "."), " (", l[1], ")  "), -20) + on, 36) + off, 52) + l[2]);
-        $command_utils:suspend_if_needed(2);
       endfor
     endif
   endverb

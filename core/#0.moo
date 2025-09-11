@@ -620,11 +620,6 @@ object #0
     return typeof(input) == ERR && $code_utils:dflag_on() ? raise(input) | input;
   endverb
 
-  verb "sin" (this none this) owner: #2 flags: "rxd"
-    {?time = 0, @ann} = args;
-    return $command_utils:suspend_if_needed(time, @ann);
-  endverb
-
   verb "s ies es" (this none this) owner: #2 flags: "rxd"
     "A quick and dirty way to pluralize a word based on a number (oftentimes the result of a length() check).";
     "Usage: $verb(word, amount)";

@@ -32,7 +32,6 @@ object #32
         if (typeof(data) == STR)
           data = {data};
         endif
-        $command_utils:suspend_if_needed(3);
         if (typeof(data) == ERR)
           player:tell("Error: ", tostr(data));
           data = $failed_match;
@@ -83,7 +82,6 @@ object #32
       endif
     endif
     for i in [1..length(data)]
-      $command_utils:suspend_if_needed(1);
       if (typeof(data[i]) != STR)
         data[i] = "";
       endif

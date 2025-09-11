@@ -192,7 +192,7 @@ object #52
     "... properties existing on newparent";
     "... cannot be present on object or any descendent...";
     props = conflicts = {};
-    for o in ({object, @$object_utils:descendents_suspended(object)})
+    for o in ({object, @$object_utils:descendents(object)})
       for p in (properties(o))
         if (`property_info(newparent, p) ! E_PROPNF => 0')
           if (i = p in props)
@@ -202,55 +202,16 @@ object #52
             conflicts = {@conflicts, {p, o}};
           endif
         endif
-        $command_utils:suspend_if_needed(0);
       endfor
-      $command_utils:suspend_if_needed(0);
     endfor
     return conflicts;
   endverb
 
-  verb "descendants_with_property_suspended" (this none this) owner: #2 flags: "rxd"
-    ":descendants_with_property_suspended(object,property)";
-    " => list of descendants of object on which property is defined.";
-    "calls suspend(0) as needed";
-    {object, prop} = args;
-    if (caller == this || (object.w || $perm_utils:controls(caller_perms(), object)))
-      $command_utils:suspend_if_needed(0);
-      if (`property_info(object, prop) ! E_PROPNF => 0')
-        return {object};
-      endif
-      r = {};
-      for c in (children(object))
-        r = {@r, @this:descendants_with_property_suspended(c, prop)};
-      endfor
-      return r;
-    else
-      return E_PERM;
-    endif
-  endverb
 
   verb "locations" (this none this) owner: #2 flags: "rxd"
     "Usage:  locations(object)";
     "Return a listing of the location hierarchy above object.";
     return locations(@args);
-  endverb
-
-  verb "all_properties_suspended all_verbs_suspended" (this none this) owner: #2 flags: "rxd"
-    "Syntax:  all_properties_suspended (OBJ what)";
-    "         all_verbs_suspended      (OBJ what)";
-    "";
-    "Returns all properties or verbs defined on `what' and all of its ancestors. Uses wizperms to get properties or verbs if the caller of this verb owns what, otherwise, uses caller's perms. Suspends as necessary";
-    what = args[1];
-    if (what.owner != caller_perms())
-      set_task_perms(caller_perms());
-    endif
-    bif = verb == "all_verbs_suspended" ? "verbs" | "properties";
-    res = `call_function(bif, what) ! E_PERM => {}';
-    while (valid(what = parent(what)))
-      res = {@`call_function(bif, what) ! E_PERM => {}', @res};
-      $command_utils:suspend_if_needed(0);
-    endwhile
-    return res;
   endverb
 
   verb "connected" (this none this) owner: #36 flags: "rxd"
@@ -343,56 +304,6 @@ object #52
     return r;
   endverb
 
-  verb "descendants_suspended descendents_suspended" (this none this) owner: #2 flags: "rxd"
-    ":descendants_suspended (OBJ object) => {OBJs} all nested children of <object>";
-    set_task_perms(caller_perms());
-    r = children(args[1]);
-    i = 1;
-    while (i <= length(r))
-      if (kids = children(r[i]))
-        r = {@r, @kids};
-      endif
-      i = i + 1;
-      $command_utils:suspend_if_needed(0);
-    endwhile
-    return r;
-  endverb
-
-  verb "leaves_suspended" (this none this) owner: #2 flags: "rxd"
-    ":leaves_suspended (OBJ object) => {OBJs} descendants of <object> that have";
-    "                                         no children";
-    set_task_perms(caller_perms());
-    r = {args[1]};
-    i = 1;
-    while (i <= length(r))
-      if (kids = children(r[i]))
-        r[i..i] = kids;
-      else
-        i = i + 1;
-      endif
-      $command_utils:suspend_if_needed(0);
-    endwhile
-    return r;
-  endverb
-
-  verb "branches_suspended" (this none this) owner: #2 flags: "rxd"
-    ":branches_suspended (OBJ object) => {OBJs} all descendants of <object> that";
-    "                                           have children.";
-    set_task_perms(caller_perms());
-    r = args[1..1];
-    i = 1;
-    while (i <= length(r))
-      if (kids = children(r[i]))
-        r[i + 1..i] = kids;
-        i = i + 1;
-      else
-        r[i..i] = {};
-      endif
-      $command_utils:suspend_if_needed(0);
-    endwhile
-    return r;
-  endverb
-
   verb "disown disinherit" (this none this) owner: #2 flags: "rxd"
     ":disown(object) / :disinherit(object)";
     " => 1 (for a successful disinheritance)";
@@ -437,7 +348,6 @@ object #52
     props = {};
     set_task_perms(caller_perms());
     for i in (all)
-      $command_utils:suspend_if_needed(0);
       if ((info = `property_info(thing, i) ! ANY') != E_PROPNF)
         props = {@props, info ? i | E_PERM};
       endif

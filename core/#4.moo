@@ -524,13 +524,11 @@ object #4
         if (parent(x) == $nothing)
           objects = {@objects, x};
         endif
-        $command_utils:suspend_if_needed(1);
       endfor
     else
       objects = $set_utils:intersection(children(root), printed);
     endif
-    for c in ($list_utils:sort_suspended(2, objects))
-      $command_utils:suspend_if_needed(10);
+    for c in ($list_utils:sort(2, objects))
       this:classes_2(c, indent, members, printed);
     endfor
   endverb
@@ -611,7 +609,6 @@ object #4
       player:notify(su:left("--------", 30) + "---------------");
       for r in (result)
         player:notify(su:left(tostr(parent, ".", r[1]), 30) + su:from_list(listdelete(r, 1), " "));
-        $command_utils:suspend_if_needed(0);
       endfor
     else
       player:notify("No property conflicts found.");

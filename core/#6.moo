@@ -300,7 +300,6 @@ object #6
         if (typeof(`p.gaglist ! E_PERM') == LIST && this in p.gaglist)
           gl = {@gl, p};
         endif
-        $command_utils:suspend_if_needed(10, "...searching gaglist...");
       endfor
       if (gl || !callers())
         player:notify(tostr($string_utils:nn(gl, " ", "No one"), " appear", length(gl) <= 1 ? "s" | "", " to be gagging you."));
@@ -398,7 +397,6 @@ object #6
         endif
         if (matches)
           for match in (matches)
-            $command_utils:suspend_if_needed(3);
             text = tostr(@match[$]);
             player:notify("Traceback for:");
             player:notify(text);
@@ -481,7 +479,7 @@ object #6
     "  0:  page refused";
     "If a specialization wants to refuse a page, it should return 0 to say it was refused.  If it uses pass(@args) it should propagate back up the return value.  It is possible that this code should interact with gagging and return 0 if the page was gagged.";
     if (this:is_listening())
-      this:tell_lines_suspended(args);
+      this:tell_lines(args);
       return 1;
     else
       return 2;
@@ -620,7 +618,6 @@ object #6
           else
             player:notify(line);
           endif
-          $command_utils:suspend_if_needed(0);
         endfor
       else
         player:notify(tostr("Help DB ", help, " thinks it knows about `", what, "' but something's messed up."));
@@ -1238,40 +1235,11 @@ object #6
     endif
   endverb
 
-  verb "@edit" (any any any) owner: #36 flags: "rd"
-    "Calls the verb editor on verbs, the note editor on properties, and on anything else assumes it's an object for which you want to edit the .description.";
-    if (!args)
-      (player in $note_editor.active ? $note_editor | $verb_editor):invoke(dobjstr, verb);
-    elseif ($code_utils:parse_verbref(args[1]))
-      if (player.programmer)
-        $verb_editor:invoke(argstr, verb);
-      else
-        player:notify("You need to be a programmer to do this.");
-        player:notify("If you want to become a programmer, talk to a wizard.");
-        return;
-      endif
-    else
-      $note_editor:invoke(dobjstr, verb);
-    endif
-  endverb
-
   verb "erase_paranoid_data" (this none this) owner: #2 flags: "rxd"
     if (!($perm_utils:controls(caller_perms(), this) || this == caller))
       return E_PERM;
     else
       $paranoid_db:erase_data(this);
-    endif
-  endverb
-
-  verb "notify_lines_suspended" (this none this) owner: #2 flags: "rxd"
-    if ($perm_utils:controls(caller_perms(), this) || caller == this || caller_perms() == this)
-      set_task_perms(caller_perms());
-      for line in (typeof(lines = args[1]) != LIST ? {lines} | lines)
-        $command_utils:suspend_if_needed(0);
-        this:notify(tostr(line));
-      endfor
-    else
-      return E_PERM;
     endif
   endverb
 
@@ -1325,7 +1293,6 @@ object #6
             player:tell("Failure in ", x, ":feature_remove for player ", $string_utils:nn(this));
           endtry
         endif
-        $command_utils:suspend_if_needed(0);
       endfor
     endif
   endverb

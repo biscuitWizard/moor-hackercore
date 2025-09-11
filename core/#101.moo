@@ -55,7 +55,6 @@ object #101
         endfor
       endfor
       help = {@help, ""};
-      $command_utils:suspend_if_needed(0);
     endfor
     return help;
   endverb

@@ -208,13 +208,6 @@ object #55
     return sort(@args);
   endverb
 
-  verb "sort_suspended" (this none this) owner: #2 flags: "rxd"
-    ":sort_suspended(interval,list[,keys]) => sorts keys (assumed to be all numbers or strings) and returns list with the corresponding permutation applied to it.  keys defaults to the list itself.";
-    "Note: For compatibility with LambdaCore, the interval argument hasn't been removed. In ToastStunt, however, it's not used. Instead, the task will suspend until the sort thread has finished.";
-    set_task_perms(caller_perms());
-    return sort(@args[2..$]);
-  endverb
-
   verb "slice" (this none this) owner: #36 flags: "rxd"
     "slice(alist[,index]) returns a list of the index-th elements of the elements of alist, e.g., ";
     "    slice({{\"z\",1},{\"y\",2},{\"x\",5}},2) => {1,2,5}.";
@@ -250,24 +243,6 @@ object #55
       endif
     endfor
     return 0;
-  endverb
-
-  verb "iassoc_suspended" (this none this) owner: #2 flags: "rxd"
-    "Copied from Moo_tilities (#332):iassoc_suspended by Mooshie (#106469) Wed Mar 18 19:27:53 1998 PST";
-    "Usage: iassoc_suspended(ANY target, LIST list [, INT index [, INT suspend-for ]]) => Returns the index of the first element of `list' whose own index-th element is target. Index defaults to 1.";
-    "Returns 0 if no such element is found.";
-    "Suspends as needed. Suspend length defaults to 0.";
-    set_task_perms(caller_perms());
-    {target, thelist, ?indx = 1, ?suspend_for = 0} = args;
-    cu = $command_utils;
-    for element in (thelist)
-      if (`element[indx] == target ! E_RANGE, E_TYPE => 0' && typeof(element) == LIST)
-        return element in thelist;
-      endif
-      cu:suspend_if_needed(suspend_for);
-    endfor
-    return 0;
-    "Mooshie (#106469) - Tue Feb 10, PST - :assoc_suspended does a set_task_perms, why shouldn't this?";
   endverb
 
   verb "assoc_prefix" (this none this) owner: #36 flags: "rxd"
@@ -377,44 +352,6 @@ object #55
     return {@right_sublist[1..right_index], left_sublist[1], @merged_list};
   endverb
 
-  verb "sort_alist_suspended" (this none this) owner: #2 flags: "rxd"
-    "sort_alist_suspended(interval,alist[,n]) sorts a list of tuples by n-th element.  n defaults to 1.  Calls suspend(interval) as necessary.";
-    set_task_perms(caller_perms());
-    "... so it can be killed...";
-    {interval, alist, ?sort_on = 1} = args;
-    if ((alist_length = length(alist)) < 10)
-      "insertion sort on short lists";
-      $command_utils:suspend_if_needed(interval);
-      return this:sort(alist, this:slice(@listdelete(args, 1)));
-    endif
-    "variables specially expanded for the anal-retentive";
-    left_index = alist_length / 2;
-    right_index = (alist_length + 1) / 2;
-    left_sublist = this:sort_alist_suspended(interval, alist[1..left_index], sort_on);
-    right_sublist = this:sort_alist_suspended(interval, alist[left_index + 1..alist_length], sort_on);
-    left_element = left_sublist[left_index];
-    right_element = right_sublist[right_index];
-    merged_list = {};
-    while (1)
-      $command_utils:suspend_if_needed(interval);
-      if (left_element[sort_on] > right_element[sort_on])
-        merged_list = {left_element, @merged_list};
-        if (left_index = left_index - 1)
-          left_element = left_sublist[left_index];
-        else
-          return {@right_sublist[1..right_index], @merged_list};
-        endif
-      else
-        merged_list = {right_element, @merged_list};
-        if (right_index = right_index - 1)
-          right_element = right_sublist[right_index];
-        else
-          return {@left_sublist[1..left_index], @merged_list};
-        endif
-      endif
-    endwhile
-  endverb
-
   verb "randomly_permute" (this none this) owner: #36 flags: "rxd"
     ":randomly_permute(list) => list with its elements randomly permuted";
     "  each of the length(list)! possible permutations is equally likely";
@@ -476,39 +413,6 @@ object #55
     return result;
   endverb
 
-  verb "reverse_suspended" (this none this) owner: #2 flags: "rxd"
-    "reverse(list) => reversed list.  Does suspend(0) as necessary.";
-    set_task_perms(caller_perms());
-    "^^^For suspend task.";
-    return this:_reverse_suspended(@args[1]);
-  endverb
-
-  verb "_reverse_suspended" (this none this) owner: #2 flags: "rxd"
-    ":_reverse(@list) => reversed list";
-    set_task_perms(caller_perms());
-    $command_utils:suspend_if_needed(0);
-    if (length(args) > 50)
-      return {@this:_reverse_suspended(@args[$ / 2 + 1..$]), @this:_reverse_suspended(@args[1..$ / 2])};
-    endif
-    l = {};
-    for a in (args)
-      l = listinsert(l, a);
-    endfor
-    return l;
-  endverb
-
-  verb "randomly_permute_suspended" (this none this) owner: #2 flags: "rxd"
-    ":randomly_permute_suspended(list) => list with its elements randomly permuted";
-    "  each of the length(list)! possible permutations is equally likely";
-    set_task_perms(caller_perms());
-    plist = {};
-    for i in [1..length(ulist = args[1])]
-      plist = listinsert(plist, ulist[i], random(i));
-      $command_utils:suspend_if_needed(0);
-    endfor
-    return plist;
-  endverb
-
   verb "swap_elements" (this none this) owner: #36 flags: "rxd"
     "swap_elements -- exchange two elements in a list";
     "Usage:  $list_utils:swap_elements(<list/LIST>,<index/INT>,<index/INT>)";
@@ -544,25 +448,6 @@ object #55
     else
       return E_ARGS;
     endif
-  endverb
-
-  verb "assoc_suspended" (this none this) owner: #2 flags: "rxd"
-    "Copied from Moo_tilities (#332):assoc_suspended by Mooshie (#106469) Wed Mar 18 19:27:54 1998 PST";
-    "Usage: assoc_suspended(ANY target, LIST list [, INT index [, INT suspend-for ])) => Returns the first element of `list' whose own index-th element is target.  Index defaults to 1.";
-    "Returns {} if no such element is found.";
-    "Suspends as necessary. Suspend length defaults to 0.";
-    set_task_perms(caller_perms());
-    {target, thelist, ?indx = 1, ?suspend_for = 0} = args;
-    cu = $command_utils;
-    for t in (thelist)
-      if (`t[indx] == target ! E_TYPE => 0')
-        if (typeof(t) == LIST && length(t) >= indx)
-          return t;
-        endif
-      endif
-      cu:suspend_if_needed(suspend_for);
-    endfor
-    return {};
   endverb
 
   verb "amerge" (this none this) owner: #36 flags: "rxd"
@@ -654,23 +539,6 @@ object #55
       d = d + interval;
     endwhile
     return nlist;
-  endverb
-
-  verb "flatten_suspended" (this none this) owner: #36 flags: "rxd"
-    "Copied from list utilities (#372):flatten [verb author Hacker (#18105)] at Sun Jul  3 07:46:47 2011 PDT";
-    "Copied from $quinn_utils (#34283):unroll by Quinn (#19845) Mon Mar  8 09:29:03 1993 PST";
-    ":flatten(LIST list_of_lists) => LIST of all lists in given list `flattened'";
-    newlist = {};
-    for elm in (args[1])
-      if (typeof(elm) == LIST)
-        $command_utils:suspend_if_needed(0);
-        newlist = {@newlist, @this:flatten_suspended(elm)};
-      else
-        $command_utils:suspend_if_needed(0);
-        newlist = {@newlist, elm};
-      endif
-    endfor
-    return newlist;
   endverb
 
   verb "max_length" (this none this) owner: #2 flags: "rx"

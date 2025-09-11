@@ -220,13 +220,13 @@ object #25
     return tostr(@args, "`n000", "]");
   endverb
 
-  verb "cutoff*_suspended" (this none this) owner: #36 flags: "rxd"
-    ":cutoff[_suspended] (STR string, NUM start, NUM end) => STR";
+  verb "cutoff" (this none this) owner: #36 flags: "rxd"
+    ":cutoff (STR string, NUM start, NUM end) => STR";
     "Acts like: string[start..end] but ignores $xterm256 tags.";
     {string, start, end, ?terminate = 0} = args;
     COLOR_TAG_LENGTH = 6;
     try
-      info = this:_cutoff_locs(string, start, end, terminate, verb == "cutoff_suspended");
+      info = this:_cutoff_locs(string, start, end, terminate, 0);
       {sstart, send} = info;
       out = string[sstart..send];
       if ((endchange = send - end) > 0)

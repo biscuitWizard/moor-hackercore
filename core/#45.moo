@@ -110,7 +110,6 @@ object #45
         endif
         for line in (ls)
           player:tell("    ", line);
-          $command_utils:suspend_if_needed(0);
         endfor
       endfor
     endif
@@ -394,9 +393,6 @@ object #45
     msg_order = $list_utils:sort($list_utils:range(n = length(msgs = this.messages)), date_seq);
     newmsgs = {};
     for i in [1..n]
-      if ($command_utils:suspend_if_needed(0))
-        player:tell("...", i);
-      endif
       newmsgs = {@newmsgs, {i, msgs[msg_order[i]][2]}};
     endfor
     if (length(this.messages) != n)
@@ -426,7 +422,6 @@ object #45
   verb "__check" (this none this) owner: #36 flags: "rxd"
     for m in (this.messages)
       $mail_agent:__convert_new(@m[2]);
-      $command_utils:suspend_if_needed(0);
     endfor
   endverb
 

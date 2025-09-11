@@ -35,7 +35,6 @@ object #90
     endfor
     to_tell = listappend(to_tell, $string_utils:pronoun_sub_secure($code_utils:verb_or_property(player, "paste_footer"), "") || $string_utils:center("finished", 75, "-"));
     for thing in (player.location.contents)
-      $command_utils:suspend_if_needed(0);
       thing:tell_lines(to_tell);
     endfor
     player:tell("Done @pasting.");

@@ -87,7 +87,6 @@ object #121
         endif
         this.client_info = setremove(this.client_info, x);
       endif
-      $command_utils:suspend_if_needed(0);
     endfor
     this.client_stats = {clients, users};
   endverb

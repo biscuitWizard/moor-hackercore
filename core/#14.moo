@@ -164,7 +164,6 @@ object #14
             msgs = {@msgs, {this:_message_num(@x), this:_message_text(@x)}};
           endfor
           handle = this._mgr:next(@listdelete(handle, 1));
-          $command_utils:suspend_if_needed(0);
         endwhile
         seq = seq[3..$];
       endwhile
@@ -189,7 +188,6 @@ object #14
       handle = this._mgr:start(this.messages, seq[1], seq[2] - 1);
       while (handle)
         for x in (handle[1])
-          $command_utils:suspend_if_needed(0);
           if (keep_seq[k] <= (mcount = mcount + 1))
             k = k + 1;
           endif
@@ -222,7 +220,6 @@ object #14
           player:display_message(preamble ? strsub(preamble, "%d", tostr(cur)) | {}, this:msg_full_text(@this:_message_text(@x)));
         endfor
         handle = this._mgr:next(@listdelete(handle, 1));
-        $command_utils:suspend_if_needed(0);
       endwhile
       seq = seq[3..$];
     endwhile
@@ -321,10 +318,6 @@ object #14
     onext = 1;
     rmmed = 0;
     for i in [1..length(seq) / 2]
-      if ($command_utils:suspend_if_needed(0))
-        player:tell("... rmm ", onext);
-        suspend(0);
-      endif
       start = seq[2 * i - 1];
       next = seq[2 * i];
       {msgtree, zmsgs} = this._mgr:extract_range(msgtree, start - rmmed, next - 1 - rmmed);
@@ -461,7 +454,6 @@ object #14
             endif
           endfor
           i = i + 1;
-          $command_utils:suspend_if_needed(0);
         endfor
         handle = this._mgr:next(@listdelete(handle, 1));
       endwhile
@@ -493,7 +485,6 @@ object #14
             endif
           endfor
           i = i + 1;
-          $command_utils:suspend_if_needed(0);
         endfor
         handle = this._mgr:next(@listdelete(handle, 1));
       endwhile
@@ -524,7 +515,6 @@ object #14
             endif
           endfor
           i = i + 1;
-          $command_utils:suspend_if_needed(0);
         endfor
         handle = this._mgr:next(@listdelete(handle, 1));
       endwhile
@@ -556,7 +546,6 @@ object #14
             endif
           endfor
           i = i + 1;
-          $command_utils:suspend_if_needed(0);
         endfor
         handle = this._mgr:next(@listdelete(handle, 1));
       endwhile
@@ -581,7 +570,6 @@ object #14
             seq = $seq_utils:add(seq, i, i);
           endif
           i = i + 1;
-          $command_utils:suspend_if_needed(0);
         endfor
         handle = this._mgr:next(@listdelete(handle, 1));
       endwhile
@@ -604,17 +592,8 @@ object #14
         for msg in (handle[1])
           if (msg[1] && (body = this.(msg[1])) && index(tostr(@body), target))
             seq = $seq_utils:add(seq, i, i);
-            "Above saves ticks. Munges the whole message into one string and indexes it. Old code follows.";
-            "l = length(body);";
-            "while (!index(body[l], target) && (l = l - 1))";
-            "$command_utils:suspend_if_needed(0);";
-            "endwhile";
-            "if (l)";
-            "seq = $seq_utils:add(seq, i, i);";
-            "endif";
           endif
           i = i + 1;
-          $command_utils:suspend_if_needed(0);
         endfor
         handle = this._mgr:next(@listdelete(handle, 1));
       endwhile
@@ -668,14 +647,12 @@ object #14
     if (caller != this && !(length(c) > 1 && c[1][1] == $list_utils && c[1][2] == "map_arg" && c[2][1] == this))
       raise(E_PERM);
     endif
-    $command_utils:suspend_if_needed(0);
     biglist = this;
     propname = args[1];
     if (!propname)
       bestlevel = -1;
       best = {};
       for prop in (properties(biglist))
-        $command_utils:suspend_if_needed(0);
         if (index(prop, " ") == 1)
           val = biglist.(prop);
           if (typeof(val[1]) == INT)
@@ -697,13 +674,11 @@ object #14
         propname = best[1];
         val = biglist.(propname);
         for prop in (best[2..$])
-          $command_utils:suspend_if_needed(0);
           val[2] = {@val[2], @biglist.(prop)[2]};
         endfor
         biglist.(propname) = val;
         "Now that the new value is safely stored, delete old values.";
         for prop in (best[2..$])
-          $command_utils:suspend_if_needed(0);
           player:notify(tostr("Removing property ", toliteral(prop), ".  Its value, ", toliteral(biglist.(prop)), ", has been merged with property ", toliteral(propname), "."));
           delete_property(biglist, prop);
         endfor
@@ -714,7 +689,6 @@ object #14
       "Arrgh.  Even after finding the root, some nodes might be detached!";
       player:notify("Checking for orphans...");
       for prop in (properties(biglist))
-        $command_utils:suspend_if_needed(0);
         if (prop && prop[1] == " ")
           val = biglist.(prop);
           if (typeof(val) == LIST && typeof(level = val[1]) == INT && level < maxlevel)
@@ -723,7 +697,6 @@ object #14
         endif
       endfor
       for prop in (properties(biglist))
-        $command_utils:suspend_if_needed(0);
         if (prop && prop[1] == " ")
           val = biglist.(prop);
           if (typeof(val) == LIST && typeof(level = val[1]) == INT && level > 0)

@@ -320,10 +320,8 @@ object #1
     what = this;
     hidden_verbs = this:hidden_verbs(who);
     while (what != $nothing)
-      $command_utils:suspend_if_needed(0);
       if (!(what in dull_classes))
         for i in [1..length(verbs(what))]
-          $command_utils:suspend_if_needed(0);
           info = verb_info(what, i);
           syntax = verb_args(what, i);
           if (this:examine_verb_ok(what, i, info, syntax, commands_ok, hidden_verbs))
@@ -447,18 +445,6 @@ object #1
 
   verb "announce*_all_but" (this none this) owner: #2 flags: "rxd"
     return;
-  endverb
-
-  verb "tell_lines_suspended" (this none this) owner: #2 flags: "rxd"
-    lines = args[1];
-    if (typeof(lines) == LIST)
-      for line in (lines)
-        this:tell(line);
-        $command_utils:suspend_if_needed(0);
-      endfor
-    else
-      this:tell(lines);
-    endif
   endverb
 
   verb "acceptable" (this none this) owner: #2 flags: "rxd"
