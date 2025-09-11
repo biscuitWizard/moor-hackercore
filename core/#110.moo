@@ -174,8 +174,4 @@ object #110
     endif
   endverb
 
-  verb "include_for_core" (this none this) owner: #2 flags: "rxd"
-    return {"parser", "session", "package", "negotiate", "registry", "cord", "simpleedit", "client", "status", "dispatch", "owner"};
-  endverb
-
 endobject
