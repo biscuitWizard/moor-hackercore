@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # hacker.sh - Docker Compose management script for hackercore
-# Usage: ./hacker.sh [start|stop|restart|status]
+# Usage: ./hacker.sh [start|stop|restart|status|clean|rebuild|clean-rebuild]
 
 set -e
 
@@ -266,6 +266,53 @@ show_status() {
     docker-compose ps
 }
 
+# Function to clean Docker images and containers
+clean_docker() {
+    print_info "Cleaning Docker images and containers..."
+    cd "$SCRIPT_DIR"
+    
+    # Stop services first
+    print_info "Stopping services..."
+    docker-compose down
+    
+    # Remove containers
+    print_info "Removing containers..."
+    docker-compose rm -f
+    
+    # Remove images built by this compose file
+    print_info "Removing images..."
+    docker-compose down --rmi all
+    
+    # Clean up any dangling images
+    print_info "Cleaning up dangling images..."
+    docker image prune -f
+    
+    print_success "Docker cleanup completed!"
+}
+
+# Function to rebuild all images
+rebuild_images() {
+    print_info "Rebuilding all Docker images..."
+    cd "$SCRIPT_DIR"
+    
+    # Initialize and fetch submodules before rebuilding
+    init_submodules
+    
+    # Force rebuild all images without cache
+    print_info "Building images (no cache)..."
+    docker-compose build --no-cache
+    
+    print_success "All images rebuilt successfully!"
+}
+
+# Function to clean and rebuild
+clean_rebuild() {
+    print_info "Performing clean rebuild..."
+    clean_docker
+    rebuild_images
+    print_success "Clean rebuild completed!"
+}
+
 # Main function
 main() {
     local command=${1:-""}
@@ -287,22 +334,34 @@ main() {
         "status")
             show_status
             ;;
+        "clean")
+            clean_docker
+            ;;
+        "rebuild")
+            rebuild_images
+            ;;
+        "clean-rebuild")
+            clean_rebuild
+            ;;
         "")
             print_error "No command specified."
             echo
-            echo "Usage: $0 [start|stop|restart|status]"
+            echo "Usage: $0 [start|stop|restart|status|clean|rebuild|clean-rebuild]"
             echo
             echo "Commands:"
-            echo "  start   - Start all hackercore services"
-            echo "  stop    - Stop all hackercore services"
-            echo "  restart - Restart all hackercore services"
-            echo "  status  - Show status of all services"
+            echo "  start        - Start all hackercore services"
+            echo "  stop         - Stop all hackercore services"
+            echo "  restart      - Restart all hackercore services"
+            echo "  status       - Show status of all services"
+            echo "  clean        - Stop services and remove all Docker images/containers"
+            echo "  rebuild      - Force rebuild all Docker images (no cache)"
+            echo "  clean-rebuild - Clean everything and rebuild from scratch"
             exit 1
             ;;
         *)
             print_error "Unknown command: $command"
             echo
-            echo "Usage: $0 [start|stop|restart|status]"
+            echo "Usage: $0 [start|stop|restart|status|clean|rebuild|clean-rebuild]"
             exit 1
             ;;
     esac
