@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # hacker.sh - Docker Compose management script for hackercore
-# Usage: ./hacker.sh [start|stop|restart|status|clean|rebuild|clean-rebuild]
+# Usage: ./hacker.sh [start|stop|restart|status|clean|rebuild|clean-rebuild|logs]
 
 set -e
 
@@ -237,6 +237,10 @@ start_services() {
     print_success "Services started successfully!"
     print_info "You can connect to the MUD via telnet on localhost:8888"
     print_info "Or connect via websocket on localhost:8080"
+    
+    # Follow logs automatically to monitor for unexpected daemon deaths
+    print_info "Following moor daemon logs (Ctrl+C to exit)..."
+    docker-compose logs -f moor-daemon
 }
 
 # Function to stop services
@@ -313,6 +317,13 @@ clean_rebuild() {
     print_success "Clean rebuild completed!"
 }
 
+# Function to follow logs
+follow_logs() {
+    print_info "Following moor daemon logs (Ctrl+C to exit)..."
+    cd "$SCRIPT_DIR"
+    docker-compose logs -f moor-daemon
+}
+
 # Main function
 main() {
     local command=${1:-""}
@@ -343,25 +354,29 @@ main() {
         "clean-rebuild")
             clean_rebuild
             ;;
+        "logs")
+            follow_logs
+            ;;
         "")
             print_error "No command specified."
             echo
-            echo "Usage: $0 [start|stop|restart|status|clean|rebuild|clean-rebuild]"
+            echo "Usage: $0 [start|stop|restart|status|clean|rebuild|clean-rebuild|logs]"
             echo
             echo "Commands:"
-            echo "  start        - Start all hackercore services"
+            echo "  start        - Start all hackercore services (automatically follows logs)"
             echo "  stop         - Stop all hackercore services"
             echo "  restart      - Restart all hackercore services"
             echo "  status       - Show status of all services"
             echo "  clean        - Stop services and remove all Docker images/containers"
             echo "  rebuild      - Force rebuild all Docker images (no cache)"
             echo "  clean-rebuild - Clean everything and rebuild from scratch"
+            echo "  logs         - Follow moor daemon logs"
             exit 1
             ;;
         *)
             print_error "Unknown command: $command"
             echo
-            echo "Usage: $0 [start|stop|restart|status|clean|rebuild|clean-rebuild]"
+            echo "Usage: $0 [start|stop|restart|status|clean|rebuild|clean-rebuild|logs]"
             exit 1
             ;;
     esac
