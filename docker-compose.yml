@@ -1,0 +1,103 @@
+# Example docker composition for starting up a mooR system, with a telnet server and a web server, and a worker process
+# for handling outbound HTTP requests.
+
+# This could be used as a starting point for a production system, and uses release builds of the mooR system as built
+# by the Dockerfile in the root of the repository. A real production system would definitely need to consider its
+# security and network layout, and this is just a simple example to get started with.
+
+# The first time the system starts, it will import cores/lambda-moor from the cores directory.
+# This is a fork of LambdaCore, reconstituted in mooR's `objdef` format, with some modifications.
+# To import an existing LambdaMOO 1.8.x DB, change --import to point to it, and change --import-format to textdump
+# After import, `moor-data` will contain the database that resulted.
+# To re-import simply delete this directory.
+
+# After this is running, a MUD client / telnet client can connect to port 8888 on localhost to interact with the
+# system. (e.g. telnet localhost 8888). Or a websocket client can connect to port 8080 on localhost.
+
+networks:
+  # An internal network for the mooR system, to allow the different components to communicate with each other.
+  # Note: We could use IPC sockets instead, and it would be more efficient, but by using TCP we can give an example
+  # of how to use the system over a network if we were in a real distributed system.
+  moor_net:
+
+
+services:
+  # The core Moor daemon, which handles the database, scheduling and execution of tasks, and hosts the RPC server.
+  moor-daemon:
+    build:
+      context: vendor/moor
+      target: backend
+      network: host
+      args:
+        BUILD_PROFILE: ${BUILD_PROFILE:-release}
+    container_name: "moor-daemon"
+    environment:
+      - RUST_BACKTRACE=1
+    working_dir: /moor
+    volumes:
+      - ./db:/db
+      - ./core:/db/hackercore
+    command: >
+       ./moor-daemon /db/development.db 
+        --rpc-listen=tcp://0.0.0.0:7899 
+        --events-listen=tcp://0.0.0.0:7898 
+        --workers-response-listen=tcp://0.0.0.0:7897 
+        --workers-request-listen=tcp://0.0.0.0:7896 
+        --import=/db/hackercore --import-format=objdef
+        --checkpoint-interval-seconds=360
+        --use-symbols-in-builtins false
+        --symbol-type=false
+        --custom-errors true
+    ports:
+      # ZMQ ports
+      - "7899:7899" # RPC listener
+      - "7898:7898" # Events listener
+      - "7897:7897" # Workers response listener
+      - "7896:7896" # Workers request listener
+    networks:
+      - moor_net
+
+  # A host process that runs the telnet server, and handles incoming connections and forwards events to the daemon.
+  moor-telnet-host:
+    build:
+      context: vendor/moor
+      target: backend
+      network: host
+      args:
+        BUILD_PROFILE: ${BUILD_PROFILE:-release}
+    container_name: "moor-telnet-host"
+    environment:
+      - RUST_BACKTRACE=1
+    working_dir: /moor
+    command: >
+      ./moor-telnet-host --telnet-address=0.0.0.0 
+        --telnet-port=8888 
+        --rpc-address=tcp://moor-daemon:7899 
+        --events-address=tcp://moor-daemon:7898
+    ports:
+      # Telnet listener
+      - "8888:8888"
+    networks:
+      - moor_net
+
+  # A worker process that handles requests from the daemon for outbound HTTP requests and returns the results back
+  # to the daemon.
+  moor-curl-worker:
+    build:
+      context: vendor/moor
+      target: backend
+      network: host
+      args:
+        BUILD_PROFILE: ${BUILD_PROFILE:-release}
+    container_name: "moor-curl-worker"
+    environment:
+      - RUST_BACKTRACE=1
+    working_dir: /moor
+    command: >
+      ./moor-curl-worker 
+        --rpc-address=tcp://moor-daemon:7899 
+        --events-address=tcp://moor-daemon:7898 
+        --workers-request-address=tcp://moor-daemon:7896 
+        --workers-response-address=tcp://moor-daemon:7897
+    networks:
+      - moor_net

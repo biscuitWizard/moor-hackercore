@@ -1,0 +1,9 @@
+/.idea/.gitignore
+/.idea/modules.xml
+/.idea/moor.iml
+/.idea/vcs.xml
+/.idea
+.vscode/
+
+# If the docker compose mounts a db we don't want to commit it
+db/
