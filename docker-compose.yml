@@ -25,7 +25,7 @@ services:
   # The core Moor daemon, which handles the database, scheduling and execution of tasks, and hosts the RPC server.
   moor-daemon:
     build:
-      context: vendor/moor
+      context: .
       target: backend
       network: host
       args:
@@ -59,7 +59,7 @@ services:
   # A host process that runs the telnet server, and handles incoming connections and forwards events to the daemon.
   moor-telnet-host:
     build:
-      context: vendor/moor
+      context: .
       target: backend
       network: host
       args:
@@ -83,7 +83,7 @@ services:
   # to the daemon.
   moor-curl-worker:
     build:
-      context: vendor/moor
+      context: .
       target: backend
       network: host
       args:
@@ -94,6 +94,26 @@ services:
     working_dir: /moor
     command: >
       ./moor-curl-worker 
+        --rpc-address=tcp://moor-daemon:7899 
+        --events-address=tcp://moor-daemon:7898 
+        --workers-request-address=tcp://moor-daemon:7896 
+        --workers-response-address=tcp://moor-daemon:7897
+    networks:
+      - moor_net
+
+  moor-vms-worker:
+    build:
+      context: .
+      target: backend
+      network: host
+      args:
+        BUILD_PROFILE: ${BUILD_PROFILE:-release}
+    container_name: "moor-vms-worker"
+    environment:
+      - RUST_BACKTRACE=1
+    working_dir: /moor
+    command: >
+      ./moor-vms-worker 
         --rpc-address=tcp://moor-daemon:7899 
         --events-address=tcp://moor-daemon:7898 
         --workers-request-address=tcp://moor-daemon:7896 

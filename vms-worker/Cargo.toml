@@ -1,5 +1,5 @@
 [package]
-name = "moor-vcs-worker"
+name = "moor-vms-worker"
 version = "0.9.0-alpha"
 rust-version = "1.88.0"
 edition = "2024"
@@ -14,10 +14,14 @@ categories = [
 ]
 
 [dependencies]
-moor-common = { path = "vendor/moor/crates/common" }
-moor-var = { path = "vendor/moor/crates/var" }
-rpc-async-client = { path = "vendor/moor/crates/rpc/rpc-async-client" }
-rpc-common = { path = "vendor/moor/crates/rpc/rpc-common" }
+moor-common = { path = "../common" }
+moor-var = { path = "../var" }
+rpc-async-client = { path = "../rpc/rpc-async-client" }
+rpc-common = { path = "../rpc/rpc-common" }
+## moor-common = { path = "../vendor/moor/crates/common" }
+## moor-var = { path = "../vendor/moor/crates/var" }
+## rpc-async-client = { path = "../vendor/moor/crates/rpc/rpc-async-client" }
+## rpc-common = { path = "../vendor/moor/crates/rpc/rpc-common" }
 
 ## Command line arguments parsing.
 clap = "4.5"
