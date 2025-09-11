@@ -18,11 +18,11 @@ object #0
 
   property "limbo" (owner: #2, flags: "r") = #15;
 
-  property "registration_db" (owner: #2, flags: "r") = #16;
+  property "singleton" (owner: #2, flags: "r") = #17;
+
+  property "datastore" (owner: #2, flags: "r") = #19;
 
   property "wiz_utils" (owner: #2, flags: "r") = #24;
-
-  property "site_db" (owner: #2, flags: "r") = #25;
 
   property "math_utils" (owner: #2, flags: "r") = #26;
 
@@ -38,11 +38,7 @@ object #0
 
   property "hacker" (owner: #2, flags: "r") = #36;
 
-  property "generic_db" (owner: #2, flags: "r") = #37;
-
   property "no_one" (owner: #2, flags: "r") = #38;
-
-  property "player_db" (owner: #2, flags: "r") = #39;
 
   property "gender_utils" (owner: #2, flags: "r") = #41;
 
@@ -138,7 +134,7 @@ object #0
 
   property "mcp" (owner: #2, flags: "r") = #110;
 
-  property "server" (owner: #2, flags: "r") = ["core_history" -> {{"YourMOO", "2.7.2", 1721212110}, {"YourMOO", "2.7.2", 1721211497}, {"ToastCore", "2.7.1", 1713940026}, {"a 2018 LambdaCore", "2.6.0", 1576791887}}, "last_restart_time" -> 1756637231, "name" -> "LambdaMOO-ToastStunt", "shutdown_time" -> 0];
+  property "server" (owner: #2, flags: "r") = ["core_history" -> {{"HackerCore", "2.7.2", 1721211497}, {"ToastCore", "2.7.1", 1713940026}, {"a 2018 LambdaCore", "2.6.0", 1576791887}}, "last_restart_time" -> 1756637231, "name" -> "LambdaMOO-ToastStunt", "shutdown_time" -> 0];
 
   property "help_db" (owner: #2, flags: "r") = ["ansi" -> #101, "builder" -> #84, "builtin_function" -> #28, "core" -> #19, "editor" -> #44, "frand" -> #92, "mail" -> #85, "mcp" -> #116, "prog" -> #22, "toaststunt" -> #86, "verb" -> #18, "wiz" -> #23];
 
@@ -177,7 +173,21 @@ object #0
   property "class_registry" (owner: #2, flags: "r") = {{"generics", "Generic objects intended for use as the parents of new objects", {#3, #7, #5, #9, #54, #8, #1, #6, #58, #57, #50, #45, #46}, #4}, {"utilities", "Objects holding useful general-purpose verbs", {#20, #55, #24, #27, #41, #26, #43, #51, #52, #53, #56, #42, #21, #33, #13, #79, #81, #59, #91, #93, #99, #122, #125, #75}, #58}, {"server", "Objects containing functionality that affects the server.", {#64, #82, #97}, #57}, {"prototypes", "Objects containing verbs that can be called on their corresponding types.", {#117, #119, #115, #114, #111}, #58}};
 
   verb "do_login_command" (this none this) owner: #2 flags: "rxd"
-    return #2;
+    "...This code should only be run as a server task...";
+    if (callers())
+      return E_PERM;
+    endif
+    if (typeof(h = $network:incoming_connection(player)) == OBJ)
+      "connected to an object";
+      return h;
+    elseif (h)
+      return 0;
+    endif
+    "...checks to see if the login is spamming the server with too many commands...";
+    if (!$login:maybe_limit_commands())
+      args = $login:parse_command(@args);
+      return $login:((args[1]))(@listdelete(args, 1));
+    endif
   endverb
 
   verb "server_started" (this none this) owner: #2 flags: "rxd"
@@ -510,12 +520,6 @@ object #0
     return typeof(r) == ERR && $code_utils:dflag_on() ? raise(r) | r;
   endverb
 
-  verb "checkpoint_finished" (this none this) owner: #2 flags: "rxd"
-    callers() && raise(E_PERM);
-    $login.checkpoint_in_progress = 0;
-    `$local.checkpoint_notification:checkpoint_finished(@args) ! ANY';
-  endverb
-
   verb "do_out_of_band_command doobc" (this none this) owner: #2 flags: "rxd"
     "do_out_of_band_command -- a cheap and very dirty do_out_of_band verb.  Forwards to verb on player with same name if it exists, otherwise forwards to $login.  May only be called by the server in response to an out of band command, otherwise E_PERM is returned.";
     if (caller == #-1 && caller_perms() == #-1 && callers() == {})
@@ -543,12 +547,6 @@ object #0
       "now let the player do something with it if e wants...";
       return `player:(verb)(@args) ! ANY';
     endif
-  endverb
-
-  verb "checkpoint_started" (this none this) owner: #2 flags: "rxd"
-    callers() && raise(E_PERM);
-    $login.checkpoint_in_progress = 1;
-    `$local.checkpoint_notification:checkpoint_started(@args) ! ANY';
   endverb
 
   verb "bf_force_input" (this none this) owner: #2 flags: "rxd"

@@ -633,13 +633,13 @@ object #59
     while (args && !fail)
       prep = args[1];
       if (prep == "from")
-        if ((start = player.location:match_object(args[2])) >= #0)
+        if ((start = player.location:match_contents(args[2])) >= #0)
           start = toint(start);
         else
           start = toint(args[2]);
         endif
       elseif (prep == "to")
-        if ((end = player.location:match_object(args[2])) >= #0)
+        if ((end = player.location:match_contents(args[2])) >= #0)
           end = toint(end);
         else
           end = toint(args[2]);

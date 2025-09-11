@@ -78,7 +78,7 @@ object #8
       player:tell(this.name, " is not open.");
     elseif (this.dark)
       player:tell("You can't see into ", this.name, " to remove anything.");
-    elseif ((dobj = this:match_object(dobjstr)) == $nothing)
+    elseif ((dobj = this:match(dobjstr)) == $nothing)
       player:tell("What do you want to take from ", this.name, "?");
     elseif ($command_utils:object_match_failed(dobj, dobjstr))
     elseif (!(dobj in this:contents()))

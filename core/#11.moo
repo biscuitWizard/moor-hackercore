@@ -22,7 +22,7 @@ object #11
     dobjstr = $string_utils:from_list(args[1..pos - 1], " ");
     message = $string_utils:from_list(args[pos + 1..nargs], " ");
     msg_name = verb[2..$];
-    dobj = player:my_match_object(dobjstr);
+    dobj = player:match(dobjstr);
     if ($command_utils:object_match_failed(dobj, dobjstr))
       "... oh well ...";
     elseif (pos == nargs)

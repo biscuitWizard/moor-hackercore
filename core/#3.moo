@@ -228,14 +228,14 @@ object #3
         dobjstr = dobjstr + (prepstr && (dobjstr && " ") + prepstr);
         dobjstr = dobjstr + (iobjstr && (dobjstr && " ") + iobjstr);
       endif
-      dobj = this:match_object(dobjstr);
+      dobj = this:match(dobjstr);
       if (!$command_utils:object_match_failed(dobj, dobjstr))
         dobj:look_self();
       endif
     elseif (!iobjstr)
       player:tell(verb, " ", prepstr, " what?");
     else
-      iobj = this:match_object(iobjstr);
+      iobj = this:match(iobjstr);
       if (!$command_utils:object_match_failed(iobj, iobjstr))
         if (dobjstr == "")
           iobj:look_self();
@@ -312,7 +312,7 @@ object #3
       player:tell("Usage:  @add-exit <exit-number>");
       return;
     endif
-    exit = this:match_object(dobjstr);
+    exit = this:match(dobjstr);
     if ($command_utils:object_match_failed(exit, dobjstr))
       return;
     endif
@@ -355,7 +355,7 @@ object #3
       player:tell("Usage:  @add-entrance <exit-number>");
       return;
     endif
-    exit = this:match_object(dobjstr);
+    exit = this:match(dobjstr);
     if ($command_utils:object_match_failed(exit, dobjstr))
       return;
     endif
@@ -497,7 +497,7 @@ object #3
       player:tell("Usage:  @remove-exit <exit>");
       return;
     endif
-    exit = this:match_object(dobjstr);
+    exit = this:match(dobjstr);
     if (!(exit in this.exits))
       if ($command_utils:object_match_failed(exit, dobjstr))
         return;
@@ -521,7 +521,7 @@ object #3
     entrance = $string_utils:match(dobjstr, this.entrances, "name", this.entrances, "aliases");
     if (!valid(entrance))
       "Try again to parse it.  Maybe they gave object number.  Don't complain if it's invalid though; maybe it's been recycled in some nefarious way.";
-      entrance = this:match_object(dobjstr);
+      entrance = this:match(dobjstr);
     endif
     if (!(entrance in this.entrances))
       player:tell("Couldn't find \"", dobjstr, "\" in the entrances list of ", this.name, ".");

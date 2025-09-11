@@ -64,7 +64,7 @@ object #4
         return;
       endif
     else
-      parent = player:my_match_object(parentstr);
+      parent = player:match(parentstr);
       if ($command_utils:object_match_failed(parent, parentstr))
         return;
       endif
@@ -90,7 +90,7 @@ object #4
 
   verb "@recycle" (any none none) owner: #2 flags: "rd"
     set_task_perms(player);
-    dobj = player:my_match_object(dobjstr);
+    dobj = player:match(dobjstr);
     if (dobj == $nothing)
       player:notify(tostr("Usage:  ", verb, " <object>"));
     elseif ($command_utils:object_match_failed(dobj, dobjstr))
@@ -122,7 +122,7 @@ object #4
     if (named <= as + 1 || named == length(args))
       player:notify_lines({tostr("Usage:  ", verb, " <object> as <parent-class> named [name:]alias,...,alias"), "", "where <parent-class> is one of the standard classes ($note, $letter, $thing, or $container) or an object number (e.g., #999), or the name of some object in the current room.  The [name:]alias... specification is as in @create.", "", "You can use \"called\" instead of \"named\", if you wish."});
       return;
-    elseif ($command_utils:object_match_failed(dobj = player:my_match_object(dobjstr), dobjstr, 1))
+    elseif ($command_utils:object_match_failed(dobj = player:match(dobjstr), dobjstr, 1))
       return;
     elseif (valid(dobj) && is_player(dobj))
       player:notify("You really *don't* want to do that!");
@@ -137,7 +137,7 @@ object #4
         return;
       endif
     else
-      parent = player:my_match_object(parentstr);
+      parent = player:match(parentstr);
       if ($command_utils:object_match_failed(parent, parentstr))
         return;
       endif
@@ -341,7 +341,7 @@ object #4
 
   verb "@unlock" (any none none) owner: #2 flags: "rd"
     set_task_perms(player);
-    dobj = player:my_match_object(dobjstr);
+    dobj = player:match(dobjstr);
     if ($command_utils:object_match_failed(dobj, dobjstr))
       return;
     endif
@@ -355,7 +355,7 @@ object #4
 
   verb "@lock" (any with any) owner: #2 flags: "rd"
     set_task_perms(player);
-    dobj = player:my_match_object(dobjstr);
+    dobj = player:match(dobjstr);
     if ($command_utils:object_match_failed(dobj, dobjstr))
       return;
     endif
@@ -439,7 +439,7 @@ object #4
 
   verb "@kids" (any none none) owner: #2 flags: "rxd"
     "'@kids <obj>' - List the children of an object. This is handy for seeing whether anybody's actually using your carefully-wrought public objects.";
-    thing = player:my_match_object(dobjstr);
+    thing = player:match(dobjstr);
     if (!$command_utils:object_match_failed(thing, dobjstr))
       kids = children(thing);
       if (kids)
@@ -457,7 +457,7 @@ object #4
     if (!dobjstr)
       dobj = player.location;
     else
-      dobj = player:my_match_object(dobjstr);
+      dobj = player:match(dobjstr);
     endif
     if ($command_utils:object_match_failed(dobj, dobjstr))
     else
@@ -480,7 +480,7 @@ object #4
       return;
     endif
     set_task_perms(player);
-    o = player:my_match_object(dobjstr);
+    o = player:match(dobjstr);
     if (!$command_utils:object_match_failed(o, dobjstr))
       player:notify($string_utils:names_of({o, @$object_utils:ancestors(o)}));
     endif
@@ -491,7 +491,7 @@ object #4
     set_task_perms(player);
     if (!dobjstr)
       what = player;
-    elseif (!valid(what = player:my_match_object(dobjstr)) && !valid(what = $string_utils:match_player(dobjstr)))
+    elseif (!valid(what = player:match(dobjstr)) && !valid(what = $string_utils:match_player(dobjstr)))
       $command_utils:object_match_failed(dobj, dobjstr);
       return;
     endif
@@ -552,9 +552,9 @@ object #4
 
   verb "@chparent" (any at any) owner: #2 flags: "rd"
     set_task_perms(player);
-    if ($command_utils:object_match_failed(object = player:my_match_object(dobjstr), dobjstr))
+    if ($command_utils:object_match_failed(object = player:match(dobjstr), dobjstr))
       "...bogus object...";
-    elseif ($command_utils:object_match_failed(parent = player:my_match_object(iobjstr), iobjstr))
+    elseif ($command_utils:object_match_failed(parent = player:match(iobjstr), iobjstr))
       "...bogus new parent...";
     elseif (this != player && !$object_utils:isa(player, $player))
       "...They chparented to #1 and want to chparent back to $prog.  Probably for some nefarious purpose...";
@@ -593,9 +593,9 @@ object #4
     set_task_perms(player);
     if (!(dobjstr && iobjstr))
       player:notify(tostr("Usage:  ", verb, " <object> to <newparent>"));
-    elseif ($command_utils:object_match_failed(object = player:my_match_object(dobjstr), dobjstr))
+    elseif ($command_utils:object_match_failed(object = player:match(dobjstr), dobjstr))
       "...bogus object...";
-    elseif ($command_utils:object_match_failed(parent = player:my_match_object(iobjstr), iobjstr))
+    elseif ($command_utils:object_match_failed(parent = player:match(iobjstr), iobjstr))
       "...bogus new parent...";
     elseif (player != this)
       player:notify(tostr(E_PERM));
@@ -626,7 +626,7 @@ object #4
     endif
     l = $code_utils:parse_propref(dobjstr);
     if (l)
-      dobj = player:my_match_object(l[1], player.location);
+      dobj = player:match(l[1], player.location);
       if ($command_utils:object_match_failed(dobj, l[1]))
         return;
       endif
@@ -731,129 +731,6 @@ object #4
         endif
       endif
       player:notify_lines(option_pkg:show(this.(options), presult[1]));
-    endif
-  endverb
-
-  verb "@meas*ure" (any any any) owner: #36 flags: "rd"
-    "Syntax:";
-    "  @measure object <object name>";
-    "  @measure summary [player]";
-    "  @measure new [player]";
-    "  @measure breakdown <object name>";
-    "  @measure recent [number of days] [player]";
-    if (length(args) < 1)
-      player:tell_lines($code_utils:verb_documentation());
-      return;
-    endif
-    if (index("object", args[1]) == 1)
-      "Object.";
-      what = player.location:match_object(name = $string_utils:from_list(args[2..$], " "));
-      lag = $login:current_lag();
-      if (!valid(what))
-        player:tell("Sorry, I didn't understand `", name, "'");
-      elseif ($object_utils:has_property(what, "object_size") && what.object_size[1] > $byte_quota_utils.too_large && !player.wizard && player != $byte_quota_utils.owner && player != $hacker && player != what.owner && lag > 0)
-        player:tell($string_utils:nn(what), " when last measured was ", $string_utils:group_number(what.object_size[1]), " bytes.  To reduce lag induced by multiple players re-measuring large objects multiple times, you may not measure that object.");
-      elseif (lag > 0 && `what.object_size[2] ! ANY => 0' > time() - 86400 && !$command_utils:yes_or_no(tostr("That object was measured only ", $string_utils:from_seconds(time() - what.object_size[2]), " ago.  Please don't lag the MOO by remeasuring things frequently.  Are you sure you want to remeasure it?")))
-        return player:tell("Not measuring.  It was ", $string_utils:group_number(what.object_size[1]), " bytes when last measured.");
-      else
-        player:tell("Checking size of ", what.name, " (", what, ")...");
-        player:tell("Size of ", what.name, " (", what, ") is ", $string_utils:group_number($byte_quota_utils:object_bytes(what)), " bytes.");
-      endif
-    elseif (index("summary", args[1]) == 1)
-      "Summarize player.";
-      if (length(args) == 1)
-        what = player;
-      else
-        what = $string_utils:match_player(name = $string_utils:from_list(args[2..$], " "));
-      endif
-      if (!valid(what))
-        player:tell("Sorry, I don't know who you mean by `", name, "'");
-      else
-        $byte_quota_utils:do_summary(what);
-      endif
-    elseif (index("new", args[1]) == 1)
-      if (length(args) == 1)
-        what = player;
-      elseif (!valid(what = $string_utils:match_player(name = $string_utils:from_list(args[2..$], " "))))
-        return $command_utils:player_match_failed(what, name);
-      endif
-      player:tell("Measuring the sizes of ", what.name, "'s recently created objects...");
-      total = 0;
-      unmeasured_index = 4;
-      unmeasured_multiplier = 100;
-      nunmeasured = 0;
-      if (typeof(what.owned_objects) == LIST)
-        for x in (what.owned_objects)
-          if (!$object_utils:has_property(x, "object_size"))
-            nunmeasured = nunmeasured + 1;
-          elseif (!x.object_size[1])
-            player:tell("Measured ", $string_utils:nn(x), ":  ", size = $byte_quota_utils:object_bytes(x), " bytes.");
-            total = total + size;
-          endif
-          $command_utils:suspend_if_needed(5);
-        endfor
-        if (nunmeasured && what.size_quota[unmeasured_index] < unmeasured_multiplier * nunmeasured)
-          what.size_quota[unmeasured_index] = what.size_quota[unmeasured_index] % unmeasured_multiplier + nunmeasured * unmeasured_multiplier;
-        endif
-        player:tell("Total bytes used in new creations: ", total, ".", nunmeasured ? tostr(" There were a total of ", nunmeasured, " object(s) found with no .object_size property. This will prevent additional building.") | "");
-      else
-        player:tell("Sorry, ", what.name, " is not enrolled in the object measurement scheme.");
-      endif
-    elseif (index("recent", args[1]) == 1)
-      "@measure recent days player";
-      if (length(args) > 1)
-        days = $code_utils:toint(args[2]);
-      else
-        days = $byte_quota_utils.cycle_days;
-      endif
-      if (!days)
-        return player:tell("Couldn't understand `", args[2], "' as a positive integer.");
-      endif
-      if (length(args) > 2)
-        if (!valid(who = $string_utils:match_player(name = $string_utils:from_list(args[3..$], " "))))
-          return $command_utils:player_match_failed(who, name);
-        endif
-      else
-        who = player;
-      endif
-      if (typeof(who.owned_objects) == LIST)
-        player:tell("Re-measuring objects of ", $string_utils:nn(who), " which have not been measured in the past ", days, " days.");
-        when = time() - days * 86400;
-        which = {};
-        for x in (who.owned_objects)
-          if (x.object_size[2] < when)
-            $byte_quota_utils:object_size(x);
-            which = setadd(which, x);
-            $command_utils:suspend_if_needed(3, "...measuring");
-          endif
-        endfor
-        player:tell("Done, re-measured ", length(which), " objects.", length(which) > 0 ? "  Recommend you use @measure summary to update the display of @quota." | "");
-      else
-        player:tell("Sorry, ", who.name, " is not enrolled in the object measurement scheme.");
-      endif
-    elseif (index("breakdown", args[1]) == 1)
-      what = player.location:match_object(name = $string_utils:from_list(args[2..$], " "));
-      if (!valid(what))
-        player:tell("Sorry, I didn't understand `", name, "'");
-      elseif (!$byte_quota_utils:can_peek(player, what.owner))
-        return player:tell("Sorry, you don't control ", what.name, " (", what, ")");
-      else
-        if (mail = $command_utils:yes_or_no("This might be kinda long.  Want me to mail you the result?"))
-          player:tell("Result will be mailed.");
-        endif
-        info = $byte_quota_utils:do_breakdown(what);
-        if (typeof(info) == ERR)
-          player:tell(info);
-        endif
-        if (mail)
-          $mail_agent:send_message($byte_quota_utils.owner, {player}, tostr("Object breakdown of ", what.name, " (", what, ")"), info);
-        else
-          player:tell_lines_suspended(info);
-        endif
-      endif
-    else
-      player:tell("Not a sub-command of @measure: ", args[1]);
-      player:tell_lines($code_utils:verb_documentation());
     endif
   endverb
 

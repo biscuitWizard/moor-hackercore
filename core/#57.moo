@@ -50,7 +50,7 @@ object #57
     bynumber = verb == "@chown#";
     if ($command_utils:player_match_result(owner, args[2])[1])
     elseif (spec = $code_utils:parse_verbref(what))
-      object = this:my_match_object(spec[1]);
+      object = this:match(spec[1]);
       if (!$command_utils:object_match_failed(object, spec[1]))
         vname = spec[2];
         if (bynumber)
@@ -78,7 +78,7 @@ object #57
     elseif (bynumber)
       player:notify("@chown# can only be used with verbs.");
     elseif (index(what, ".") && (spec = $code_utils:parse_propref(what)))
-      object = this:my_match_object(spec[1]);
+      object = this:match(spec[1]);
       if (!$command_utils:object_match_failed(object, spec[1]))
         pname = spec[2];
         e = $wiz_utils:set_property_owner(object, pname, owner);
@@ -89,7 +89,7 @@ object #57
         endif
       endif
     else
-      object = this:my_match_object(what);
+      object = this:match(what);
       if (!$command_utils:object_match_failed(object, what))
         player:notify(tostr($wiz_utils:set_owner(object, owner) && "Object ownership changed."));
       endif
@@ -144,7 +144,7 @@ object #57
       else
         objlist = objlist[2];
       endif
-    elseif ($command_utils:object_match_failed(object = this:my_match_object(dobjstr), dobjstr))
+    elseif ($command_utils:object_match_failed(object = this:match(dobjstr), dobjstr))
       "...object is bogus...";
       return;
     else
@@ -1326,7 +1326,7 @@ object #57
       return;
     endif
     if (dobj == $failed_match)
-      dobj = player:my_match_object(dobjstr);
+      dobj = player:match(dobjstr);
     endif
     if ($command_utils:object_match_failed(dobj, dobjstr))
       return;
@@ -1722,7 +1722,7 @@ object #57
     if (typeof(`function_info("curl") ! E_INVARG') == ERR)
       return player:tell("This verb relies on the curl builtin function to retrieve up-to-date documentation. Please ensure that the server has been compiled with the function enabled. You may need to install a supporting library, such as libcurl. Further information may be available here: https://github.com/lisdude/toaststunt/blob/master/docs/README.md#build-instructions");
     endif
-    required_verbs = {{$object_utils, "has_property"}, {$player, "my_match_object"}, {$command_utils, "object_match_failed"}, {$string_utils, "nn"}, {$command_utils, "yes_or_no"}, {$recycler, "_create"}, {$string_utils, "english_list"}, {$list_utils, "map_builtin"}};
+    required_verbs = {{$object_utils, "has_property"}, {$player, "match"}, {$command_utils, "object_match_failed"}, {$string_utils, "nn"}, {$command_utils, "yes_or_no"}, {$recycler, "_create"}, {$string_utils, "english_list"}, {$list_utils, "map_builtin"}};
     required_props = {{$sysobj, "generic_help"}, {$sysobj, "prog"}};
     for x in (required_verbs)
       if (typeof(`verb_info(@x) ! E_VERBNF') == ERR)
@@ -1783,7 +1783,7 @@ object #57
         endif
       endfor
     else
-      match = player:my_match_object(argstr);
+      match = player:match(argstr);
       if ($command_utils:object_match_failed(match, argstr))
         return;
       elseif (isa(match, $generic_help))

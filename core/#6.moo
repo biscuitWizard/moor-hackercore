@@ -166,11 +166,6 @@ object #6
     endif
   endverb
 
-  verb "my_match_object" (this none this) owner: #2 flags: "rxd"
-    ":my_match_object(string [,location])";
-    return $string_utils:match_object(@{@args, this.location}[1..2], this);
-  endverb
-
   verb "tell_contents" (this none this) owner: #2 flags: "rxd"
     c = args[1];
     if (c)
@@ -991,7 +986,7 @@ object #6
 
   verb "@desc*ribe" (any as any) owner: #2 flags: "rd"
     set_task_perms(player);
-    dobj = player:my_match_object(dobjstr);
+    dobj = player:match(dobjstr);
     if ($command_utils:object_match_failed(dobj, dobjstr))
       "...lose...";
     elseif (e = dobj:set_description(iobjstr))
@@ -1007,7 +1002,7 @@ object #6
       player:notify(tostr("Usage:  ", verb, " <object>"));
       return;
     endif
-    dobj = player:my_match_object(dobjstr);
+    dobj = player:match(dobjstr);
     if ($command_utils:object_match_failed(dobj, dobjstr))
       return;
     endif
@@ -1119,7 +1114,7 @@ object #6
       player:notify(tostr("Usage:  ", verb, " <object>"));
       return E_INVARG;
     endif
-    what = player.location:match_object(dobjstr);
+    what = player.location:match_contents(dobjstr);
     if ($command_utils:object_match_failed(what, dobjstr))
       return;
     endif

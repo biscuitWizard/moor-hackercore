@@ -38,7 +38,7 @@ object #58
       player:notify(usage);
       return;
     endif
-    object = player:my_match_object(spec[1]);
+    object = player:match(spec[1]);
     name = spec[2];
     if ($command_utils:object_match_failed(object, spec[1]))
       return;
@@ -108,7 +108,7 @@ object #58
         player:notify("If you want to become a programmer, talk to a wizard.");
         return;
       endif
-      if (valid(object = player:my_match_object(spec[1])))
+      if (valid(object = player:match(spec[1])))
         vname = spec[2];
         if (bynumber)
           vname = $code_utils:toint(vname);
@@ -145,7 +145,7 @@ object #58
     elseif (bynumber)
       return player:notify("@chmod# can only be used for verbs.");
     elseif (index(what, ".") && (spec = $code_utils:parse_propref(what)))
-      if (valid(object = player:my_match_object(spec[1])))
+      if (valid(object = player:match(spec[1])))
         pname = spec[2];
         try
           info = property_info(object, pname);
@@ -165,7 +165,7 @@ object #58
         endtry
         return;
       endif
-    elseif (valid(object = player:my_match_object(what)))
+    elseif (valid(object = player:match(what)))
       perms = $perm_utils:apply((object.r ? "r" | "") + (object.w ? "w" | "") + (object.f ? "f" | ""), perms);
       r = w = f = 0;
       for i in [1..length(perms)]
@@ -205,7 +205,7 @@ object #58
     endif
     if (!(args && (spec = $code_utils:parse_verbref(args[1]))))
       player:notify(tostr(args ? "\"" + args[1] + "\"?  " | "", "<object>:<verb>  expected."));
-    elseif ($command_utils:object_match_failed(object = player:my_match_object(spec[1]), spec[1]))
+    elseif ($command_utils:object_match_failed(object = player:match(spec[1]), spec[1]))
       "...can't find object...";
     else
       if (verb == "@args#")
@@ -279,7 +279,7 @@ object #58
       player:notify(tostr("Usage:  ", verb, " <object>.<property>"));
       return;
     endif
-    object = player:my_match_object(spec[1]);
+    object = player:match(spec[1]);
     pname = spec[2];
     if ($command_utils:object_match_failed(object, spec[1]))
       return;
@@ -307,7 +307,7 @@ object #58
     if (!(args && (spec = $code_utils:parse_verbref(args[1]))))
       player:notify(tostr("Usage:  ", verb, " <object>:<verb-name(s)> [<dobj> [<prep> [<iobj> [<permissions> [<owner>]]]]]"));
       return;
-    elseif ($command_utils:object_match_failed(object = player:my_match_object(spec[1]), spec[1]))
+    elseif ($command_utils:object_match_failed(object = player:match(spec[1]), spec[1]))
       return;
     endif
     name = spec[2];
@@ -364,7 +364,7 @@ object #58
     set_task_perms(player);
     if (!(args && (spec = $code_utils:parse_verbref(args[1]))))
       player:notify(tostr("Usage:  ", verb, " <object>:<verb>"));
-    elseif ($command_utils:object_match_failed(object = player:my_match_object(spec[1]), spec[1]))
+    elseif ($command_utils:object_match_failed(object = player:match(spec[1]), spec[1]))
       "...bogus object...";
     elseif (typeof(argspec = $code_utils:parse_argspec(@listdelete(args, 1))) != LIST)
       player:notify(tostr(argspec));
@@ -533,7 +533,7 @@ object #58
       whatstr = argstr[1..colon - 1];
       vrb = argstr[colon + 1..$];
       if (whatstr)
-        what = player:my_match_object(whatstr);
+        what = player:match(whatstr);
       endif
     else
       player:notify_lines({tostr("Usage:  ", verb, " [object]:[verb]"), tostr("        ", verb, " task_id"), tostr("        ", verb, " soon [number-of-seconds]", player.wizard ? " [everyone|<player name>]" | ""), tostr("        ", verb, " all", player.wizard ? " [\"everyone\"|<player name>]" | "")});
@@ -623,17 +623,17 @@ object #58
       player:notify(tostr("        ", verb, " obj:verb to obj"));
       player:notify(tostr("        ", verb, " obj:verb to :verb"));
       return;
-    elseif ($command_utils:object_match_failed(fobj = player:my_match_object(from[1]), from[1]))
+    elseif ($command_utils:object_match_failed(fobj = player:match(from[1]), from[1]))
       return;
     elseif (iobjstr[1] == ":")
       to = {fobj, iobjstr[2..$]};
     elseif (!index(iobjstr, ":") || !(to = $code_utils:parse_verbref(iobjstr)))
-      iobj = player:my_match_object(iobjstr);
+      iobj = player:match(iobjstr);
       if ($command_utils:object_match_failed(iobj, iobjstr))
         return;
       endif
       to = {iobj, from[2]};
-    elseif ($command_utils:object_match_failed(tobj = player:my_match_object(to[1]), to[1]))
+    elseif ($command_utils:object_match_failed(tobj = player:match(to[1]), to[1]))
       return;
     else
       to[1] = tobj;
@@ -720,7 +720,7 @@ object #58
     punt = "...set punt to 0 only if everything works out...";
     if (!(args && (spec = $code_utils:parse_verbref(args[1]))))
       player:notify(tostr("Usage: ", verb, " <object>:<verb> [<dobj> <prep> <iobj>]"));
-    elseif ($command_utils:object_match_failed(object = player:my_match_object(spec[1]), spec[1]))
+    elseif ($command_utils:object_match_failed(object = player:match(spec[1]), spec[1]))
       "...bogus object...";
     elseif (typeof(argspec = $code_utils:parse_argspec(@listdelete(args, 1))) != LIST)
       player:notify(tostr(argspec));
@@ -884,7 +884,7 @@ object #58
     endfor
     opivu[punc] = {@opivu[punc], string};
     objname = opivu[1][1];
-    it = this:my_match_object(objname);
+    it = this:match(objname);
     if ($command_utils:object_match_failed(it, objname))
       return;
     endif
@@ -1145,11 +1145,11 @@ object #58
       return;
     endif
     if (index(dobjstr, ".") && (spec = $code_utils:parse_propref(dobjstr)))
-      if (valid(object = player:my_match_object(spec[1])))
+      if (valid(object = player:match(spec[1])))
         return $code_utils:show_property(object, spec[2]);
       endif
     elseif (index(dobjstr, ":") && (spec = $code_utils:parse_verbref(dobjstr)))
-      if (valid(object = player:my_match_object(spec[1])) && player.programmer)
+      if (valid(object = player:match(spec[1])) && player.programmer)
         return $code_utils:show_verbdef(object, spec[2]);
       else
         player:tell("You must be a programmer to show verbs.");
@@ -1162,7 +1162,7 @@ object #58
     elseif (dobjstr[1] == "$" && (spec = $code_utils:parse_propref(dobjstr)))
       return $code_utils:show_property(#0, spec[2]);
     else
-      if (valid(object = player:my_match_object(dobjstr)))
+      if (valid(object = player:match(dobjstr)))
         return $code_utils:show_object(object);
       endif
     endif
@@ -1175,7 +1175,7 @@ object #58
     set_task_perms(player);
     if (!(spec = $code_utils:parse_propref(dobjstr)))
       player:notify(tostr("Usage:  ", verb, " <object>.<prop-name>"));
-    elseif ($command_utils:object_match_failed(object = player:my_match_object(spec[1]), spec[1]))
+    elseif ($command_utils:object_match_failed(object = player:match(spec[1]), spec[1]))
       "...bogus object...";
     elseif (!($perm_utils:controls(player, object) || object.w))
       player:notify("You can't create a property on that object anyway.");
@@ -1216,7 +1216,7 @@ object #58
     set_task_perms(player);
     if (!(l = $code_utils:parse_propref(dobjstr)))
       player:notify(tostr("Usage:  ", verb, " <object>.<property>"));
-    elseif ($command_utils:object_match_failed(dobj = player:my_match_object(l[1]), l[1]))
+    elseif ($command_utils:object_match_failed(dobj = player:match(l[1]), l[1]))
       "... bogus object...";
     endif
     try
@@ -1241,7 +1241,7 @@ object #58
       if (prepstr != "from")
         player:notify("Usage:  ", verb, " <object> [from <object>]");
         return;
-      elseif ($command_utils:object_match_failed(iobj = player:my_match_object(iobjstr), iobjstr))
+      elseif ($command_utils:object_match_failed(iobj = player:match(iobjstr), iobjstr))
         "... from WHAT?..";
         return;
       elseif (valid(dobj = $string_utils:literal_object(dobjstr)))
@@ -1254,7 +1254,7 @@ object #58
         "... can't match dobjstr against any children of iobj";
         return;
       endif
-    elseif ($command_utils:object_match_failed(dobj = player:my_match_object(dobjstr), dobjstr))
+    elseif ($command_utils:object_match_failed(dobj = player:match(dobjstr), dobjstr))
       "... can't match dobjstr...";
       return;
     endif
@@ -1303,7 +1303,7 @@ object #58
     "   noverbs -- don't show verbs.";
     "   create  -- indicates that a @create command should be generated and all of the verbs be introduced with @verb rather than @args; the default assumption is that the object already exists and you're just doing this to have a look at it.";
     set_task_perms(player);
-    dobj = player:my_match_object(dobjstr);
+    dobj = player:match(dobjstr);
     if ($command_utils:object_match_failed(dobj, dobjstr))
       return;
     endif
@@ -1360,7 +1360,7 @@ object #58
       player:notify("Usage:  #string [exit|player|inventory]");
       return;
     elseif (!args)
-      what = player:my_match_object(whatstr);
+      what = player:match(whatstr);
     elseif (index("exits", args[1]) == 1)
       what = player.location:match_exit(whatstr);
     elseif (index("inventory", args[1]) == 1)
@@ -1371,7 +1371,7 @@ object #58
         return;
       endif
     else
-      what = player:my_match_object(whatstr);
+      what = player:match(whatstr);
     endif
     if (!valid(what) && match(whatstr, "^[0-9]+$"))
       what = toobj(whatstr);
@@ -1562,7 +1562,7 @@ object #58
         player:notify(tostr("Usage:  ", verb, " <object>:<verb> [<dobj> <prep> <iobj>] [with|without parentheses|numbers] [all] [ranges]"));
       endif
       return;
-    elseif ($command_utils:object_match_failed(object = player:my_match_object(spec[1]), spec[1]))
+    elseif ($command_utils:object_match_failed(object = player:match(spec[1]), spec[1]))
       return;
     endif
     shown_one = 0;
@@ -1668,7 +1668,7 @@ object #58
         return player:tell("Usage:  @verbs <object>");
       endtry
     endif
-    thing = player:my_match_object(dobjstr);
+    thing = player:match(dobjstr);
     if (!$command_utils:object_match_failed(thing, dobjstr))
       verbs = $object_utils:accessible_verbs(thing);
       player:tell(";verbs(", thing, ") => ", toliteral(verbs));
@@ -1730,7 +1730,7 @@ object #58
       return player:tell(E_PERM);
     endif
     set_task_perms(player);
-    ob = this:my_match_object(argstr);
+    ob = this:match(argstr);
     if (!$command_utils:object_match_failed(ob, argstr))
       this:notify(tostr(";properties(", $code_utils:corify_object(ob), ") => ", toliteral($object_utils:accessible_props(ob))));
     endif
@@ -1743,7 +1743,7 @@ object #58
       return E_PERM;
     endif
     set_task_perms(player);
-    package = player:my_match_object(iobjstr);
+    package = player:match(iobjstr);
     if (package == $failed_match || isa(package, $generic_options) == 0)
       return player:tell("You need to specify an option package.");
     elseif (dobjstr in package.names)
@@ -1767,7 +1767,7 @@ object #58
       return E_PERM;
     endif
     set_task_perms(player);
-    found_obj = player:my_match_object(argstr);
+    found_obj = player:match(argstr);
     return player:tell($string_utils:nn(found_obj), " => ", $code_utils:corify_object(found_obj));
   endverb
 
@@ -1776,7 +1776,7 @@ object #58
       return E_PERM;
     endif
     set_task_perms(player);
-    package = player:my_match_object(iobjstr);
+    package = player:match(iobjstr);
     dobjstr = strsub(dobjstr, " ", "_");
     if (package == $failed_match || isa(package, $generic_options) == 0)
       return player:tell("You need to specify an option package.");

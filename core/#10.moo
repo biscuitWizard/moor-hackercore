@@ -8,7 +8,7 @@ object #10
 
   override "description" = "This provides everything needed by #0:do_login_command.  See `help $login' on $core_help for details.";
 
-  property "welcome_message" (owner: #2, flags: "rc") = {"Welcome to the ToastCore database.", "", "Type 'connect wizard' to log in.", "", "You will probably want to change this text and the output of the `help' command, which are stored in $login.welcome_message and $login.help_message, respectively."};
+  property "welcome_message" (owner: #2, flags: "rc") = {"Welcome to the HackerCore database.", "", "Type 'connect wizard' to log in.", "", "You will probably want to change this text and the output of the `help' command, which are stored in $login.welcome_message and $login.help_message, respectively."};
 
   property "newt_registration_string" (owner: #2, flags: "rc") = "Your character is temporarily hosed.";
 
@@ -75,12 +75,6 @@ object #10
   property "temporary_spooflist" (owner: #2, flags: "") = {{}, {}};
 
   property "temporary_graylist" (owner: #2, flags: "") = {{}, {}};
-
-  property "intercepted_players" (owner: #36, flags: "") = {};
-
-  property "intercepted_actions" (owner: #36, flags: "") = {};
-
-  property "checkpoint_in_progress" (owner: #2, flags: "rc") = 0;
 
   property "no_connect_message" (owner: #2, flags: "rc") = 0;
 
@@ -192,12 +186,119 @@ object #10
       new.last_disconnect_time = time();
       "make sure the owership quota isn't clear!";
       $quota_utils:initialize_quota(new);
-      this:record_connection(new);
       $player_db:insert(name, new);
       `move(new, $player_start) ! ANY';
       return new;
     endif
     return 0;
+  endverb
+
+  verb "_match_player" (this none this) owner: #2 flags: "rxd"
+    {possible_id} = args;
+    for dude in (players())
+      if (dude.name == possible_id || dude.email_address == possible_id)
+        return dude;
+      endif
+    endfor
+    return $nothing;
+  endverb
+
+  verb "co*nnect @co*nnect" (any none any) owner: #2 flags: "rxd"
+    "$login:connect(player-name [, password])";
+    " => 0 (for failed connections)";
+    " => objnum (for successful connections)";
+    caller == #0 || caller == this || raise(E_PERM);
+    "=================================================================";
+    "=== Check arguments, print usage notice if necessary";
+    try
+      {name, ?password = 0} = args;
+      name = strsub(name, " ", "_");
+    except (E_ARGS)
+      notify(player, tostr("Usage:  ", verb, " <existing-player-name> <password>"));
+      return 0;
+    endtry
+    try
+      "=================================================================";
+      "=== Is our candidate name invalid?";
+      if (!valid(candidate = orig_candidate = this:_match_player(name)))
+        raise(E_INVARG, tostr("`", name, "' matches no player name."));
+      endif
+      "=================================================================";
+      "=== Is our candidate unable to connect for generic security";
+      "=== reasons (ie clear password, non-player object)?";
+      if (`is_clear_property(candidate, "password") ! E_PROPNF' || !$object_utils:isa(candidate, $player))
+        server_log(tostr("FAILED CONNECT: ", name, " (", candidate, ") on ", connection_name(player), $string_utils:connection_hostname(connection_name(player)) in candidate.all_connect_places ? "" | "******"));
+        raise(E_INVARG);
+      endif
+      "=================================================================";
+      "=== Check password";
+      if (typeof(cp = candidate.password) == STR)
+        "=== Candidate requires a password";
+        if (password)
+          "=== Candidate requires a password, and one was provided";
+          if (strcmp(crypt(password, cp), cp))
+            "=== Candidate requires a password, and one was provided, which was wrong";
+            server_log(tostr("FAILED CONNECT: ", name, " (", candidate, ") on ", connection_name(player), $string_utils:connection_hostname(connection_name(player)) in candidate.all_connect_places ? "" | "******"));
+            raise(E_INVARG, "Invalid password.");
+          else
+            "=== Candidate requires a password, and one was provided, which was right";
+          endif
+        else
+          "=== Candidate requires a password, and none was provided";
+          raise(E_INVARG, "A password is required.");
+        endif
+      elseif (cp == 0)
+        "=== Candidate does not require a password";
+      else
+        "=== Candidate has a nonstandard password; something's wrong";
+        raise(E_INVARG);
+      endif
+      "=================================================================";
+      "=== Check guest connections";
+      if ($object_utils:isa(candidate, $guest) && !valid(candidate = candidate:defer()))
+        if (candidate == #-2)
+          server_log(tostr("GUEST DENIED: ", connection_name(player)));
+          notify(player, "Sorry, guest characters are not allowed from your site at the current time.");
+        else
+          notify(player, "Sorry, all of our guest characters are in use right now.");
+        endif
+        return 0;
+      endif
+      "=================================================================";
+      "=== Check newts";
+      if (candidate in this.newted)
+        if (entry = $list_utils:assoc(candidate, this.temporary_newts))
+          if ((uptime = this:uptime_since(entry[2])) > entry[3])
+            "Temporary newting period is over.  Remove entry.  Oh, send mail, too.";
+            this.temporary_newts = setremove(this.temporary_newts, entry);
+            this.newted = setremove(this.newted, candidate);
+            fork (0)
+              player = this.owner;
+              $mail_agent:send_message(player, $newt_log, tostr("automatic @unnewt ", candidate.name, " (", candidate, ")"), {"message sent from $login:connect"});
+            endfork
+          else
+            notify(player, "");
+            notify(player, this:temp_newt_registration_string(entry[3] - uptime));
+            boot_player(player);
+            return 0;
+          endif
+        else
+          notify(player, "");
+          notify(player, this:newt_registration_string());
+          boot_player(player);
+          return 0;
+        endif
+      endif
+      "=================================================================";
+      "=== Log the player on!";
+      if (candidate != orig_candidate)
+        notify(player, tostr("Okay,... ", name, " is in use.  Logging you in as `", candidate.name, "'"));
+      endif
+      return candidate;
+    except (E_INVARG)
+      notify(player, "Either that player does not exist, or has a different password.");
+      return 0;
+    endtry
   endverb
 
   verb "q*uit @q*uit" (any none any) owner: #2 flags: "rxd"
@@ -234,9 +335,6 @@ object #10
     "Commands available to not-logged-in users should be located on this object and given the verb_args \"any none any\"";
     if (caller != #0 && caller != this)
       return E_PERM;
-    endif
-    if (li = this:interception(player))
-      return {@li, @args};
     endif
     if (!args)
       return {this.blank_command, @args};
@@ -297,28 +395,6 @@ object #10
     endif
   endverb
 
-  verb "_match_player" (this none this) owner: #2 flags: "rxd"
-    ":_match_player(name)";
-    "This is the matching routine used by @connect.";
-    "returns either a valid player corresponding to name or $failed_match.";
-    name = args[1];
-    if (valid(candidate = $string_utils:literal_object(name)) && is_player(candidate))
-      return candidate;
-    endif
-    ".....uncomment this to trust $player_db and have `connect' recognize aliases";
-    if (valid(candidate = $player_db:find_exact(name)) && is_player(candidate))
-      return candidate;
-    endif
-    ".....uncomment this if $player_db gets hosed and you want by-name login";
-    ". for candidate in (players())";
-    ".   if (candidate.name == name)";
-    ".     return candidate; ";
-    ".   endif ";
-    ". endfor ";
-    ".....";
-    return $failed_match;
-  endverb
-
   verb "notify" (this none this) owner: #2 flags: "rxd"
     caller != $ansi_utils && set_task_perms(caller_perms());
     notify(player, $ansi_utils:delete(args[1]));
@@ -341,9 +417,6 @@ object #10
 
   verb "newt_registration_string registration_string" (this none this) owner: #2 flags: "rxd"
     return $string_utils:subst(this.(verb), {{"%e", this.registration_address}, {"%%", "%"}});
-  endverb
-
-  verb "special_action" (this none this) owner: #2 flags: "x"
   endverb
 
   verb "blacklisted graylisted redlisted spooflisted" (this none this) owner: #2 flags: "rxd"
@@ -423,38 +496,6 @@ object #10
 
   verb "listname" (this none this) owner: #2 flags: "rxd"
     return {"???", "blacklist", "graylist", "redlist", "spooflist"}[1 + index("bgrs", (args[1] || "?")[1])];
-  endverb
-
-  verb "who(vanilla)" (this none this) owner: #2 flags: "rxd"
-    if (caller != #0)
-      return E_PERM;
-    elseif (!args)
-      $code_utils:show_who_listing(connected_players()) || this:notify("No one logged in.");
-    else
-      plyrs = listdelete($command_utils:player_match_result($string_utils:match_player(args), args), 1);
-      $code_utils:show_who_listing(plyrs);
-    endif
-    return 0;
-  endverb
-
-  verb "record_connection" (this none this) owner: #2 flags: "rxd"
-    ":record_connection(plyr) update plyr's connection information";
-    "to reflect impending login.";
-    if (!caller_perms().wizard)
-      return E_PERM;
-    else
-      plyr = args[1];
-      plyr.first_connect_time = min(time(), plyr.first_connect_time);
-      plyr.previous_connection = {plyr.last_connect_time, $string_utils:connection_hostname(plyr.last_connect_place)};
-      plyr.last_connect_time = time();
-      plyr.last_connect_place = connection_name(player);
-      chost = $string_utils:connection_hostname(player);
-      acp = setremove(plyr.all_connect_places, chost);
-      plyr.all_connect_places = {chost, @acp[1..min($, 15)]};
-      if (!$object_utils:isa(plyr, $guest))
-        $site_db:add(plyr, chost);
-      endif
-    endif
   endverb
 
   verb "sample_lag" (this none this) owner: #2 flags: "rxd"
@@ -659,9 +700,7 @@ object #10
     if (caller_perms().wizard)
       this.lag_samples = {0, 0, 0, 0, 0};
       this.downtimes = {{time(), this.last_lag_sample}, @this.downtimes[1..min($, 100)]};
-      this.intercepted_players = this.intercepted_actions = {};
       this.name_lookup_players = {};
-      this.checkpoint_in_progress = 0;
       this.current_numcommands = [];
     endif
   endverb
@@ -754,61 +793,9 @@ object #10
     return "Your character is unavailable for another " + $time_utils:english_time(args[1]) + ".";
   endverb
 
-  verb "add_interception" (this none this) owner: #36 flags: "rxd"
-    caller == this || raise(E_PERM);
-    {who, verbname, @arguments} = args;
-    who in this.intercepted_players && raise(E_INVARG, "Player already has an interception set.");
-    this.intercepted_players = {@this.intercepted_players, who};
-    this.intercepted_actions = {@this.intercepted_actions, {verbname, @arguments}};
-    return 1;
-  endverb
-
-  verb "delete_interception" (this none this) owner: #36 flags: "rxd"
-    caller == this || raise(E_PERM);
-    {who} = args;
-    if (loc = who in this.intercepted_players)
-      this.intercepted_players = listdelete(this.intercepted_players, loc);
-      this.intercepted_actions = listdelete(this.intercepted_actions, loc);
-      return 1;
-    else
-      "raise an error?  nah.";
-      return 0;
-    endif
-  endverb
-
-  verb "interception" (this none this) owner: #36 flags: "rxd"
-    caller == this || raise(E_PERM);
-    {who} = args;
-    return (loc = who in this.intercepted_players) ? this.intercepted_actions[loc] | 0;
-  endverb
-
   verb "do_out_of_band_command doobc" (this none this) owner: #36 flags: "rxd"
     "This is where oob handlers need to be put to handle oob commands issued prior to assigning a connection to a player object.  Right now it simply returns.";
     return;
-  endverb
-
-  verb "check_for_checkpoint" (this none this) owner: #2 flags: "rxd"
-    if (this.checkpoint_in_progress)
-      line = "***************************************************************************";
-      notify(player, "");
-      notify(player, "");
-      notify(player, line);
-      notify(player, line);
-      notify(player, "****");
-      notify(player, "****  NOTICE:  The server is very slow now.");
-      notify(player, "****           The database is being saved to disk.");
-      notify(player, "****");
-      notify(player, line);
-      notify(player, line);
-      notify(player, "");
-      notify(player, "");
-    endif
-  endverb
-
-  verb "encrypt_password" (this none this) owner: #2 flags: "rxd"
-    {password} = args;
-    salt = random_bytes(20);
-    return argon2(password, salt, this.argon2["iterations"], this.argon2["memory"], this.argon2["threads"]);
   endverb
 
   verb "connection_name_lookup" (this none this) owner: #2 flags: "rxd"

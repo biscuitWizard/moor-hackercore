@@ -79,7 +79,7 @@ object #77
     endif
     if (typeof(raw) != STR)
       return "You need to give an object id.";
-    elseif ($command_utils:object_match_failed(value = player:my_match_object(raw), raw))
+    elseif ($command_utils:object_match_failed(value = player:match(raw), raw))
       return "Option unchanged.";
     endif
     what = verb == "parse_dig_room" ? "room" | "exit";

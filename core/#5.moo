@@ -85,7 +85,7 @@ object #5
       player:tell("You don't have that!");
     elseif (!valid(player.location))
       player:tell("I see no \"", iobjstr, "\" here.");
-    elseif ($command_utils:object_match_failed(who = player.location:match_object(iobjstr), iobjstr))
+    elseif ($command_utils:object_match_failed(who = player.location:match_contents(iobjstr), iobjstr))
     elseif (who.location != player.location)
       player:tell("I see no \"", iobjstr, "\" here.");
     elseif (who == player)

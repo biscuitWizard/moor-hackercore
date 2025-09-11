@@ -73,14 +73,70 @@ object #1
   endverb
 
   verb "match" (this none this) owner: #2 flags: "rxd"
-    c = this:contents();
-    return $string_utils:match(args[1], c, "name", c, "aliases");
+    ":match(STR subject) => OBJ match";
+    "  This matches <subject> from the perspective of <this>";
+    "  If nothing is found then $failed_match is returned";
+    "  If multiple things are found then $ambiguous_match is returned";
+    {?subject = ""} = args;
+    if (!subject)
+      return $failed_match;
+    elseif (subject == "me")
+      return this;
+    elseif (subject == "here")
+      return $recycler:valid(this.location) ? this.location | $failed_match;
+    endif
+    matches = this:matches(subject);
+    if (!matches)
+      return $failed_match;
+    elseif (length(matches) > 1)
+      return $ambiguous_match;
+    endif
+    return matches[1];
   endverb
 
-  verb "match_object" (this none this) owner: #2 flags: "rxd"
-    ":match_object(string [,who])";
-    args[2..1] = {this};
-    return $string_utils:match_object(@args);
+  verb "matches" (this none this) owner: #2 flags: "rxd"
+    ":matches(STR subject[, LIST targets]) => LIST of matches";
+    "  This matches <subject> from the perspective of <this>";
+    "  If nothing is found then {$failed_match} is returned";
+    "  If targets is specified, it'll match specifically against those objects";
+    {?subject = "", ?targets = E_NONE} = args;
+    if (!subject)
+      return {$failed_match};
+    endif
+    if (targets == E_NONE)
+      
+      targets = this:contents();
+      if ($recycler:valid(this.location))
+        targets = {@targets, @this.location:contents()};
+        targets = {@targets, @`this.location:exits() ! ANY => {}'};
+      endif
+    endif
+    keys = {};
+    for target in (targets)
+      
+      keys = {@keys, setadd(target:aliases(this), target:name(this))};
+    endfor
+    return `complex_match(subject, targets, keys) ! E_INVARG => {}';
+  endverb
+
+  verb "match_contents" (this none this) owner: #2 flags: "rxd"
+    ":match_contents(STR subject) => OBJ match";
+    "  This matches <subject> from the perspective of <this>";
+    "  If nothing is found then $failed_match is returned";
+    "  If multiple things are found then $ambiguous_match is returned";
+    {?subject = ""} = args;
+    if (!subject)
+      return $failed_match;
+    elseif (subject == "me")
+      return this;
+    endif
+    matches = this:matches(subject, this:contents());
+    if (!matches)
+      return $failed_match;
+    elseif (length(matches) > 1)
+      return $ambiguous_match;
+    endif
+    return matches[1];
   endverb
 
   verb "set_description" (this none this) owner: #2 flags: "rxd"

@@ -128,9 +128,9 @@ object #53
       elseif (next == "")
         return "Missing object-name at end of key expression";
       else
-        what = this:match_object(next);
+        what = this:match(next);
         if (typeof(what) == OBJ)
-          return {"?", this:match_object(next)};
+          return {"?", this:match(next)};
         else
           return what;
         endif
@@ -140,7 +140,7 @@ object #53
     elseif (token == "")
       return "Missing expression at end of key expression";
     else
-      return this:match_object(token);
+      return this:match(token);
     endif
   endverb
 
@@ -167,7 +167,7 @@ object #53
     endif
   endverb
 
-  verb "match_object" (this none this) owner: #2 flags: "rxd"
+  verb "match" (this none this) owner: #2 flags: "rxd"
     "used by $lock_utils to unparse a key expression so one can use `here' and `me' as well as doing the regular object matching.";
     token = args[1];
     if (token == "me")
@@ -179,7 +179,7 @@ object #53
         return "'here' has no meaning where " + this.player.name + " is";
       endif
     else
-      what = this.player.location:match_object(token);
+      what = this.player.location:match(token);
       if (what == $failed_match)
         return "Can't find an object named '" + token + "'";
       elseif (what == $ambiguous_match)
@@ -305,9 +305,9 @@ object #53
       elseif (next == "")
         return "Missing object-name at end of key expression";
       else
-        what = this:match_object(next);
+        what = this:match(next);
         if (typeof(what) == OBJ)
-          return {"?", this:match_object(next)};
+          return {"?", this:match(next)};
         else
           return what;
         endif
@@ -328,7 +328,7 @@ object #53
     elseif (token == "")
       return "Missing expression at end of key expression";
     else
-      return this:match_object(token);
+      return this:match(token);
     endif
   endverb
 

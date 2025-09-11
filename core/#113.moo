@@ -62,7 +62,7 @@ object #113
     punt = 1;
     if (!(spec = $code_utils:parse_verbref(args[1])))
       raise(E_INVARG, "Invalid reference: " + reference);
-    elseif ($command_utils:object_match_failed(object = player:my_match_object(spec[1]), spec[1]))
+    elseif ($command_utils:object_match_failed(object = player:match(spec[1]), spec[1]))
       return;
     elseif ($string_utils:is_numeric(spec[2]))
       "numeric verbref";
