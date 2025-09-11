@@ -73,10 +73,6 @@ object #52
     "See if an object has a verb that can be called by another verb (i.e., that has its x permission bit set).";
     "Return {location}, where location is the object that defines the verb, or 0 if the object doesn't have the verb.";
     {object, verbname} = args;
-    if (typeof(object) == WAIF)
-      object = object.class;
-      verbname = ":" + verbname;
-    endif
     return `{respond_to(object, verbname)[1]} ! ANY => 0';
   endverb
 
@@ -99,12 +95,6 @@ object #52
     {what, targ, ?return_parent = 0} = args;
     if (typeof(what) == OBJ && typeof(targ) in {OBJ, LIST})
       return isa(@args);
-    elseif (typeof(what) == WAIF && typeof(targ) in {OBJ, LIST})
-      return isa(what.class, targ, return_parent);
-    elseif (typeof(what) == WAIF && typeof(targ) == WAIF)
-      return isa(what.class, targ.class, return_parent);
-    elseif (typeof(what) == OBJ && typeof(targ) == WAIF)
-      return isa(targ.class, what, return_parent);
     else
       raise(E_INVARG);
     endif
