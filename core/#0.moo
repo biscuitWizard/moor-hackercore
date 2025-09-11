@@ -4,6 +4,10 @@ object #0
   owner: #2
   readable: true
 
+  property "false" (owner: #2, flags: "r") = 0;
+
+  property "true" (owner: #2, flags: "r") = 1;
+
   property "builder" (owner: #2, flags: "r") = #4;
 
   property "login" (owner: #2, flags: "r") = #10;
@@ -80,6 +84,8 @@ object #0
 
   property "string_utils" (owner: #2, flags: "r") = #20;
 
+  property "ansi" (owner: #2, flags: "r") = #25;
+
   property "su" (owner: #2, flags: "r") = #20;
 
   property "news" (owner: #2, flags: "r") = #61;
@@ -127,10 +133,6 @@ object #0
   property "convert_utils" (owner: #2, flags: "r") = #93;
 
   property "gendered_object" (owner: #2, flags: "r") = #94;
-
-  property "ansi_pc" (owner: #2, flags: "r") = #100;
-
-  property "ansi_utils" (owner: #2, flags: "r") = #99;
 
   property "mcp" (owner: #2, flags: "r") = #110;
 

@@ -20,15 +20,6 @@ object #6
 
   property "more_msg" (owner: #2, flags: "rc") = "*** More ***  %n lines left.  Do @more [rest|flush] for more.";
 
-  property "linetask" (owner: #36, flags: "r") = {0, 0};
-
-  property "linesleft" (owner: #36, flags: "r") = 0;
-
-  property "linebuffer" (owner: #36, flags: "") = {};
-
-  property "pagelen" (owner: #36, flags: "r") = 0;
-
-  property "linelen" (owner: #36, flags: "r") = -79;
 
   property "all_connect_places" (owner: #2, flags: "") = {};
 
@@ -191,68 +182,16 @@ object #6
     return `this.namec ! E_PROPNF => this:title()';
   endverb
 
-  verb "notify" (this none this) owner: #2 flags: "rxd"
-    line = args[1];
-    if (!(this in connected_players()))
-      "...drop it on the floor...";
-      return 0;
-    elseif (caller != this && !$perm_utils:controls(caller_perms(), this))
-      return E_PERM;
-    endif
-    if (this.pagelen)
-      "...need wizard perms if this and this.owner are different, since...";
-      "...only this can notify() and only this.owner can read .linebuffer...";
-      if (player == this && this.linetask[2] != task_id())
-        "...player has started a new task...";
-        "....linetask[2] is the taskid of the most recent player task...";
-        if (this.linetask[2] != this.linetask[1])
-          this.linesleft = this.pagelen - 2;
-        endif
-        this.linetask[2] = task_id();
-      endif
-      "... digest the current line...";
-      if (this.linelen > 0)
-        lbuf = {@this.linebuffer, @this:linesplit(line, this.linelen)};
-      else
-        lbuf = {@this.linebuffer, line};
-      endif
-      "... print out what we can...";
-      if (this.linesleft)
-        howmany = min(this.linesleft, length(lbuf));
-        for l in (lbuf[1..howmany])
-          pass(l);
-        endfor
-        this.linesleft = this.linesleft - howmany;
-        lbuf[1..howmany] = {};
-      endif
-      if (lbuf)
-        "...see if we need to say ***More***";
-        if (this.linetask[1] != this.linetask[2])
-          "....linetask[1] is the taskid of the most recent player task";
-          "...   for which ***More*** was printed...";
-          this.linetask[1] = this.linetask[2];
-          fork (0)
-            if (lb = this.linebuffer)
-              pass(strsub(this.more_msg, "%n", tostr(length(lb))));
-            endif
-          endfork
-        endif
-        llen = length(lbuf);
-        if (llen > 500)
-          "...way too much saved text, flush some of it...";
-          lbuf[1..llen - 100] = {"*** buffer overflow, lines flushed ***"};
-        endif
-      endif
-      this.linebuffer = lbuf;
+  verb "notify" (this none this) owner: #36 flags: "rxd"
+    line = length(args) > 1 ? tostr(@args) | args[1];
+    ansi_enabled = `this:player_option("ansi_enabled") ! ANY => $false';
+    ansi_enabled = true;
+    if (!ansi_enabled)
+      line = $ansi:strip_tags(line);
     else
-      if (this.linelen > 0)
-        for l in (this:linesplit(line, this.linelen))
-          pass(l);
-        endfor
-      else
-        pass(line);
-      endif
+      line = $ansi:convert_tags_to_color(line, this);
     endif
+    return pass(line);
   endverb
 
   verb "notify_lines" (this none this) owner: #2 flags: "rxd"
@@ -263,149 +202,6 @@ object #6
       endfor
     else
       return E_PERM;
-    endif
-  endverb
-
-  verb "linesplit" (this none this) owner: #2 flags: "rxd"
-    ":linesplit(line,len) => list of substrings of line";
-    "used by :notify to split up long lines if .linelen>0";
-    {line, len} = args;
-    cline = {};
-    while (length(line) > len)
-      cutoff = rindex(line[1..len], " ");
-      if (nospace = cutoff < 4 * len / 5)
-        cutoff = len + 1;
-        nospace = line[cutoff] != " ";
-      endif
-      cline = {@cline, line[1..cutoff - 1]};
-      line = (nospace ? " " | "") + line[cutoff..$];
-    endwhile
-    return {@cline, line};
-  endverb
-
-  verb "linelen" (this none this) owner: #36 flags: "rxd"
-    return abs(this.linelen);
-  endverb
-
-  verb "@more" (any none none) owner: #2 flags: "rd"
-    if (player != this)
-      "... somebody's being sneaky...";
-      "... Can't do set_task_perms(player) since we need to be `this'...";
-      "... to notify and `this.owner' to change +c properties...";
-      return;
-    elseif (!(lbuf = this.linebuffer))
-      this.linesleft = this.pagelen - 2;
-      notify(this, "*** No more ***");
-    elseif (index("flush", dobjstr || "x") == 1)
-      this.linesleft = this.pagelen - 2;
-      notify(this, tostr("*** Flushed ***  ", length(lbuf), " lines"));
-      this.linebuffer = {};
-    elseif (index("rest", dobjstr || "x") == 1 || !this.pagelen)
-      this.linesleft = this.pagelen - 2;
-      for l in (lbuf)
-        notify(this, l);
-      endfor
-      this.linebuffer = {};
-    else
-      howmany = min(this.pagelen - 2, llen = length(lbuf = this.linebuffer));
-      for l in (lbuf[1..howmany])
-        notify(this, l);
-      endfor
-      this.linesleft = this.pagelen - 2 - howmany;
-      this.linebuffer = lbuf[howmany + 1..llen];
-      if (howmany < llen)
-        notify(this, strsub(this.more_msg, "%n", tostr(llen - howmany)));
-        this.linetask[1] = task_id();
-      endif
-    endif
-    this.linetask[2] = task_id();
-  endverb
-
-  verb "@wrap" (none any none) owner: #36 flags: "rd"
-    if (player != this)
-      "... someone is being sneaky...";
-      "... Can't do set_task_perms(player) since we need to be `this'...";
-      "... to notify and `this.owner' to change +c properties...";
-      return;
-    endif
-    linelen = player.linelen;
-    if (!(prepstr in {"on", "off"}))
-      player:notify("Usage:  @wrap on|off");
-      player:notify(tostr("Word wrap is currently ", linelen > 0 ? "on" | "off", "."));
-      return;
-    endif
-    player.linelen = abs(linelen) * (prepstr == "on" ? 1 | -1);
-    player:notify(tostr("Word wrap is now ", prepstr, "."));
-  endverb
-
-  verb "@linelen*gth" (any none none) owner: #36 flags: "rd"
-    if (callers() ? caller != this && !$perm_utils:controls(caller_perms(), this) | player != this)
-      "... somebody is being sneaky ...";
-      return;
-    endif
-    curlen = player.linelen;
-    wrap = curlen > 0;
-    wrapstr = wrap ? "on" | "off";
-    if (!dobjstr)
-      player:notify(tostr("Usage:  ", verb, " <number>"));
-      player:notify(tostr("Current line length is ", abs(curlen), ".  Word wrapping is ", wrapstr, "."));
-      return;
-    endif
-    newlen = toint(dobjstr);
-    if (newlen < 0)
-      player:notify("Line length can't be a negative number.");
-      return;
-    elseif (newlen == 0)
-      return player:notify("Linelength zero makes no sense.  You want to use '@wrap off' if you want to turn off wrapping.");
-    elseif (newlen < 10)
-      player:notify("You don't want your linelength that small.  Setting it to 10.");
-      newlen = 10;
-    elseif (newlen > 1000)
-      player:notify("You don't want your line length that large.  Setting it to 1000.");
-      newlen = 1000;
-    endif
-    this:set_linelength(newlen);
-    player:notify(tostr("Line length is now ", abs(player.linelen), ".  Word wrapping is ", wrapstr, "."));
-    if (!wrap)
-      player:notify("To enable word wrapping, type `@wrap on'.");
-    endif
-  endverb
-
-  verb "@pagelen*gth" (any none none) owner: #2 flags: "rd"
-    "@pagelength number  -- sets page buffering to that many lines (or 0 to turn off page buffering)";
-    if (player != this)
-      "... somebody is being sneaky ...";
-      "... Can't do set_task_perms(player) since we need to be `this'...";
-      "... to notify and `this.owner' to change +c properties...";
-      return;
-    elseif (!dobjstr)
-      notify(player, tostr("Usage:  ", verb, " <number>"));
-      notify(player, tostr("Current page length is ", player.pagelen, "."));
-      return;
-    elseif (0 > (newlen = toint(dobjstr)))
-      notify(player, "Page length can't be a negative number.");
-      return;
-    elseif (newlen == 0)
-      player.pagelen = 0;
-      notify(player, "Page buffering off.");
-      if (lb = this.linebuffer)
-        "queued text remains";
-        this:notify_lines(lb);
-        clear_property(this, "linebuffer");
-      endif
-    elseif (newlen < 5)
-      player.pagelen = 5;
-      notify(player, "Too small.  Setting it to 5.");
-    else
-      notify(player, tostr("Page length is now ", player.pagelen = newlen, "."));
-    endif
-    if (this.linebuffer)
-      notify(this, strsub(this.more_msg, "%n", tostr(length(this.linebuffer))));
-      player.linetask = {task_id(), task_id()};
-      player.linesleft = 0;
-    else
-      player.linetask = {0, task_id()};
-      player.linesleft = player.pagelen - 2;
     endif
   endverb
 
@@ -1244,12 +1040,6 @@ object #6
     this:tell("(from within you) ", @args);
   endverb
 
-  verb "linewrap" (this none this) owner: #36 flags: "rxd"
-    "Return a true value if this needs linewrapping.";
-    "default is true if .linelen > 0";
-    return this.linelen > 0;
-  endverb
-
   verb "tell_lines" (this none this) owner: #2 flags: "rxd"
     lines = args[1];
     if (typeof(lines) != LIST)
@@ -1317,43 +1107,6 @@ object #6
     if (never)
       player:tell("Players who have never connected:");
       player:tell("  ", $string_utils:english_list($list_utils:map_prop(never, "name")));
-    endif
-  endverb
-
-  verb "set_linelength" (this none this) owner: #2 flags: "rxd"
-    "Set linelength.  Linelength must be an integer >= 10.";
-    "If wrap is currently off (i.e. linelength is less than 0), maintains sign.  That is, this function *takes* an absolute value, and coerces the sign to be appropriate.";
-    "If you want to override the dwimming of wrap, pass in a second argument.";
-    "returns E_PERM if not allowed, E_INVARG if linelength is too low, otherwise the linelength.";
-    if (caller != this && !$perm_utils:controls(caller_perms(), this))
-      return E_PERM;
-    elseif (abs(len = args[1]) < 10)
-      return E_INVARG;
-    elseif (length(args) > 1)
-      this.linelen = len;
-    else
-      "DWIM here.";
-      this.linelen = this.linelen > 0 ? len | -len;
-      return len;
-    endif
-  endverb
-
-  verb "set_pagelength" (this none this) owner: #2 flags: "rxd"
-    "Set pagelength. Must be an integer >= 5, or 0 to turn pagelength off.";
-    "Returns E_PERM if you shouldn't be doing this, E_INVARG if it's too low, otherwise, what it got set to.";
-    if (caller != this && !$perm_utils:controls(caller_perms(), this))
-      return E_PERM;
-    elseif ((len = args[1]) < 5 && len != 0)
-      return E_INVARG;
-    else
-      if ((this.pagelen = len) == 0)
-        if (lb = this.linebuffer)
-          "queued text remains";
-          this:notify_lines(lb);
-          clear_property(this, "linebuffer");
-        endif
-      endif
-      return len;
     endif
   endverb
 

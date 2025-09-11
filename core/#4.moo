@@ -1,6 +1,6 @@
 object #4
   name: "Generic Builder"
-  parent: #100
+  parent: #6
   location: #-1
   owner: #2
   readable: true
@@ -16,24 +16,118 @@ object #4
 
   property "build_options" (owner: #2, flags: "rc") = {};
 
-  verb "@quota" (any none none) owner: #2 flags: "rd"
-    set_task_perms(player);
-    if (dobjstr == "")
-      dobj = player;
-    else
-      dobj = $string_utils:match_player(dobjstr);
+  verb "@children @kids" (any none any) owner: #36 flags: "rxd"
+    "Usage:  @tree <object> [-d] [search objects by name]";
+    "Shows an object hierarchy beginning with the given object. All fertile children";
+    "and children with children are included in the tree.  The output includes the";
+    "object number, the object name, and the total number of children the object has.";
+    "With option '-d', number of verbs and properties defined.";
+    if (!dobjstr)
+      return player:tell("@children <object> [-d] [search objects by name]");
     endif
-    if (!valid(dobj))
-      player:notify("Show whose quota?");
-      return;
+    parameters = dobjstr;
+    details = 0;
+    if (index(dobjstr, "-d"))
+      details = 1;
+      parameters = $string_utils:subst(parameters, {{"-d", ""}});
     endif
-    $quota_utils:display_quota(dobj);
-    try
-      if (dobj in $local.informed_quota_consumers.uninformed_quota_consumers)
-        player:notify(tostr("Note that quota is held in escrow -- `look ", $local.informed_quota_consumers, "' for more details."));
+    parts = $string_utils:explode(parameters);
+    root = player:match(parts[1]);
+    search_text = "";
+    if (length(parts) > 1)
+      search_text = $string_utils:from_list(parts[2..$]);
+    endif
+    if (!valid(root))
+      return player:tell("Invalid object reference: ", dobjstr);
+    endif
+    player:tell("Fertile kids of ", root.name, ": (this may take a while)");
+    this:do_tree(root, "", search_text, details, $false);
+    player:tell("----- End of @tree listing for ", $string_utils:nn(root), details ? " [kids, verbs and properties]" | "");
+  endverb
+
+  verb "@tree" (any none any) owner: #36 flags: "rxd"
+    "Usage:  @tree <object> [-d] [search objects by name]";
+    "Shows an object hierarchy beginning with the given object. All fertile children";
+    "and children with children are included in the tree.  The output includes the";
+    "object number, the object name, and the total number of children the object has.";
+    "With option '-d', number of verbs and properties defined.";
+    if (!dobjstr)
+      return player:tell("@tree <object> [-d] [search objects by name]");
+    endif
+    parameters = dobjstr;
+    details = 0;
+    if (index(dobjstr, "-d"))
+      details = 1;
+      parameters = $string_utils:subst(parameters, {{"-d", ""}});
+    endif
+    parts = $string_utils:explode(parameters);
+    root = player:match(parts[1]);
+    search_text = "";
+    if (length(parts) > 1)
+      search_text = $string_utils:from_list(parts[2..$]);
+    endif
+    if (!valid(root))
+      return player:tell("Invalid object reference: ", dobjstr);
+    endif
+    player:tell("Fertile kids of ", root.name, ": (this may take a while)");
+    this:do_tree(root, "", search_text, details);
+    player:tell("----- End of @tree listing for ", $string_utils:nn(root), details ? " [kids, verbs and properties]" | "");
+  endverb
+
+  verb "do_tree" (this none this) owner: #36 flags: "rxd"
+    ":do_tree(OBJ root, INT indent, STR search_text, [INT details, BOOL require_fertile = 1, STR color = \"normal\"])";
+    "traverse fertile kids of given root object";
+    {root, indent, search_text, ?details = 0, ?require_fertile = 1, ?color = "normal"} = args;
+    kids = children(root);
+    limit = 70;
+    if (length(search_text) > 0 ? index(root.name, search_text) | 1)
+      line = tostr($string_utils:space(indent, "  | | | | | | | | |"), "|-", $string_utils:nn(root));
+      len = length(line);
+      if (len > limit)
+        line = line[1..limit];
+      elseif (len < limit)
+        line = $su:left(line, limit);
       endif
-    except id (ANY)
-    endtry
+      line = tostr(line, $string_utils:right(length(kids), 4));
+      if (details)
+        v = verbs(root);
+        p = properties(root);
+        line = tostr(line, " ", $string_utils:right(v ? length(v) | " ", 3), " ", $string_utils:right(p ? length(p) | " ", 4));
+      endif
+      player:tell($ansi:(color)(line));
+      color = color == "normal" ? "bright" | "normal";
+    endif
+    indent = indent + "  ";
+    hadfertile = 0;
+    for kid in (kids)
+      if (!require_fertile || kid.f || children(kid))
+        {color, spaced} = this:do_tree(kid, indent, search_text, details, require_fertile, color);
+        hadfertile = 1;
+      endif
+      if (kid == kids[$] && hadfertile && !spaced)
+        if (callers()[1][2] == "do_tree" && children(parent(root))[$] != root)
+          player:tell($ansi:(color)($string_utils:space(indent, "  | | | | | | | | |")));
+          color = color == "normal" ? "bright" | "normal";
+        endif
+      endif
+    endfor
+    return {color, hadfertile};
+  endverb
+
+  verb "match" (this none this) owner: #2 flags: "rxd"
+    ":match(STR subject) => OBJ match";
+    "  This matches <subject> from the perspective of <this>";
+    "  If nothing is found then $failed_match is returned";
+    "  If multiple things are found then $ambiguous_match is returned";
+    {?subject = "", @more} = args;
+    if ($recycler:valid(result = pass(@args)))
+      return result;
+    elseif ($recycler:valid(object = $su:literal_object(subject)))
+      return object;
+    elseif ($recycler:valid(character = $match_utils:match_character(subject)))
+      return character;
+    endif
+    return $failed_match;
   endverb
 
   verb "@create" (any any any) owner: #2 flags: "rd"
@@ -435,20 +529,6 @@ object #4
       name = name + "_msg";
     endif
     return name;
-  endverb
-
-  verb "@kids" (any none none) owner: #2 flags: "rxd"
-    "'@kids <obj>' - List the children of an object. This is handy for seeing whether anybody's actually using your carefully-wrought public objects.";
-    thing = player:match(dobjstr);
-    if (!$command_utils:object_match_failed(thing, dobjstr))
-      kids = children(thing);
-      if (kids)
-        player:notify(tostr(thing:title(), "(", thing, ") has ", length(kids), " kid", length(kids) == 1 ? "" | "s", "."));
-        player:notify(tostr($string_utils:names_of(kids)));
-      else
-        player:notify(tostr(thing:title(), "(", thing, ") has no kids."));
-      endif
-    endif
   endverb
 
   verb "@contents" (any none none) owner: #2 flags: "rd"

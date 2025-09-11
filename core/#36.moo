@@ -20,8 +20,4 @@ object #36
 
   override "first_connect_time" = 9223372036854775807;
 
-  override "size_quota" = {100000008, -28300100, 1008125633, 1510995};
-
-  override "replace_codes" = {};
-
 endobject

@@ -1,6 +1,6 @@
 object #31
   name: "Generic Guest"
-  parent: #100
+  parent: #6
   location: #-1
   owner: #36
   readable: true
@@ -11,8 +11,6 @@ object #31
   override "features" = {#90, #89};
 
   override "help" = 0;
-
-  override "linelen" = 79;
 
   override "home" = #62;
 
@@ -181,7 +179,7 @@ object #31
       return E_PERM;
     else
       flush_input(this, 0);
-      for x in ({"paranoid", "lines", "responsible", "linelen", "linebuffer", "brief", "gaglist", "rooms", "pagelen", "messages", "messages_going", "request", "mail_options", "edit_options", "home", "spurned_objects", "web_info", "ansi_options", "replace_codes"})
+      for x in ({"paranoid", "lines", "responsible", "brief", "gaglist", "rooms", "messages", "messages_going", "request", "mail_options", "edit_options", "home", "spurned_objects", "web_info", "ansi_options", "replace_codes"})
         if ($object_utils:has_property(parent(this), x))
           clear_property(this, x);
         endif
