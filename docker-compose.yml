@@ -44,7 +44,6 @@ services:
         --workers-response-listen=tcp://0.0.0.0:7897 
         --workers-request-listen=tcp://0.0.0.0:7896 
         --import=/db/hackercore --import-format=objdef
-        --checkpoint-interval-seconds=360
         --use-symbols-in-builtins false
         --symbol-type=false
         --custom-errors true
