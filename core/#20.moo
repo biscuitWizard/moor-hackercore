@@ -444,7 +444,8 @@ object #20
       elseif (valid(aobj = $string_utils:literal_object(astr)) && is_player(aobj))
         "astr is a valid literal object number of some player, so we are done.";
       else
-        aobj = $player_db:find(astr);
+        matches = complex_match(astr, players());
+        aobj = typeof(matches) == LIST ? matches[1] | matches;
       endif
       found = {@found, aobj};
     endfor
