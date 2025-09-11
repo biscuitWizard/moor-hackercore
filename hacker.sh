@@ -210,10 +210,29 @@ check_compose_file() {
     fi
 }
 
+# Function to initialize and fetch all submodules
+init_submodules() {
+    print_info "Initializing and fetching submodules..."
+    cd "$SCRIPT_DIR"
+    
+    # Initialize submodules if they haven't been initialized
+    if [[ -f ".gitmodules" ]]; then
+        git submodule init
+        git submodule update --recursive
+        print_success "Submodules initialized and updated successfully!"
+    else
+        print_info "No submodules found (.gitmodules not present)"
+    fi
+}
+
 # Function to start services
 start_services() {
     print_info "Starting hackercore services..."
     cd "$SCRIPT_DIR"
+    
+    # Initialize and fetch submodules before starting
+    init_submodules
+    
     docker-compose up -d
     print_success "Services started successfully!"
     print_info "You can connect to the MUD via telnet on localhost:8888"
@@ -232,6 +251,10 @@ stop_services() {
 restart_services() {
     print_info "Restarting hackercore services..."
     cd "$SCRIPT_DIR"
+    
+    # Initialize and fetch submodules before restarting
+    init_submodules
+    
     docker-compose restart
     print_success "Services restarted successfully!"
 }
