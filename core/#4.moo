@@ -318,26 +318,6 @@ object #4
     endif
   endverb
 
-  verb "@audit" (any any any) owner: #2 flags: "rd"
-    "Usage:  @audit [player] [from <start>] [to <end>] [for <matching string>]";
-    set_task_perms(player);
-    dobj = $string_utils:match_player(dobjstr);
-    if (!dobjstr)
-      dobj = player;
-    elseif ($command_utils:player_match_result(dobj, dobjstr)[1])
-      return;
-    endif
-    dobjwords = $string_utils:words(dobjstr);
-    if (args[1..length(dobjwords)] == dobjwords)
-      args = args[length(dobjwords) + 1..$];
-    endif
-    if (!(parse_result = $code_utils:_parse_audit_args(@args)))
-      player:notify(tostr("Usage:  ", verb, " [player] [from <start>] [to <end>] [for <match>]"));
-      return;
-    endif
-    return $building_utils:do_audit(dobj, @parse_result);
-  endverb
-
   verb "@count" (any none none) owner: #2 flags: "rd"
     if (!dobjstr)
       dobj = player;
@@ -374,63 +354,6 @@ object #4
       endif
     endfor
     player:notify(tostr(dobj.name, " currently owns ", count, " object", count == 1 ? "." | "s."));
-  endverb
-
-  verb "@sort-owned*-objects" (any none none) owner: #2 flags: "rd"
-    "$player:owned_objects -- sorts a players .owned_objects property in ascending";
-    "order so it looks nice on @audit.";
-    if (player != this)
-      return E_PERM;
-    endif
-    if (typeof(player.owned_objects) == LIST)
-      if (!dobjstr || index("object", dobjstr) == 1)
-        ret = $list_utils:sort_suspended(0, player.owned_objects);
-      elseif (index("size", dobjstr) == 1)
-        ret = $list_utils:reverse_suspended($list_utils:sort_suspended(0, player.owned_objects, $list_utils:slice($list_utils:map_prop(player.owned_objects, "object_size"))));
-      endif
-      if (typeof(ret) == LIST)
-        player.owned_objects = ret;
-        player:tell("Your .owned_objects list has been sorted.");
-        return 1;
-      else
-        player:tell("Something went wrong. .owned_objects not sorted.");
-        return 0;
-      endif
-    else
-      player:tell("You are not enrolled in .owned_objects scheme, sorry.");
-    endif
-  endverb
-
-  verb "@add-owned" (any none none) owner: #2 flags: "rd"
-    if (player != this)
-      player:tell("Permission Denied");
-      return E_PERM;
-    endif
-    if (!valid(dobj))
-      player:tell("Don't understand `", dobjstr, "' as an object to add.");
-    elseif (dobj.owner != player)
-      player:tell("You don't own ", dobj.name, ".");
-    elseif (dobj in player.owned_objects)
-      player:tell(dobj.name, " is already recorded in your .owned_objects.");
-    else
-      player.owned_objects = setadd(player.owned_objects, dobj);
-      player:tell("Added ", dobj, " to your .owned_objects.");
-    endif
-  endverb
-
-  verb "@verify-owned" (none none none) owner: #2 flags: "rd"
-    for x in (player.owned_objects)
-      if (!valid(x) || x.owner != player)
-        player.owned_objects = setremove(player.owned_objects, x);
-        if (valid(x))
-          player:tell("Removing ", x.name, "(", x, "), owned by ", valid(x.owner) ? x.owner.name | "<recycled player>", " from your .owned_objects property.");
-        else
-          player:tell("Removing invalid object ", x, " from your .owned_objects property.");
-        endif
-      endif
-      $command_utils:suspend_if_needed(2, tostr("Suspending @verify-owned ... ", x));
-    endfor
-    player:tell(".owned_objects property verified.");
   endverb
 
   verb "@unlock" (any none none) owner: #2 flags: "rd"
@@ -531,7 +454,7 @@ object #4
     return name;
   endverb
 
-  verb "@contents" (any none none) owner: #2 flags: "rd"
+  verb "@contents @i*nventory" (any none none) owner: #2 flags: "rd"
     "'@contents <obj> - list the contents of an object, with object numbers.";
     set_task_perms(player);
     if (!dobjstr)
