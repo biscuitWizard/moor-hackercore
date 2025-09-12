@@ -333,9 +333,6 @@ object #58
       if (it.location != $nothing)
         this:notify(tostr("  Location ", valid(p = it.location) ? p.name | "** unplace (tell a wizard, fast!) **", " (", p, ")."));
       endif
-      if ($quota_utils.byte_based && $object_utils:has_property(it, "object_size"))
-        this:notify(tostr("  Size: ", $string_utils:group_number(it.object_size[1]), " bytes at ", this:ctime(it.object_size[2])));
-      endif
     endif
     blankargs = this:display_option("blank_tnt") ? {"this", "none", "this"} | #-1;
     for b in (vrb)

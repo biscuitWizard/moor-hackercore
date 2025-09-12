@@ -74,7 +74,6 @@ object #24
     elseif (typeof(e = `victim.programmer = 1 ! ANY') == ERR)
       return e;
     else
-      $quota_utils:adjust_quota_for_programmer(victim);
       if (!$object_utils:isa(victim, $prog))
         if (typeof(e = `chparent(victim, $prog) ! ANY') == ERR)
           "...this isn't really supposed to happen but it could...";
@@ -157,9 +156,6 @@ object #24
       endif
     endfor
     if ($object_utils:isa(oldowner, $player))
-      if (is_player(oldowner) && object != oldowner)
-        $quota_utils:reimburse_quota(oldowner, object);
-      endif
       if (typeof(oldowner.owned_objects) == LIST)
         oldowner.owned_objects = setremove(oldowner.owned_objects, object);
       endif
@@ -846,22 +842,6 @@ object #24
         set_property_info(object, pname, {newowner, perms});
       endif
     endfor
-    if ($object_utils:isa(oldowner, $player))
-      if (is_player(oldowner) && object != oldowner)
-        $quota_utils:reimburse_quota(oldowner, object);
-      endif
-      if (typeof(oldowner.owned_objects) == LIST)
-        oldowner.owned_objects = setremove(oldowner.owned_objects, object);
-      endif
-    endif
-    if ($object_utils:isa(newowner, $player))
-      if (object != newowner)
-        $quota_utils:charge_quota(newowner, object);
-      endif
-      if (typeof(newowner.owned_objects) == LIST)
-        newowner.owned_objects = setadd(newowner.owned_objects, object);
-      endif
-    endif
     return 1;
   endverb
 

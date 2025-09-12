@@ -152,7 +152,7 @@ object #73
     endif
   endverb
 
-  verb "@chmod*#" (any any any) owner: #2 flags: "rd"
+  verb "@chmod*#" (any any any) owner: #2 flags: "rdx"
     set_task_perms(player);
     bynumber = verb == "@chmod#";
     if (length(args) != 2)
@@ -254,7 +254,7 @@ object #73
     $command_utils:object_match_failed(object, what);
   endverb
 
-  verb "@rmprop*erty" (any any any) owner: #2 flags: "rd"
+  verb "@rmprop*erty" (any any any) owner: #2 flags: "rdx"
     set_task_perms(player);
     if (length(args) != 1 || !(spec = $code_utils:parse_propref(args[1])))
       player:notify(tostr("Usage:  ", verb, " <object>.<property>"));
@@ -277,7 +277,7 @@ object #73
     endtry
   endverb
 
-  verb "@rmverb*#" (any none none) owner: #2 flags: "rd"
+  verb "@rmverb*#" (any none none) owner: #2 flags: "rdx"
     set_task_perms(player);
     if (!(args && (spec = $code_utils:parse_verbref(args[1]))))
       player:notify(tostr("Usage:  ", verb, " <object>:<verb>"));
@@ -342,7 +342,7 @@ object #73
     endif
   endverb
 
-  verb "@args*#" (any any any) owner: #2 flags: "rd"
+  verb "@args*#" (any any any) owner: #2 flags: "rdx"
     set_task_perms(player);
     if (!player.programmer)
       player:notify("You need to be a programmer to do this.");
@@ -393,7 +393,7 @@ object #73
     endif
   endverb
 
-  verb "@copy @copy-x @copy-move" (any at any) owner: #2 flags: "rd"
+  verb "@copy @copy-x @copy-move" (any at any) owner: #2 flags: "rdx"
     "Usage:  @copy source:verbname to target[:verbname]";
     "  the target verbname, if not given, defaults to that of the source.  If the target verb doesn't already exist, a new verb is installed with the same args, names, code, and permission flags as the source.  Otherwise, the existing target's verb code is overwritten and no other changes are made.";
     "This the poor man's version of multiple inheritance... the main problem is that someone may update the verb you're copying and you'd never know.";
@@ -425,7 +425,7 @@ object #73
     endif
     from[1] = fobj;
     if (verb == "@copy-move")
-      if (!$perm_utils:controls(player, fobj) && !$quota_utils:verb_addition_permitted(player))
+      if (!$perm_utils:controls(player, fobj))
         player:notify("Won't be able to delete old verb.  Quota exceeded, so unable to continue.  Aborted.");
         return;
       elseif ($perm_utils:controls(player, fobj))
@@ -484,7 +484,7 @@ object #73
     endif
   endverb
 
-  verb "@dump" (any any any) owner: #2 flags: "rd"
+  verb "@dump" (any any any) owner: #2 flags: "rdx"
     "@dump something [with [id=...] [noprops] [noverbs] [create]]";
     "This spills out all properties and verbs on an object, calling suspend at appropriate intervals.";
     "   id=#nnn -- specifies an idnumber to use in place of the object's actual id (for porting to another MOO)";
@@ -533,7 +533,7 @@ object #73
     player:notify("\"***finished***");
   endverb
 
-  verb "@clearp*roperty @clprop*erty" (any none none) owner: #2 flags: "rd"
+  verb "@clearp*roperty @clprop*erty" (any none none) owner: #2 flags: "rdx"
     "@clearproperty <obj>.<prop>";
     "Set the value of <obj>.<prop> to `clear', making it appear to be the same as the property on its parent.";
     set_task_perms(player);
@@ -556,8 +556,70 @@ object #73
     endtry
   endverb
 
+  verb "@verb" (any any any) owner: #2 flags: "rdx"
+    set_task_perms(player);
+    if (!player.programmer)
+      player:notify("You need to be a programmer to do this.");
+      player:notify("If you want to become a programmer, talk to a wizard.");
+      return;
+    endif
+    if (!(args && (spec = $code_utils:parse_verbref(args[1]))))
+      player:notify(tostr("Usage:  ", verb, " <object>:<verb-name(s)> [<dobj> [<prep> [<iobj> [<permissions> [<owner>]]]]]"));
+      return;
+    elseif ($command_utils:object_match_failed(object = player:match(spec[1]), spec[1]))
+      return;
+    endif
+    name = spec[2];
+    "...Adding another verb of the same name is often a mistake...";
+    namelist = $string_utils:explode(name);
+    for n in (namelist)
+      if (i = index(n, "*"))
+        n = n[1..i - 1] + n[i + 1..$];
+      endif
+      if ((hv = $object_utils:has_verb(object, n)) && hv[1] == object)
+        player:notify(tostr("Warning:  Verb `", n, "' already defined on that object."));
+      endif
+    endfor
+    if (typeof(pas = $code_utils:parse_argspec(@listdelete(args, 1))) != LIST)
+      player:notify(tostr(pas));
+      return;
+    endif
+    verbargs = pas[1] || (player:prog_option("verb_args") || {});
+    verbargs = {@verbargs, "none", "none", "none"}[1..3];
+    rest = pas[2];
+    if (verbargs == {"this", "none", "this"})
+      perms = player:prog_option("verb_perms") || "rxd";
+      if (!index(perms, "x"))
+        perms = perms + "x";
+      endif
+    else
+      perms = player:prog_option("verb_perms") || "rd";
+    endif
+    if (rest)
+      perms = $perm_utils:apply(perms, rest[1]);
+    endif
+    if (length(rest) < 2)
+      owner = player;
+    elseif (length(rest) > 2)
+      player:notify(tostr("\"", rest[3], "\" unexpected."));
+      return;
+    elseif ($command_utils:player_match_result(owner = $string_utils:match_player(rest[2]), rest[2])[1])
+      return;
+    elseif (owner == $nothing)
+      player:notify("Verb can't be owned by no one!");
+      return;
+    endif
+    try
+      x = add_verb(object, {#12, perms, name}, verbargs);
+      player:notify(tostr("Verb added (", x > 0 ? x | length($object_utils:accessible_verbs(object)), ")."));
+    except (E_INVARG)
+      player:notify(tostr(rest ? tostr("\"", perms, "\" is not a valid set of permissions.") | tostr("\"", verbargs[2], "\" is not a valid preposition (?)")));
+    except e (ANY)
+      player:notify(e[2]);
+    endtry
+  endverb
   
-  verb "@verbs @verbs/*" (any any any) owner: #2 flags: "rxd"
+  verb "@verbs @verbs/*" (any any any) owner: #2 flags: "rdx"
     if (!argstr)
       return this:ooc_tell("Syntax is @verbs <obj>.");
     endif
@@ -615,5 +677,125 @@ object #73
     endfor
     player:tell_lines(lines);
     player:tell($ansi:brgreen(">"), " => Defined on Parent");
+  endverb
+
+  verb "@prog*ram @program#" (any any any) owner: #2 flags: "rdx"
+    "Copied from Generic Agent (#58):@prog [verb author Wizard (#2)] at Sun Jul 17 20:14:29 2022 UTC";
+    "This version of @program deals with multiple verbs having the same name.";
+    "... @program <object>:<verbname> <dobj> <prep> <iobj>  picks the right one.";
+    "...";
+    "...catch usage errors first...";
+    "...";
+    set_task_perms(player);
+    punt = "...set punt to 0 only if everything works out...";
+    if (!(args && (spec = $code_utils:parse_verbref(args[1]))))
+      player:notify(tostr("Usage: ", verb, " <object>:<verb> [<dobj> <prep> <iobj>]"));
+    elseif ($command_utils:object_match_failed(object = player:match(spec[1]), spec[1]))
+      "...bogus object...";
+    elseif (typeof(argspec = $code_utils:parse_argspec(@listdelete(args, 1))) != LIST)
+      player:notify(tostr(argspec));
+    elseif (verb == "@program#")
+      verbname = $code_utils:toint(spec[2]);
+      if (verbname == E_TYPE)
+        player:notify("Verb number expected.");
+      elseif (length(args) > 1)
+        player:notify("Don't give args for @program#.");
+      elseif (verbname < 1 || `verbname > length(verbs(object)) ! E_PERM')
+        player:notify("Verb number out of range.");
+      else
+        argspec = 0;
+        punt = 0;
+      endif
+    elseif (argspec[2])
+      player:notify($string_utils:from_list(argspec[2], " ") + "??");
+    elseif (length(argspec = argspec[1]) in {1, 2})
+      player:notify({"Missing preposition", "Missing iobj specification"}[length(argspec)]);
+    else
+      punt = 0;
+      verbname = spec[2];
+      if (index(verbname, "*") > 1)
+        verbname = strsub(verbname, "*", "");
+      endif
+    endif
+    "...";
+    "...if we have an argspec, we'll need to reset verbname...";
+    "...";
+    if (punt)
+    elseif (argspec)
+      if (!(argspec[2] in {"none", "any"}))
+        argspec[2] = $code_utils:full_prep(argspec[2]);
+      endif
+      loc = $code_utils:find_verb_named(object, verbname);
+      while (loc > 0 && `verb_args(object, loc) ! ANY' != argspec)
+        loc = $code_utils:find_verb_named(object, verbname, loc + 1);
+      endwhile
+      if (!loc)
+        punt = "...can't find it....";
+        player:notify("That object has no verb matching that name + args.");
+      else
+        verbname = loc;
+      endif
+    else
+      loc = 0;
+    endif
+    "...";
+    "...get verb info...";
+    "...";
+    if (punt || !(punt = "...reset punt to TRUE..."))
+    else
+      try
+        info = verb_info(object, verbname);
+        punt = 0;
+        aliases = info[3];
+        if (!loc)
+          loc = aliases in (verbs(object) || {});
+        endif
+      except (E_VERBNF)
+        player:notify("That object does not have that verb definition.");
+      except error (ANY)
+        player:notify(error[2]);
+      endtry
+    endif
+    "...";
+    "...check permissions...";
+    "...";
+    if (object.owner != this && !this.wizard)
+      return this:notify("Unable to edit object; not currently checked out.");
+    endif
+    "...";
+    "...read the code...";
+    "...";
+    if (punt)
+      player:notify(tostr("Now ignoring code for ", args ? args[1] | "nothing in particular", "."));
+      $command_utils:read_lines();
+      player:notify("Verb code ignored.");
+    else
+      player:notify(tostr("Now programming ", object.name, ":", aliases, "(", !loc ? "??" | loc, ")."));
+      lines = $command_utils:read_lines_escape((active = player in $verb_editor.active) ? {} | {"@edit"}, {tostr("You are editing ", $string_utils:nn(object), ":", verbname, "."), @active ? {} | {"Type `@edit' to take this into the verb editor."}});
+      if (lines[1] == "@edit")
+        $verb_editor:invoke(args[1], "@program", lines[2]);
+        return;
+      endif
+      try
+        old_code = verb_code(object, verbname);
+        if (result = set_verb_code(object, verbname, lines[2]))
+          player:notify_lines(result);
+          player:notify(tostr(length(result), " error(s)."));
+          player:notify("Verb not programmed.");
+        else
+          try
+            $diff_utils:diff_display("oldcode", old_code, "newcode", lines[2]);
+          except e (ANY)
+            $error:log(e);
+          endtry
+          player:notify("0 errors.");
+          player:notify("Verb programmed.");
+          $code_scanner:display_issues($code_scanner:scan_for_issues(object, verbname));
+        endif
+      except error (ANY)
+        player:notify(error[2]);
+        player:notify("Verb not programmed.");
+      endtry
+    endif
   endverb
 endobject

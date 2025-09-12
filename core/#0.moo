@@ -62,6 +62,10 @@ object #0
 
   property "command_utils" (owner: #2, flags: "r") = #56;
 
+  property "code_scanner" (owner: #2, flags: "r") = #95;
+
+  property "diff_utils" (owner: #2, flags: "r") = #96;
+
   property "player" (owner: #2, flags: "r") = #6;
 
   property "wiz" (owner: #2, flags: "r") = #57;
@@ -291,9 +295,7 @@ object #0
       retval = E_PERM;
     elseif (index(info[2], "w") && !$server_options.permit_writable_verbs)
       retval = E_INVARG;
-    elseif (!$quota_utils:verb_addition_permitted(who))
-      retval = E_QUOTA;
-    elseif (what.owner != who && !who.wizard && !$quota_utils:verb_addition_permitted(what.owner))
+    elseif (what.owner != who && !who.wizard)
       retval = E_QUOTA;
     elseif (!who.programmer)
       retval = E_PERM;
@@ -315,14 +317,6 @@ object #0
     elseif (!$perm_utils:controls(who, what) && !what.w)
       retval = E_PERM;
     elseif (!$perm_utils:controls(who, info[1]))
-      retval = E_PERM;
-    elseif (!$quota_utils:property_addition_permitted(who))
-      retval = E_QUOTA;
-    elseif (what.owner != who && !who.wizard && !$quota_utils:property_addition_permitted(what.owner))
-      retval = E_QUOTA;
-      "elseif (!who.programmer)";
-      "  return E_PERM;     I wanted to do this, but $builder:@newmessage relies upon nonprogs being able to call add_property.  --Nosredna";
-    elseif (propname in {"object_size", "size_quota", "queued_task_limit"} && !who.wizard)
       retval = E_PERM;
     else
       "we now know that the caller's perms control the object (or the object is writable), and that the caller's perms are permitted to control the new property's owner.";
