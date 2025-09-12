@@ -680,7 +680,6 @@ object #73
   endverb
 
   verb "@prog*ram @program#" (any any any) owner: #2 flags: "rdx"
-    "Copied from Generic Agent (#58):@prog [verb author Wizard (#2)] at Sun Jul 17 20:14:29 2022 UTC";
     "This version of @program deals with multiple verbs having the same name.";
     "... @program <object>:<verbname> <dobj> <prep> <iobj>  picks the right one.";
     "...";
@@ -757,12 +756,6 @@ object #73
       endtry
     endif
     "...";
-    "...check permissions...";
-    "...";
-    if (object.owner != this && !this.wizard)
-      return this:notify("Unable to edit object; not currently checked out.");
-    endif
-    "...";
     "...read the code...";
     "...";
     if (punt)
@@ -771,11 +764,7 @@ object #73
       player:notify("Verb code ignored.");
     else
       player:notify(tostr("Now programming ", object.name, ":", aliases, "(", !loc ? "??" | loc, ")."));
-      lines = $command_utils:read_lines_escape((active = player in $verb_editor.active) ? {} | {"@edit"}, {tostr("You are editing ", $string_utils:nn(object), ":", verbname, "."), @active ? {} | {"Type `@edit' to take this into the verb editor."}});
-      if (lines[1] == "@edit")
-        $verb_editor:invoke(args[1], "@program", lines[2]);
-        return;
-      endif
+      lines = $command_utils:read_lines_escape({}, {tostr("You are editing ", $string_utils:nn(object), ":", verbname, ".")});
       try
         old_code = verb_code(object, verbname);
         if (result = set_verb_code(object, verbname, lines[2]))
@@ -783,11 +772,7 @@ object #73
           player:notify(tostr(length(result), " error(s)."));
           player:notify("Verb not programmed.");
         else
-          try
-            $diff_utils:diff_display("oldcode", old_code, "newcode", lines[2]);
-          except e (ANY)
-            $error:log(e);
-          endtry
+          `$diff_utils:diff_display("oldcode", old_code, "newcode", lines[2]) ! ANY';
           player:notify("0 errors.");
           player:notify("Verb programmed.");
           $code_scanner:display_issues($code_scanner:scan_for_issues(object, verbname));

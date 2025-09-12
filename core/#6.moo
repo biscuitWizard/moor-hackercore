@@ -42,10 +42,6 @@ object #6
 
   property "password" (owner: #2, flags: "") = "impossible password to type";
 
-  property "gaglist" (owner: #2, flags: "rc") = {};
-
-  property "paranoid" (owner: #2, flags: "rc") = 0;
-
   property "display_options" (owner: #2, flags: "rc") = {};
 
   property "first_connect_time" (owner: #2, flags: "r") = 2147483647;
@@ -67,7 +63,6 @@ object #6
       return E_PERM;
     endif
     this:("@last-connection")();
-    $news:check();
   endverb
 
   verb "disfunc" (this none this) owner: #2 flags: "rxd"
@@ -75,8 +70,6 @@ object #6
       return E_PERM;
     endif
     this:expunge_rmm();
-    this:erase_paranoid_data();
-    this:gc_gaglist();
     return;
   endverb
 
@@ -204,236 +197,6 @@ object #6
     endif
   endverb
 
-  verb "tell" (this none this) owner: #2 flags: "rxd"
-    if (this.gaglist || this.paranoid)
-      "Check the above first, default case, to save ticks.  Paranoid gaggers are cost an extra three or so ticks by this, probably a net savings.";
-      if (this:gag_p())
-        return;
-      endif
-      if (this.paranoid == 1)
-        $paranoid_db:add_data(this, {{@callers(1), {player, "<cmd-line>", player}}, args});
-      elseif (this.paranoid == 2)
-        z = this:whodunnit({@callers(), {player, "", player}}, {this, $no_one}, {})[3];
-        args = {"(", z.name, " ", z, ") ", @args};
-      endif
-    endif
-    pass(@args);
-  endverb
-
-  verb "gag_p" (this none this) owner: #2 flags: "rxd"
-    if (player in this.gaglist)
-      return 1;
-    elseif (gag = this.gaglist)
-      for x in (callers())
-        if (x[1] == #-1 && x[3] == #-1 && x[2] != "")
-        elseif (x[1] in gag || x[4] in gag)
-          return 1;
-        endif
-      endfor
-    endif
-    return 0;
-    "--- old definition --";
-    if (player in this.gaglist)
-      return 1;
-    elseif (this.gaglist)
-      for x in (callers())
-        if (valid(x[1]))
-          if (x[1] in this.gaglist)
-            return 1;
-          endif
-        endif
-      endfor
-    endif
-    return 0;
-  endverb
-
-  verb "set_gaglist" (this none this) owner: #2 flags: "rxd"
-    ":set_gaglist(@newlist) => this.gaglist = newlist";
-    if (!(caller == this || $perm_utils:controls(caller_perms(), this)))
-      return E_PERM;
-    else
-      return this.gaglist = args;
-    endif
-  endverb
-
-  verb "@gag*!" (any any any) owner: #2 flags: "rd"
-    set_task_perms(player);
-    if (player != this)
-      player:notify("Permission denied.");
-      return;
-    endif
-    if (!args)
-      player:notify(tostr("Usage:  ", verb, " <player or object> [<player or object>...]"));
-      return;
-    endif
-    victims = $string_utils:match_player_or_object(@args);
-    changed = 0;
-    for p in (victims)
-      if (p in player.gaglist)
-        player:notify(tostr("You are already gagging ", p.name, "."));
-      elseif (p == player)
-        player:notify("Gagging yourself is a bad idea.");
-      elseif (children(p) && verb != "@gag!")
-        player:tell("If you really want to gag all descendents of ", $string_utils:nn(p), ", use `@gag! ", p, "' instead.");
-      else
-        changed = 1;
-        player:set_gaglist(@setadd(this.gaglist, p));
-      endif
-    endfor
-    if (changed)
-      this:("@listgag")();
-    endif
-  endverb
-
-  verb "@listgag @gaglist @gagged" (any none none) owner: #2 flags: "rxd"
-    set_task_perms(valid(caller_perms()) ? caller_perms() | player);
-    if (!this.gaglist)
-      player:notify(tostr("You are ", callers() ? "no longer gagging anything." | "not gagging anything right now."));
-    else
-      player:notify(tostr("You are ", callers() ? "now" | "currently", " gagging ", $string_utils:nn(this.gaglist), "."));
-    endif
-    gl = {};
-    if (args)
-      player:notify("Searching for players who may be gagging you...");
-      for p in (players())
-        if (typeof(`p.gaglist ! E_PERM') == LIST && this in p.gaglist)
-          gl = {@gl, p};
-        endif
-      endfor
-      if (gl || !callers())
-        player:notify(tostr($string_utils:nn(gl, " ", "No one"), " appear", length(gl) <= 1 ? "s" | "", " to be gagging you."));
-      endif
-    endif
-  endverb
-
-  verb "@ungag" (any none none) owner: #2 flags: "rxd"
-    if (player != this || (caller != this && !$perm_utils:controls(caller_perms(), this)))
-      player:notify("Permission denied.");
-    elseif (dobjstr == "")
-      player:notify(tostr("Usage:  ", verb, " <player>  or  ", verb, " everyone"));
-    elseif (dobjstr == "everyone")
-      this.gaglist = {};
-      player:notify("You are no longer gagging anyone or anything.");
-    else
-      if (valid(dobj))
-        match = dobj;
-      elseif ((match = toobj(dobjstr)) > #0)
-      else
-        match = $string_utils:match(dobjstr, this.gaglist, "name", this.gaglist, "aliases");
-      endif
-      if (match == $failed_match)
-        player:notify(tostr("You don't seem to be gagging anything named ", dobjstr, "."));
-      elseif (match == $ambiguous_match)
-        player:notify(tostr("I don't know which \"", dobjstr, "\" you mean."));
-      else
-        this.gaglist = setremove(this.gaglist, match);
-        player:notify(tostr(valid(match) ? match.name | match, " removed from gag list."));
-      endif
-      this:("@listgag")();
-    endif
-  endverb
-
-  verb "whodunnit" (this none this) owner: #2 flags: "rxd"
-    {record, trust, mistrust} = args;
-    s = {this, "???", this};
-    for w in (record)
-      if (!valid(s[3]) || s[3].wizard || s[3] in trust && !(s[3] in mistrust) || s[1] == this)
-        s = w;
-      else
-        return s;
-      endif
-    endfor
-    return s;
-  endverb
-
-  verb "@ch*eck-full" (any any any) owner: #2 flags: "rd"
-    responsible = $paranoid_db:get_data(this);
-    if (length(verb) <= 6)
-      "@check, not @check-full";
-      n = 5;
-      trust = {this, $no_one};
-      "... trust no one, my friend.... no one....  --Herod";
-      mistrust = {};
-      for k in (args)
-        if (z = $code_utils:toint(k))
-          n = z;
-        elseif (k[1] == "!")
-          mistrust = listappend(mistrust, $string_utils:match_player(k[2..$]));
-        else
-          trust = listappend(trust, $string_utils:match_player(k));
-        endif
-      endfor
-      msg_width = player:linelen() - 60;
-      for q in (n > (y = length(responsible)) ? responsible | responsible[y - n + 1..y])
-        msg = tostr(@q[2]);
-        if (length(msg) > msg_width)
-          msg = msg[1..msg_width];
-        endif
-        s = this:whodunnit(q[1], trust, mistrust);
-        text = valid(s[1]) ? s[1].name | "** NONE **";
-        this:notify(tostr($string_utils:left(tostr(length(text) > 13 ? text[1..13] | text, " (", s[1], ")"), 20), $string_utils:left(s[2], 15), $string_utils:left(tostr(length(s[3].name) > 13 ? s[3].name[1..13] | s[3].name, " (", s[3], ")"), 20), msg));
-      endfor
-      this:notify("*** finished ***");
-    else
-      "@check-full, from @traceback by APHiD";
-      "s_i_n's by Ho_Yan 10/18/94";
-      matches = {};
-      if (length(match = argstr) == 0)
-        player:notify(tostr("Usage: ", verb, " <string> --or-- ", verb, " <number>"));
-        return;
-      endif
-      if (!responsible)
-        player:notify("No text has been saved by the monitor.  (See `help @paranoid').");
-      else
-        if (typeof(x = $code_utils:toint(argstr)) == ERR)
-          for line in (responsible)
-            if (index(tostr(@line[$]), argstr))
-              matches = {@matches, line};
-            endif
-          endfor
-        else
-          matches = responsible[$ - min(x, $) + 1..$];
-        endif
-        if (matches)
-          for match in (matches)
-            text = tostr(@match[$]);
-            player:notify("Traceback for:");
-            player:notify(text);
-            "Moved cool display code to $code_utils, 3/29/95, Ho_Yan";
-            $code_utils:display_callers(listdelete(mm = match[1], length(mm)));
-          endfor
-          player:notify("**** finished ****");
-        else
-          player:notify(tostr("No matches for \"", argstr, "\" found."));
-        endif
-      endif
-    endif
-  endverb
-
-  verb "@paranoid" (any any any) owner: #2 flags: "rd"
-    if (args == {} || (typ = args[1]) == "")
-      $paranoid_db:set_kept_lines(this, 10);
-      this.paranoid = 1;
-      this:notify("Anti-spoofer on and keeping 10 lines.");
-    elseif (index("immediate", typ))
-      $paranoid_db:set_kept_lines(this, 0);
-      this.paranoid = 2;
-      this:notify("Anti-spoofer now in immediate mode.");
-    elseif (index("off", typ) || typ == "0")
-      this.paranoid = 0;
-      $paranoid_db:set_kept_lines(this, 0);
-      this:notify("Anti-spoofer off.");
-    elseif (tostr(y = toint(typ)) != typ || y < 0)
-      this:notify(tostr("Usage: ", verb, " <lines to be kept>     to turn on your anti-spoofer."));
-      this:notify(tostr("       ", verb, " off                    to turn it off."));
-      this:notify(tostr("       ", verb, " immediate              to use immediate mode."));
-    else
-      this.paranoid = 1;
-      kept = $paranoid_db:set_kept_lines(this, y);
-      this:notify(tostr("Anti-spoofer on and keeping ", kept, " lines."));
-    endif
-  endverb
-
   verb "page" (any any any) owner: #2 flags: "rxd"
     nargs = length(args);
     if (nargs < 1)
@@ -442,9 +205,6 @@ object #6
     endif
     who = $string_utils:match_player(args[1]);
     if ($command_utils:player_match_result(who, args[1])[1])
-      return;
-    elseif (who in this.gaglist)
-      player:tell("You have ", who:title(), " @gagged.  If you paged ", $gender_utils:get_pronoun("o", who), ", ", $gender_utils:get_pronoun("s", who), " wouldn't be able to answer you.");
       return;
     endif
     "for pronoun_sub's benefit...";
@@ -1041,18 +801,6 @@ object #6
     if (typeof(lines) != LIST)
       lines = {lines};
     endif
-    if (this.gaglist || this.paranoid)
-      "Check the above first, default case, to save ticks.  Paranoid gaggers are cost an extra three or so ticks by this, probably a net savings.";
-      if (this:gag_p())
-        return;
-      endif
-      if (this.paranoid == 2)
-        z = this:whodunnit({@callers(1), {player, "", player}}, {this, $no_one}, {})[3];
-        lines = {"[start text by " + z.name + " (" + tostr(z) + ")]", @lines, "[end text by " + z.name + " (" + tostr(z) + ")]"};
-      elseif (this.paranoid == 1)
-        $paranoid_db:add_data(this, {{@callers(1), {player, "<cmd-line>", player}}, lines});
-      endif
-    endif
     this:notify_lines(lines);
   endverb
 
@@ -1234,14 +982,6 @@ object #6
     endif
   endverb
 
-  verb "erase_paranoid_data" (this none this) owner: #2 flags: "rxd"
-    if (!($perm_utils:controls(caller_perms(), this) || this == caller))
-      return E_PERM;
-    else
-      $paranoid_db:erase_data(this);
-    endif
-  endverb
-
   verb "_chparent" (this none this) owner: #2 flags: "rxd"
     set_task_perms(caller_perms());
     return chparent(@args);
@@ -1293,19 +1033,6 @@ object #6
           endtry
         endif
       endfor
-    endif
-  endverb
-
-  verb "gc_gaglist" (this none this) owner: #2 flags: "rxd"
-    caller == this || $perm_utils:controls(caller_perms(), this) || raise(E_PERM);
-    if (g = this.gaglist)
-      recycler = $recycler;
-      for o in (g)
-        if (!recycler:valid(o))
-          g = setremove(g, o);
-        endif
-      endfor
-      this.gaglist = g;
     endif
   endverb
 

@@ -774,11 +774,9 @@ object #20
       phrase = `phrase[1] ! E_RANGE => "UNDEF"';
     endif
     where = valid(where) ? where | (valid(who) ? who.location | where);
-    set_task_perms($no_one);
     if (typeof(string) == LIST)
       plines = {};
       for line in (string)
-        
         plines = {@plines, this:(verb)(line, @args[2..$])};
       endfor
       return plines;
@@ -2375,7 +2373,6 @@ object #20
     if (typeof(string) == LIST)
       plines = {};
       for line in (string)
-        
         plines = {@plines, this:(verb)(line, @args[2..$])};
       endfor
       return plines;

@@ -209,7 +209,8 @@ object #0
     if (callers())
       return;
     endif
-    $mcp:(verb)(@args);
+    "commented out as moor may handle sessions";
+    "$mcp:(verb)(@args)";
     user = args[1];
     set_task_perms(user);
     try

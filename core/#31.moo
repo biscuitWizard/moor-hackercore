@@ -16,8 +16,6 @@ object #31
 
   override "password" = 0;
 
-  override "paranoid" = 1;
-
   override "size_quota" = {0, 0, 0, 0};
 
   property "default_gender" (owner: #36, flags: "r") = "neuter";
@@ -48,7 +46,6 @@ object #31
     "Don't let another guest use this one until all this is done. See :defer, Ho_Yan 1/19/94";
     this.free_to_use = 0;
     this:log_disconnect();
-    this:erase_paranoid_data();
     try
       if (this.location != this.home)
         this:room_announce(player.name, " has disconnected.");
@@ -179,7 +176,7 @@ object #31
       return E_PERM;
     else
       flush_input(this, 0);
-      for x in ({"paranoid", "lines", "responsible", "brief", "gaglist", "rooms", "messages", "messages_going", "request", "mail_options", "edit_options", "home", "spurned_objects", "web_info", "ansi_options", "replace_codes"})
+      for x in ({"lines", "responsible", "brief", "rooms", "messages", "messages_going", "request", "edit_options", "home", "spurned_objects", "web_info", "ansi_options", "replace_codes"})
         if ($object_utils:has_property(parent(this), x))
           clear_property(this, x);
         endif

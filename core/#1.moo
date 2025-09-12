@@ -453,4 +453,7 @@ object #1
     "if you want to tell, before trying, whether :accept will fail, use :acceptable instead. Normally, they'll do the same thing.";
   endverb
 
+  verb "name" (this none this) owner: #36 flags: "rxd"
+    return this.name;
+  endverb
 endobject
