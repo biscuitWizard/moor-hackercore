@@ -272,7 +272,7 @@ object #72
     endif
   endverb
 
-  verb "server_started" (this none this) owner: #2 flags: "rxd"
+  verb "on_server_started" (this none this) owner: #2 flags: "rxd"
     "called when restarting to clean out state.";
     if (caller != #0)
       return E_PERM;

@@ -671,7 +671,7 @@ object #10
     endif
   endverb
 
-  verb "server_started" (this none this) owner: #2 flags: "rxd"
+  verb "on_server_started" (this none this) owner: #2 flags: "rxd"
     "Called by #0:server_started when the server restarts.";
     if (caller_perms().wizard)
       this.lag_samples = {0, 0, 0, 0, 0};

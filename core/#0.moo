@@ -197,11 +197,24 @@ object #0
   endverb
 
   verb "server_started" (this none this) owner: #2 flags: "rxd"
-    if (!callers())
-      $server["last_restart_time"] = time();
-      $network:server_started();
-      $login:server_started();
+    if (callers())
+      raise(E_PERM, tostr(verb, " can only be called by the server daemon."));
     endif
+
+    $server["last_restart_time"] = time();
+    
+    "call on_server_started hook for mortal objects";
+    for object in ({$root_class, @$ou:descendants($root_class)})
+      hook_verb_info = `verb_info(object, "on_server_started") ! ANY => {}';
+      if (!hook_verb_info || !("x" in hook_verb_info[2]))
+        "verb does not exist or is not callable";
+        continue;
+      elseif (!hook_verb_info[1].wizard)
+        "insufficient permissions; hook must be owned by wizardly account.";
+        continue;
+      endif
+      object:on_server_started();
+    endfor
   endverb
 
   verb "user_created user_connected" (this none this) owner: #2 flags: "rxd"
