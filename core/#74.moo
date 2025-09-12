@@ -1,7 +1,7 @@
 object #74
   name: "Generic Feature Object"
   parent: #5
-  location: #-1
+  location: #83
   owner: #36
   readable: true
   override "aliases" = {"Generic Feature Object", "Generic .Features_Huh Object", "Feature Object", ".Features_Huh Object"};

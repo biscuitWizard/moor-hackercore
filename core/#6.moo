@@ -8,7 +8,7 @@ object #6
 
   override "description" = "You see a player who should type '@describe me as ...'.";
 
-  property "features" (owner: #36, flags: "r") = {};
+  property "features" (owner: #2, flags: "r") = {};
 
   property "previous_connection" (owner: #2, flags: "") = 0;
 
@@ -19,7 +19,6 @@ object #6
   property "help" (owner: #2, flags: "rc") = {#116, #44};
 
   property "more_msg" (owner: #2, flags: "rc") = "*** More ***  %n lines left.  Do @more [rest|flush] for more.";
-
 
   property "all_connect_places" (owner: #2, flags: "") = {};
 

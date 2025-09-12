@@ -8,7 +8,7 @@ object #57
 
   override "description" = "You see a wizard who chooses not to reveal its true appearance.";
 
-  override "features" = {#90, #89};
+  override "features" = {#90, #75, #73};
 
   override "help" = #23;
 
@@ -33,68 +33,6 @@ object #57
   property "mail_identity" (owner: #2, flags: "c") = #-1;
 
   property "advertised" (owner: #2, flags: "rc") = 1;
-
-  verb "@chown*#" (any any any) owner: #2 flags: "rd"
-    if (!player.wizard || player != this)
-      player:notify("Sorry.");
-      return;
-    endif
-    set_task_perms(player);
-    args = setremove(args, "to");
-    if (length(args) != 2 || !args[2])
-      player:notify(tostr("Usage:  ", verb, " <object-or-property-or-verb> <owner>"));
-      return;
-    endif
-    what = args[1];
-    owner = $string_utils:match_player(args[2]);
-    bynumber = verb == "@chown#";
-    if ($command_utils:player_match_result(owner, args[2])[1])
-    elseif (spec = $code_utils:parse_verbref(what))
-      object = this:match(spec[1]);
-      if (!$command_utils:object_match_failed(object, spec[1]))
-        vname = spec[2];
-        if (bynumber)
-          vname = $code_utils:toint(vname);
-          if (vname == E_TYPE)
-            return player:notify("Verb number expected.");
-          elseif (vname < 1 || vname > length(verbs(object)))
-            return player:notify("Verb number out of range.");
-          endif
-        endif
-        info = `verb_info(object, vname) ! ANY';
-        if (info == E_VERBNF)
-          player:notify("That object does not define that verb.");
-        elseif (typeof(info) == ERR)
-          player:notify(tostr(info));
-        else
-          try
-            result = set_verb_info(object, vname, listset(info, owner, 1));
-            player:notify("Verb owner set.");
-          except e (ANY)
-            player:notify(e[2]);
-          endtry
-        endif
-      endif
-    elseif (bynumber)
-      player:notify("@chown# can only be used with verbs.");
-    elseif (index(what, ".") && (spec = $code_utils:parse_propref(what)))
-      object = this:match(spec[1]);
-      if (!$command_utils:object_match_failed(object, spec[1]))
-        pname = spec[2];
-        e = $wiz_utils:set_property_owner(object, pname, owner);
-        if (e == E_NONE)
-          player:notify("+c Property owner set.  Did you really want to do that?");
-        else
-          player:notify(tostr(e && "Property owner set."));
-        endif
-      endif
-    else
-      object = this:match(what);
-      if (!$command_utils:object_match_failed(object, what))
-        player:notify(tostr($wiz_utils:set_owner(object, owner) && "Object ownership changed."));
-      endif
-    endif
-  endverb
 
   verb "@shout" (any any any) owner: #2 flags: "rd"
     if (caller != this)
@@ -212,161 +150,6 @@ object #57
     endif
   endverb
 
-  verb "make-core-database" (any none none) owner: #2 flags: "rd"
-    {?core_variant_name = ""} = args;
-    if (!player.wizard)
-      player:notify("Nice try, but permission denied.");
-      return;
-    elseif (length(connected_players()) > 1)
-      player:notify("You need to @boot everybody else before I'll believe this isn't the real MOO.");
-      abort = 1;
-    elseif (`boot_player(open_network_connection("localhost", 666)) ! ANY' != E_PERM)
-      player:notify("Why are outbound connections enabled?  I bet this is the real MOO.");
-      abort = 1;
-    else
-      abort = !$command_utils:yes_or_no("Continuing with this command will destroy all but the central core of the database.  Are you sure you want to do this?  ") || !$command_utils:yes_or_no("Really sure? ");
-    endif
-    if (abort)
-      player:notify("Core database extraction aborted.");
-      return;
-    endif
-    "----------------------------------------";
-    player:notify("Messing with server options...");
-    spi = {};
-    for p in ({"protect_recycle", "protect_set_property_info", "protect_add_property", "protect_chparent", "bg_ticks"})
-      spi = {@spi, {p, $server_options.(p)}};
-      $server_options.(p) = 0;
-    endfor
-    $server_options.bg_ticks = 1000000;
-    add_property($server_options, "bg_seconds", 7, {player, "r"});
-    `load_server_options() ! ANY';
-    add_property($server_options, "__mcd__savesopt", spi, {player, "r"});
-    "----------------------------------------";
-    player:notify("Killing all queued tasks ...");
-    for t in (queued_tasks())
-      kill_task(t[1]);
-    endfor
-    suspend(0);
-    "----------------------------------------";
-    player:notify(tostr("Identifying objects to be saved", @core_variant_name ? {" for core variant '", core_variant_name, "'"} | {}, " ..."));
-    "... TODO --- core variant name lookup?";
-    core_variant = {{"name", core_variant_name}};
-    {saved, saved_props, skipped_parents, proxy_original, proxy_incore, namespaces} = $core_object_info(core_variant, 1);
-    if (!(player in saved))
-      player:notify("Sorry, but this won't work unless you yourself are on the list of objects to be saved.");
-      player:notify("Core database extraction aborted.");
-      return;
-    endif
-    for ops in (saved_props)
-      {o, o_props} = ops;
-      for p in (o_props)
-        if (i = o.(p) in proxy_original)
-          o.(p) = proxy_incore[i];
-        endif
-      endfor
-    endfor
-    "... TODO --- why isn't this on #0:init_for_core ? --Rog";
-    $player_class = $mail_recipient_class;
-    "----------------------------------------";
-    player:notify("Stripping you of any personal verbs and/or properties ...");
-    for i in [1..length(verbs(player))]
-      delete_verb(player, 1);
-    endfor
-    for p in (properties(player))
-      delete_property(player, p);
-    endfor
-    chparent(player, $wiz);
-    for p in ($object_utils:all_properties(player))
-      clear_property(player, p);
-    endfor
-    player:set_name("Wizard");
-    player:set_aliases({"Wizard"});
-    player.description = "";
-    player.key = 0;
-    player.password = 0;
-    player.last_password_time = 0;
-    $gender_utils:set(player, "neuter");
-    "----------------------------------------";
-    suspend(0);
-    owners_original = owners_incore = {};
-    for i in [1..length(proxy_original)]
-      o = proxy_original[i];
-      if (is_player(o) && o != $no_one)
-        owners_original = {@owners_original, o};
-        owners_incore = {@owners_incore, proxy_incore[i]};
-      endif
-    endfor
-    for o in (saved)
-      if (is_player(o) && o != $no_one)
-        owners_original = {@owners_original, o};
-        owners_incore = {@owners_incore, o};
-      endif
-    endfor
-    player:notify(tostr("Chowning every saved object, verb and property to one of ", $string_utils:nn(owners_incore), "..."));
-    for o in (saved)
-      if (i = o.owner in owners_original)
-        o.owner = owners_incore[i];
-      elseif (valid(o.owner) && o.owner.wizard)
-        o.owner = player;
-      else
-        o.owner = $hacker;
-      endif
-      old_verbs = {};
-      for j in [1..length(verbs(o))]
-        info = verb_info(o, j);
-        if (i = info[1] in owners_original)
-          info[1] = owners_incore[i];
-        elseif (valid(info[1]) && info[1].wizard)
-          info[1] = player;
-        else
-          info[1] = $hacker;
-        endif
-        set_verb_info(o, j, info);
-        if (index(info[3], "(old)"))
-          old_verbs = {j, @old_verbs};
-        endif
-      endfor
-      for vname in (old_verbs)
-        delete_verb(o, vname);
-      endfor
-      for p in ($object_utils:all_properties(o))
-        info = property_info(o, p);
-        if (i = info[1] in owners_original)
-          info[1] = owners_incore[i];
-        elseif (valid(info[1]) && info[1].wizard)
-          info[1] = player;
-        else
-          info[1] = $hacker;
-        endif
-        set_property_info(o, p, info);
-      endfor
-    endfor
-    "----------------------------------------";
-    player:notify("Removing all unsaved :recycle, :exitfunc, and :recycle verbs ...");
-    for o in [#0..max_object()]
-      if (valid(o) && !(o in saved))
-        for v in ({"recycle", "exitfunc", "recycle"})
-          while ($object_utils:defines_verb(o, v))
-            delete_verb(o, v);
-          endwhile
-        endfor
-      endif
-    endfor
-    "----------------------------------------";
-    player:notify("Recycling unsaved objects ...");
-    add_property(this, "__mcd__pos", toint(max_object()), {player, "r"});
-    add_property(this, "__mcd__save", {core_variant, saved, saved_props, skipped_parents, namespaces}, {player, "r"});
-    suspend(0);
-    try
-      this:mcd_2(core_variant, saved, saved_props, skipped_parents, namespaces);
-    finally
-      if (!queued_tasks() && `this.__mcd__save ! E_PROPNF => 0')
-        "...use raw notify since we have no idea what will be b0rken";
-        notify(player, "Core database extraction failed.");
-      endif
-    endtry
-  endverb
-
   verb "@shutdown" (any any any) owner: #2 flags: "rd"
     if (!player.wizard)
       player:notify("Sorry.");
@@ -416,12 +199,6 @@ object #57
     $wiz_utils.shutdown_task = E_NONE;
     set_task_perms(player);
     shutdown(argstr);
-  endverb
-
-  verb "@dump-d*atabase" (none none none) owner: #2 flags: "rd"
-    set_task_perms(player);
-    dump_database();
-    player:notify("Dumping...");
   endverb
 
   verb "@who-calls" (any any any) owner: #2 flags: "rd"
@@ -664,50 +441,6 @@ object #57
     endif
   endverb
 
-  verb "@quota" (any is any) owner: #2 flags: "rd"
-    "@quota <player> is [public] <number> [<reason>]";
-    "  changes a player's quota.  sends mail to the wizards.";
-    if (player != this)
-      return player:notify("Permission denied.");
-    endif
-    set_task_perms(player);
-    dobj = $string_utils:match_player(dobjstr);
-    if ($command_utils:player_match_result(dobj, dobjstr)[1])
-      return;
-    elseif (!valid(dobj))
-      player:notify("Set whose quota?");
-      return;
-    endif
-    if (iobjstr[1..min(7, $)] == "public ")
-      iobjstr[1..7] = "";
-      if ($object_utils:has_property($local, "public_quota_log"))
-        recipients = {$quota_log, $local.public_quota_log};
-      else
-        player:tell("No public quota log.");
-        return E_INVARG;
-      endif
-    else
-      recipients = {$quota_log};
-    endif
-    old = $quota_utils:get_quota(dobj);
-    qstr = iobjstr[1..(n = index(iobjstr + " ", " ")) - 1];
-    new = $code_utils:toint(qstr[1] == "+" ? qstr[2..$] | qstr);
-    reason = iobjstr[n + 1..$] || "(none)";
-    if (typeof(new) != INT)
-      player:notify(tostr("Set ", dobj.name, "'s quota to what?"));
-      return;
-    elseif (qstr[1] == "+")
-      new = old + new;
-    endif
-    result = $quota_utils:set_quota(dobj, new);
-    if (typeof(result) == ERR)
-      player:notify(tostr(result));
-    else
-      player:notify(tostr(dobj.name, "'s quota set to ", new, "."));
-    endif
-    $mail_agent:send_message(player, recipients, tostr("@quota ", dobj.name, " (", dobj, ") ", new, " (from ", old, ")"), tostr("Reason for quota ", new - old < 0 ? "decrease: " | "increase: ", reason, index("?.!", reason[$]) ? "" | "."));
-  endverb
-
   verb "@players" (any any any) owner: #2 flags: "rd"
     set_task_perms(player);
     "The time below is Oct. 1, 1990, roughly the birthdate of the LambdaMOO server.";
@@ -851,19 +584,6 @@ object #57
       endif
     endif
     return {soon ? soon | 60, everyone ? everyone | player};
-  endverb
-
-  verb "@grepcore @egrepcore" (any any any) owner: #2 flags: "rd"
-    set_task_perms(player);
-    if (!args)
-      player:notify(tostr("Usage:  ", verb, " <pattern>"));
-      return;
-    endif
-    pattern = argstr;
-    regexp = verb == "@egrepcore";
-    player:notify(tostr("Searching for core verbs ", regexp ? "matching the regular expression " | "containing the string ", toliteral(pattern), " ..."));
-    player:notify("");
-    $code_utils:(regexp ? "find_verbs_matching" | "find_verbs_containing")(pattern, $core_objects());
   endverb
 
   verb "@net-who @@who" (any any any) owner: #2 flags: "rd"
@@ -1018,26 +738,6 @@ object #57
     endif
   endverb
 
-  verb "@log" (any any any) owner: #2 flags: "rd"
-    "@log [<string>]    enters a comment in the server log.";
-    "If no string is given, you are prompted to enter one or more lines for an extended comment.";
-    set_task_perms(player);
-    whostr = tostr("from ", player.name, " (", player, ")");
-    if (!player.wizard || player != caller)
-      player:notify("Yeah, right.");
-    elseif (argstr)
-      server_log(tostr("COMMENT: [", whostr, "]  ", argstr));
-      player:notify("One-line comment logged.");
-    elseif (lines = $command_utils:read_lines())
-      server_log(tostr("COMMENT: [", whostr, "]"));
-      for l in (lines)
-        server_log(l);
-      endfor
-      server_log(tostr("END_COMMENT."));
-      player:notify(tostr(length(lines), " lines logged as extended comment."));
-    endif
-  endverb
-
   verb "@guests" (any none none) owner: #2 flags: "rd"
     set_task_perms(player);
     n = dobjstr == "all" ? 0 | $code_utils:toint(dobjstr || "20");
@@ -1112,18 +812,6 @@ object #57
         endif
       endif
       player:tell("@guests display complete.");
-    endif
-  endverb
-
-  verb "@rn mail_catch_up check_mail_lists current_message set_current_message get_current_message make_current_message kill_current_message @nn" (none none none) owner: #2 flags: "rxd"
-    if (caller != this)
-      set_task_perms(valid(caller_perms()) ? caller_perms() | player);
-    endif
-    use = this.mail_identity;
-    if (valid(use) && use != this)
-      return use:(verb)(@args);
-    else
-      return pass(@args);
     endif
   endverb
 
@@ -1628,229 +1316,4 @@ object #57
     endif
     "Noop. Placeholder verb for MOO-specific cleanups.";
   endverb
-
-  verb "@code-replace" (none none none) owner: #2 flags: "rd"
-    if (!player.wizard)
-      return E_PERM;
-    endif
-    set_task_perms(player);
-    player:tell("What string are you replacing?");
-    old = $command_utils:read();
-    if (old == "")
-      return player:tell("You can't replace an empty string.");
-    endif
-    player:tell("What string are you replacing it with?");
-    new = $command_utils:read();
-    if (new == "")
-      return player:tell("You can't replace it with an empty string.");
-    endif
-    if ($command_utils:yes_or_no(tostr("You are about to replace ", old, " with ", new, " in all verbs. Are you sure you want to do this? Be very sure.")) == 1)
-      player:tell("Working...");
-      total = 0;
-      for o in [#0..max_object()]
-        yin();
-        if (!valid(o))
-          continue;
-        endif
-        verbs = verbs(o);
-        if (verbs == {})
-          continue;
-        endif
-        for v in (verbs)
-          code = verb_code(o, v);
-          replaced = 0;
-          old_line = new_line = {};
-          for l in [1..length(code)]
-            yin();
-            if (!index(code[l], old))
-              continue;
-            endif
-            old_line = {@old_line, code[l]};
-            code[l] = strsub(code[l], old, new);
-            new_line = {@new_line, code[l]};
-            replaced = replaced + 1;
-          endfor
-          "Try to compile the new code if it has any replaced lines.";
-          if (replaced)
-            result = set_verb_code(o, v, code);
-            if (typeof(result) == ERR)
-              player:tell("Could not compile code for ", $string_utils:nn(o), ":", v, ". ", toliteral(result));
-            else
-              player:tell("... replaced code in ", o, ":", v, ":");
-              for pew in [1..length(old_line)]
-                player:tell("   ", old_line[pew]);
-                player:tell("   ", new_line[pew]);
-              endfor
-              total = total + 1;
-            endif
-          endif
-          yin();
-        endfor
-        yin();
-      endfor
-      player:tell("Done. ", total, " verbs replaced.");
-    else
-      return player:tell("Aborted.");
-    endif
-  endverb
-
-  verb "@update-toaststunt-help" (any any any) owner: #2 flags: "rd"
-    "Automatically updates ToastStunt documentation to the latest version.";
-    "Optional arguments:";
-    "   -y: Answer yes to all prompts that update the help database.";
-    "   <database>: The name, or object number, of the help database object that you want to update. The verb itself typically finds, or creates, an appropriate database for you, so this argument is generally not necessary.";
-    if (player != this)
-      return E_PERM;
-    endif
-    "Check prerequisites:";
-    if (typeof(`function_info("curl") ! E_INVARG') == ERR)
-      return player:tell("This verb relies on the curl builtin function to retrieve up-to-date documentation. Please ensure that the server has been compiled with the function enabled. You may need to install a supporting library, such as libcurl. Further information may be available here: https://github.com/lisdude/toaststunt/blob/master/docs/README.md#build-instructions");
-    endif
-    required_verbs = {{$object_utils, "has_property"}, {$player, "match"}, {$command_utils, "object_match_failed"}, {$string_utils, "nn"}, {$command_utils, "yes_or_no"}, {$recycler, "_create"}, {$string_utils, "english_list"}, {$list_utils, "map_builtin"}};
-    required_props = {{$sysobj, "generic_help"}, {$sysobj, "prog"}};
-    for x in (required_verbs)
-      if (typeof(`verb_info(@x) ! E_VERBNF') == ERR)
-        return player:tell("This verb relies on several LambdaCore verbs being present. It seems your database is missing: ", x[1], ":", x[2]);
-      endif
-    endfor
-    for x in (required_props)
-      if (typeof(`property_info(@x) ! E_PROPNF') == ERR)
-        return player:tell("This verb relies on several LambdaCore properties being present. It seems your database is missing: ", x[1], ".", x[2]);
-      endif
-    endfor
-    "Now do a special test for builtin_function help. Standard LambdaCore stores this in a property on $sysobj. ToastCore stores it in a map on $sysobj.";
-    if ($object_utils:has_property($sysobj, "builtin_function_help"))
-      builtin_function_help = $builtin_function_help;
-    elseif ($object_utils:has_property($sysobj, "help_db") && maphaskey($help_db, "builtin_function"))
-      builtin_function_help = $help_db["builtin_function"];
-    else
-      "Not a fatal error, but we won't be able to check our priority";
-      builtin_function_help = $failed_match;
-    endif
-    "In lieu of proper flag parsing, we'll simply look for the only flag(s) we know exist.";
-    yes_to_all = 0;
-    pcre_yes_match = "\\s?-y\\s?";
-    pcre_yes_replacement = tostr("s/", pcre_yes_match, "//g");
-    if (args && pcre_match(argstr, pcre_yes_match))
-      yes_to_all = 1;
-      argstr = pcre_replace(argstr, pcre_yes_replacement);
-      if (argstr == "")
-        args = 0;
-      endif
-    endif
-    "Check if the update verb itself needs updated. (This does its own prerequisite checking because these functions aren't, strictly speaking, required for the main help update to succeed.)";
-    if (typeof(`verb_info($list_utils, "setremove_all") ! E_VERBNF') != ERR && typeof(`verb_info($object_utils, "has_verb") ! E_VERBNF') != ERR)
-      verb_loc = $object_utils:has_verb(this, verb)[1];
-      if (player.wizard || verb_info(verb_loc, verb)[1] == player)
-        update_url = "https://raw.githubusercontent.com/lisdude/toaststunt-documentation/master/update_verb.moo";
-        downloaded_data = call_function("curl", update_url);
-        if (typeof(downloaded_data) == MAP)
-          player:tell("Update check failed: ", downloaded_data["message"]);
-        elseif (!index(downloaded_data, "@update-toaststunt-help"))
-          player:tell("Update check failed: The update data does not appear to be valid.");
-        else
-          new_verb = $list_utils:setremove_all(decode_binary(downloaded_data), 10)[3..$ - 1];
-          if (new_verb != {} && new_verb != verb_code(verb_loc, verb) && $command_utils:yes_or_no(tostr("There is an update available for this verb. Would you like to apply it? You can review the updated code here: ", update_url)) == 1)
-            set_verb_code(verb_loc, verb, new_verb);
-            return player:tell("This verb has been updated. Please run it again.");
-          endif
-        endif
-      endif
-    endif
-    "Try to identify an existing help database either by name or by input from the wizard.";
-    db = 0;
-    if (!args)
-      for x in (children($generic_help))
-        if (x.name == "ToastStunt Help Database")
-          db = x;
-          break;
-        endif
-      endfor
-    else
-      match = player:match(argstr);
-      if ($command_utils:object_match_failed(match, argstr))
-        return;
-      elseif (isa(match, $generic_help))
-        db = match;
-      else
-        return player:tell($string_utils:nn(match), " doesn't appear to be a help database.");
-      endif
-    endif
-    "If we failed, create a new database and add it to $prog help.";
-    if (db == 0)
-      if ($command_utils:yes_or_no("No existing help database could be found. Would you like to create one?") == 1)
-        db = $recycler:_create($generic_help);
-        db:set_name("ToastStunt Help Database");
-        if (player.wizard && $command_utils:yes_or_no("Would you like to add the new database to $prog.help?") == 1)
-          $prog.help = setadd($prog.help, db);
-        endif
-      else
-        return player:tell("Not creating a new database.");
-      endif
-    endif
-    "Test if our help database has a higher priority than the LambdaCore builtin function help database. If not, offer to make it so.";
-    if (builtin_function_help != $failed_match && db in $prog.help > (builtin_function_help in $prog.help))
-      if ($command_utils:yes_or_no("Would you like the ToastStunt help to take priority over LambdaCore help? This means that duplicate help files (such as move()) will prefer the ToastStunt version over the LambdaCore version.") == 1)
-        $prog.help = setremove($prog.help, db);
-        $prog.help = {db, @$prog.help};
-      endif
-    endif
-    "Finally, actually update the help files.";
-    if (!yes_to_all && $command_utils:yes_or_no(tostr("Do you want to update the help database ", $string_utils:nn(db), "?")) != 1)
-      return player:tell("Not updating.");
-    endif
-    if (!player.wizard && db.owner != player)
-      return player:tell("You don't have permission to update ", $string_utils:nn(db), ".");
-    endif
-    url = "https://raw.githubusercontent.com/lisdude/toaststunt-documentation/master/function_help.moo";
-    data = call_function("curl", url);
-    if (typeof(data) == MAP)
-      return player:tell("Error retrieving help text: ", data["message"]);
-    else
-      regex = "^;;#123\\.\\(\"(?<property>.+)\"\\) = (?<value>.+)$";
-      data = decode_binary(data);
-      added = removed = updated = {};
-      properties = [];
-      for x in (data)
-        if (typeof(x) != STR)
-          continue;
-        endif
-        if (match = pcre_match(x, regex))
-          "As there's no guarantee that to_value will suspend (and, in the core, it will not), and since we have no way of knowing how many ticks any given help entry will require to parse, we give ourselves the best possible chance of having enough ticks by staring over for each entry. Fortunately, speed is not a requirement.";
-          suspend(0);
-          {property, value} = {match[1]["property"]["match"], $string_utils:to_value(match[1]["value"]["match"])};
-          if (value[1] != 1)
-            player:tell("Error parsing value for `", property, "'.");
-            continue;
-          else
-            value = value[2];
-          endif
-          properties[property] = value;
-        endif
-      endfor
-      "Check for properties that no longer exist in the remote.";
-      for local_prop in (properties(db))
-        yin();
-        if (!maphaskey(properties, local_prop))
-          if (yes_to_all || $command_utils:yes_or_no(tostr("The property `", local_prop, "' no longer exists in the remote repository. Do you wish to delete the local version?")) == 1)
-            removed = setadd(removed, local_prop);
-            delete_property(db, local_prop);
-          endif
-        endif
-      endfor
-      for value, property in (properties)
-        if ($object_utils:has_property(db, property))
-          if (db.(property) != value)
-            updated = setadd(updated, property);
-            db.(property) = value;
-          endif
-        else
-          add_property(db, property, value, {db.owner, "rc"});
-          added = setadd(added, property);
-        endif
-      endfor
-      player:tell("Done! ", added == {} && updated == {} && removed == {} ? "No changes found." | tostr("Added: ", $string_utils:english_list(added), ". Updated: ", $string_utils:english_list(updated), ".", removed == {} ? "" | tostr(" Removed: ", $string_utils:english_list(removed), ".")));
-    endif
-  endverb
-
 endobject

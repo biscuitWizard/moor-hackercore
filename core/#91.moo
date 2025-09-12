@@ -39,7 +39,7 @@ object #91
     for n in [2..length(args)]
       if (type == "add")
         for m in [1..min(lcurr = length(args[n]), lresult)]
-          results[m] = results[m] + args[n][m]
+          results[m] = results[m] + args[n][m];
         endfor
         if (lcurr > lresult)
           results[lresult + 1..lcurr] = args[n][lresult + 1..lcurr];
@@ -66,7 +66,7 @@ object #91
         endfor
         if (lcurr > lresult)
           for m in [lresult + 1..lcurr]
-            results = {@results, typeof(foo = args[n][m]) == INT ? 1 / foo | 1.0 / foo}
+            results = {@results, typeof(foo = args[n][m]) == INT ? 1 / foo | 1.0 / foo};
           endfor
         endif
       endif

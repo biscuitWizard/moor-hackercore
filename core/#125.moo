@@ -78,7 +78,7 @@ object #125
         endif
       endif
       if (options["columns"])
-        player:tell_lines($ansi_utils:columnize(names, options["columns"], player:linelen()));
+        player:tell_lines($su:columnize(names, options["columns"], player:linelen()));
       else
         player:tell_lines(names);
       endif

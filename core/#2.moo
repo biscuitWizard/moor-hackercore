@@ -13,7 +13,7 @@ object #2
 
   override "description" = "";
 
-  override "features" = {#90, #89};
+  override "features" = {#90, #75, #73};
 
   override "previous_connection" = {1755930095, "192.168.1.102"};
 
