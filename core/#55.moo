@@ -204,7 +204,6 @@ object #55
   verb "sort" (this none this) owner: #36 flags: "rxd"
     "sort(list[,keys]) => sorts keys (assumed to be all numbers or strings) and returns list with the corresponding permutation applied to it.  keys defaults to the list itself.";
     "sort({x1,x3,x2},{1,3,2}) => {x1,x2,x3}";
-    set_thread_mode(0);
     return sort(@args);
   endverb
 
@@ -213,8 +212,6 @@ object #55
     "    slice({{\"z\",1},{\"y\",2},{\"x\",5}},2) => {1,2,5}.";
     "index defaults to 1 and may also be a nonempty list, e.g., ";
     "    slice({{\"z\",1,3},{\"y\",2,4}},{2,1}) => {{1,\"z\"},{2,\"y\"}}";
-    "For compatibility with LambdaCore, threading is disabled by default.";
-    set_thread_mode(0);
     return slice(@args);
   endverb
 
