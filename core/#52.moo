@@ -356,4 +356,39 @@ object #52
     "Last modified Mon Nov 28 06:19:35 2005 PST, by Roebare (#109000).";
   endverb
 
+  verb "generate_instance_id" (this none this) owner: #36 flags: "rxd"
+    ":generate_instance_id(OBJ instance) => NONE";
+    "  assigns an instance id";
+    {instance} = args;
+    return tostr(instance, ":", ftime());
+  endverb
+
+  verb "still_isa" (this none this) owner: #36 flags: "rxd"
+    ":still_isa(object OBJ, instanceid STR) => 1 or 0";
+    "Test to see if the object's instance id is still the same.";
+    "Call <object>:instance_id() to get the present <instanceid>,";
+    "then invoke whatever code might let the object be invalidated,";
+    "and use this to confirm its still valid after";
+    {object, instanceid} = args;
+    now = object:instance_id();
+    if (now != instanceid)
+      return $false;
+    elseif (index(instanceid, tostr(parent(object))) != 1)
+      return $false;
+    endif
+    return $true;
+  endverb
+
+  verb "resolve_instance_id" (this none this) owner: #36 flags: "rxd"
+    ":resolve_instance_id(STR instance_id) => OBJ";
+    "  resolves an instance id to an object # if it still exists";
+    {instance_id} = args;
+    objnum = instance_id[1..(":" in instance_id) - 1];
+    if (!$recycler:valid(thing = toobj(objnum)))
+      return $nothing;
+    elseif (thing.instance_id != instance_id)
+      return $nothing;
+    endif
+    return thing;
+  endverb
 endobject

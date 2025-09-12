@@ -13,6 +13,20 @@ object #1
 
   property "generic" (owner: #2, flags: "r") = 1;
 
+  property "instance_id" (owner: #2, flags: "r") = "";
+
+  verb "instance_id" (this none this) owner: #2 flags: "rxd"
+    if (!this.instance_id)
+      this.instance_id = $ou:generate_instance_id(this);
+    endif
+    return this.instance_id;
+  endverb
+
+  verb "server_started" (this none this) owner: #2 flags: "rxd"
+    "generate an instance id if we don't have one.";
+    this:instance_id();
+  endverb
+
   verb "initialize" (this none this) owner: #2 flags: "rxd"
     if (caller == this || $perm_utils:controls(caller_perms(), this))
       if (is_clear_property(this, "object_size"))
