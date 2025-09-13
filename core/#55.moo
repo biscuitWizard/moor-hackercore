@@ -571,6 +571,8 @@ object #55
     {lists} = args;
     if (typeof(lists) != LIST)
       raise(E_INVARG, "Argument provideded is not a list.");
+    elseif (!lists || typeof(lists[1]) != LIST)
+      return $false;
     endif
     assoc_len = length(lists[1]);
     for elem in (lists)
