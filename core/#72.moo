@@ -296,14 +296,6 @@ object #72
     return notify(x, args[2]);
   endverb
 
-  verb "suspend_if_needed" (this none this) owner: #2 flags: "rxd"
-    "$command_utils:suspend_if_needed but chowned to player";
-    if ($command_utils:running_out_of_time())
-      set_task_perms(caller_perms().wizard ? player | caller_perms());
-      return $command_utils:suspend_if_needed(@args);
-    endif
-  endverb
-
   verb "error" (this none this) owner: #2 flags: "rxd"
     ":error(ERN, host, port) interpret open_network_connection(host, port) error";
     {msg, host, port} = args;

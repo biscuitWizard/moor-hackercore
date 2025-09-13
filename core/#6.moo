@@ -123,10 +123,6 @@ object #6
           return 1;
         endif
       endif
-      if ($command_utils:running_out_of_time())
-        player:tell("You have too many features.  Parsing your command runs out of ticks while checking ", fobj.name, " (", fobj, ").");
-        return 1;
-      endif
     endfor
   endverb
 

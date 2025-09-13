@@ -555,10 +555,6 @@ object #59
     "prints verbname and offending line to player";
     set_task_perms(caller_perms());
     {pattern, o, ?casematters = 0} = args;
-    if ($command_utils:running_out_of_time())
-      player:notify(tostr("...", o));
-      suspend(0);
-    endif
     if (typeof(o) != OBJ || !valid(o))
       return 0;
     endif
@@ -573,10 +569,6 @@ object #59
         owner = verb_info(o, vnum)[1];
         player:notify(tostr(o, ":", verbs[vnum], " [", valid(owner) ? owner.name | "Recycled Player", " (", owner, ")]:  ", l));
         count = count + 1;
-      endif
-      if ($command_utils:running_out_of_time())
-        player:notify(tostr("...", o));
-        suspend(0);
       endif
     endfor
     return count;
@@ -918,19 +910,6 @@ object #59
         tell1 = su:left(tell1, before[j]) + l[j];
       endfor
       caller:notify(tell1[1..min($, total_width)]);
-      if ($command_utils:running_out_of_time())
-        if ($login:is_lagging())
-          "Check lag two ways---global lag, but we might still fail due to individual lag of the queue this runs in, so check again later.";
-          caller:notify(tostr("Plus ", total - i, " other players (", total, " total; out of time and lag is high)."));
-          return;
-        endif
-        now = time();
-        suspend(0);
-        if (time() - now > 10)
-          caller:notify(tostr("Plus ", total - i, " other players (", total, " total; out of time and lag is high)."));
-          return;
-        endif
-      endif
     endfor
     "...";
     "...epilogue...";
@@ -1230,7 +1209,6 @@ object #59
         endif
         result = {@result, tostr(";;", targname, ".(", pquoted, ") = ", toliteral(value))};
       endif
-      $command_utils:suspend_if_needed(0);
     endfor
     for a in ($object_utils:ancestors(dobj))
       for p in (`properties(a) ! ANY => {}')
@@ -1325,10 +1303,6 @@ object #59
     "prints verbname and all offending lines to player";
     set_task_perms(caller_perms());
     {pattern, o, ?casematters = 0} = args;
-    if ($command_utils:running_out_of_time())
-      player:notify(tostr("...", o));
-      suspend(0);
-    endif
     if (!valid(o))
       return 0;
     endif
@@ -1347,10 +1321,6 @@ object #59
       endfor
       if (found)
         count = count + 1;
-      endif
-      if ($command_utils:running_out_of_time())
-        player:notify(tostr("...", o));
-        suspend(0);
       endif
     endfor
     return count;

@@ -124,13 +124,6 @@ object #14
       for m in (args)
         msgtree = this._mgr:insert_last(msgtree, this:_makemsg(new, m[2]));
         new = new + 1;
-        if ($command_utils:running_out_of_time())
-          this.messages = msgtree;
-          player:tell("... ", new);
-          suspend(0);
-          msgtree = this.messages;
-          new = this:new_message_num();
-        endif
       endfor
       this.messages = msgtree;
       this.last_used_time = time();
@@ -379,7 +372,7 @@ object #14
       endif
       "... n == first out-of-sequence ...";
       "...renumber as many messages as we have time for...";
-      while (n <= msgtree[2] && !$command_utils:running_out_of_time())
+      while (n <= msgtree[2])
         msg = this._mgr:find_nth(msgtree, n);
         msgtree = this._mgr:set_nth(msgtree, n, listset(msg, n, 2));
         n = n + 1;
@@ -621,13 +614,6 @@ object #14
       msg = {@msg[1..2], @$mail_agent:__convert_new(@msg[3..$])};
       if (doit)
         msgtree = this._mgr:set_nth(msgtree, n, msg);
-      endif
-      if ($command_utils:running_out_of_time())
-        suspend(0);
-        if (this.messages != msgtree)
-          player:notify("urk.  someone played with this folder.");
-          return 0;
-        endif
       endif
     endfor
     return 1;

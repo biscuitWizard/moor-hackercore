@@ -273,29 +273,6 @@ object #56
     return output;
   endverb
 
-  verb "running_out_of_time" (this none this) owner: #36 flags: "rxd"
-    "Return true if we're running out of ticks or seconds.";
-    return ticks_left() < 4000 || seconds_left() < 2;
-    "If this verb is changed make sure to change :suspend_if_needed as well.";
-  endverb
-
-  verb "suspend_if_needed" (this none this) owner: #2 flags: "rxd"
-    "Usage:  $command_utils:suspend_if_needed(<time>[, @<announcement>])";
-    "See if we're running out of ticks or seconds, and if so suspend(<time>) and return true.  If more than one arg is given, print the remainder with player:tell.";
-    if (ticks_left() < 4000 || seconds_left() < 2)
-      "Note: above computation should be the same as :running_out_of_time.";
-      {?time = 10, @ann} = args;
-      if (ann && valid(player))
-        player:tell(tostr(@ann));
-      endif
-      amount = max(time, min($login:current_lag(), 10));
-      set_task_perms(caller_perms());
-      "this is trying to back off according to lag...";
-      suspend(amount);
-      return 1;
-    endif
-  endverb
-
   verb "dump_lines" (this none this) owner: #36 flags: "rxd"
     ":dump_lines(text) => text `.'-quoted for :read_lines()";
     "  text is assumed to be a list of strings";

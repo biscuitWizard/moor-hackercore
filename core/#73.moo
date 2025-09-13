@@ -136,7 +136,6 @@ object #73
                 else
                   player:notify(code[i]);
                 endif
-                $command_utils:suspend_if_needed(0);
               endfor
             endfor
           endif
