@@ -247,20 +247,14 @@ check_git_heads_changed() {
     # Source the saved heads
     source "$GIT_HEADS_FILE"
     
-    local current_local_head=$(get_git_head "$SCRIPT_DIR")
     local current_moor_head=$(get_git_head "$SCRIPT_DIR/vendor/moor")
-    
-    if [[ "$current_local_head" != "$LOCAL_HEAD" ]]; then
-        print_warning "Local git head changed: $LOCAL_HEAD -> $current_local_head"
-        return 0
-    fi
     
     if [[ "$current_moor_head" != "$MOOR_HEAD" ]]; then
         print_warning "Moor git head changed: $MOOR_HEAD -> $current_moor_head"
         return 0
     fi
     
-    print_info "Git heads unchanged, no rebuild needed"
+    print_info "Moor git head unchanged, no rebuild needed"
     return 1
 }
 
