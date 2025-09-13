@@ -24,7 +24,7 @@ object #0
 
   property "singleton" (owner: #2, flags: "r") = #17;
 
-  property "datastore" (owner: #2, flags: "r") = #19;
+  property "datastore" (owner: #2, flags: "r") = #37;
 
   property "wiz_utils" (owner: #2, flags: "r") = #24;
 
@@ -57,6 +57,8 @@ object #0
   property "ou" (owner: #2, flags: "r") = #52;
 
   property "lock_utils" (owner: #2, flags: "r") = #53;
+
+  property "lu" (owner: #2, flags: "r") = #55;
 
   property "list_utils" (owner: #2, flags: "r") = #55;
 
