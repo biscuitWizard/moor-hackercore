@@ -565,4 +565,22 @@ object #55
     return alist;
   endverb
 
+  verb "is_assoc*iated_list" (this none this) owner: #36 flags: "rxd"
+    ":is_assoc(lists) => TRUE/FALSE";
+    "  Returns true if the provided list is an associated list";
+    {lists} = args;
+    if (typeof(lists) != LIST)
+      raise(E_INVARG, "Argument provideded is not a list.");
+    endif
+    assoc_len = length(lists[1]);
+    for elem in (lists)
+      if (typeof(elem) != LIST)
+        return $false;
+      elseif (length(elem)!= assoc_len)
+        return $false;
+      endif      
+    endfor
+    return $true;
+  endverb
+
 endobject
