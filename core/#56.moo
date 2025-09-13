@@ -10,7 +10,20 @@ object #56
 
   override "help_msg" = {"$command_utils is the repository for verbs that are of general usefulness to authors of all sorts of commands.  For more details about any of these verbs, use `help $command_utils:<verb-name>'.", "", "Detecting and Handling Failures in Matching", "-------------------------------------------", ":object_match_failed(match_result, name)", "    Test whether or not a :match_object() call failed and print messages if so.", ":player_match_failed(match_result, name)", "    Test whether or not a :match_player() call failed and print messages if so.", ":player_match_result(match_results, names)", "    ...similar to :player_match_failed, but does a whole list at once.", "", "Reading Input from the Player", "-----------------------------", ":read()         -- Read one line of input from the player and return it.", ":yes_or_no([prompt])", "                -- Prompt for and read a `yes' or `no' answer.", ":read_lines()   -- Read zero or more lines of input from the player.", ":dump_lines(lines) ", "                -- Return list of lines quoted so that feeding them to ", "                   :read_lines() will reproduce the original lines.", ":read_lines_escape(escapes[,help])", "                -- Like read_lines, except you can provide more escapes", "                   to terminate the read.", "", "Feature Objects", "---------------", ":validate_feature -- compare command line against feature verb argument spec", "", "Utilities for Suspending", "------------------------", ":running_out_of_time()", "                -- Return true if we're low on ticks or seconds.", ":suspend_if_needed(time)", "                -- Suspend (and return true) if we're running out of time.", "", "Client Support for Lengthy Commands", "-----------------------------------", ":suspend(args)  -- Handle PREFIX and SUFFIX for clients in long commands."};
 
-  property "lag_samples" (owner: #2, flags: "r") = {};
+  
+  property "feature_task" (owner: #12, flags: "r") = {1391373635, "who", {}, "", #-1, "", "", #-1, ""};
+
+  property "ABORT" (owner: #12, flags: "r") = 50;
+
+  property "YES" (owner: #12, flags: "r") = 1;
+
+  property "NO" (owner: #12, flags: "r") = 0;
+
+  property "ALL" (owner: #12, flags: "r") = 2;
+
+  property "NONE" (owner: #12, flags: "r") = -1;
+
+  property "NO_ABORT" (owner: #12, flags: "r") = 100;
 
   property "feature_task" (owner: #36, flags: "") = "hey, neat, no feature verbs have been run yet!";
 
@@ -95,46 +108,61 @@ object #56
     return pmf ? bombed | {bombed, @pset};
   endverb
 
-  verb "read" (this none this) owner: #2 flags: "rxd"
-    "$command_utils:read() -- read a line of input from the player and return it";
+  verb "read" (this none this) owner: #36 flags: "rxd"
+    "common usage:";
+    "$command_utils:read([ 'a line of input' ]) -- read a line of input from the player and return it";
     "Optional argument is a prompt portion to replace `a line of input' in the prompt.";
     "";
-    "Returns E_PERM if the current task is not the most recent task spawned by a command from player.";
-    {?prompt = "a line of input"} = args;
+    "connection reading:";
+    "$command_utils:read('a line of input', connection)";
+    "";
+    "kill callback:";
+    "$command_utils:read('a line of input', $nothing, verbname, arguments);";
+    "The verbname defined on the kill callback object will be called with the supplied arguments";
+    "Returns E_PERM if the current task is not a command task that has never called suspend().";
+    {?prompt = "a line of input", ?connection = #-1, ?kill_verb = "", ?kill_args = {}} = args;
     c = callers();
     p = c[$][5];
     p:notify(tostr("[Type ", prompt, " or `@abort' to abort the command.]"));
     try
-      ans = read();
+      if (connection != #-1)
+        ans = read(connection);
+      else
+        if (!(p in connected_players()))
+          raise(E_INVARG);
+        endif
+        ans = read();
+      endif
       if ($string_utils:trim(ans) == "@abort")
         p:notify(">> Command Aborted <<");
+        this:kill_task_callback(kill_verb, kill_args);
         kill_task(task_id());
       endif
       return ans;
+    except error (E_INVARG)
+      this:kill_task_callback(kill_verb, kill_args);
+      kill_task(task_id());
     except error (ANY)
       return error[1];
     endtry
   endverb
 
-  verb "read_lines" (this none this) owner: #2 flags: "rxd"
+  verb "read_lines" (this none this) owner: #36 flags: "rxd"
     "$command_utils:read_lines([max]) -- read zero or more lines of input";
     "";
     "Returns a list of strings, the (up to MAX, if given) lines typed by the player.  Returns E_PERM if the current task is not a command task that has never called suspend().";
     "In order that one may enter arbitrary lines, including \"@abort\" or \".\", if the first character in an input line is `.' and there is some nonwhitespace afterwords, the `.' is dropped and the rest of the line is taken verbatim, so that, e.g., \".@abort\" enters as \"@abort\" and \"..\" enters as \".\".";
-    "--- Inline editor ---";
-    return $edit_utils:editor();
-    "--- Inline editor ---";
-    "(Remove the above line if you wish for normal read_lines prompts.)";
-    {?max = 0} = args;
+    {?max = 0, ?kill_task_verb = "", ?kill_task_args = {}} = args;
     c = callers();
     p = c[$][5];
-    p:notify(tostr("[Type", max ? tostr(" up to ", max) | "", " lines of input; use `.' to end or `@abort' to abort the command.]"));
+    p:notify(tostr("[Type", max ? tostr(" up to ", max) | "", " lines of input; use `.' (single period) on a separate line to end or `@abort' to abort the command.]"));
     ans = {};
     while (1)
       try
         line = read();
         if (line[1..min(6, $)] == "@abort" && (tail = line[7..$]) == $string_utils:space(tail))
           p:notify(">> Command Aborted <<");
+          this:kill_task_callback(kill_task_verb, kill_task_args);
           kill_task(task_id());
         elseif (!line || line[1] != ".")
           ans = {@ans, line};
@@ -146,30 +174,51 @@ object #56
         if (max && length(ans) >= max)
           return ans;
         endif
+      except error (E_INVARG)
+        this:kill_task_callback(kill_task_verb, kill_task_args);
+        kill_task(task_id());
       except error (ANY)
         return error[1];
       endtry
     endwhile
   endverb
 
-  verb "yes_or_no" (this none this) owner: #2 flags: "rxd"
+  verb "yes_or_no" (this none this) owner: #36 flags: "rxd"
     ":yes-or-no([prompt]) -- prompts the player for a yes or no answer and returns a true value iff the player enters a line of input that is some prefix of \"yes\"";
     "";
     "Returns E_NONE if the player enters a blank line, E_INVARG, if the player enters something that isn't a prefix of \"yes\" or \"no\", and E_PERM if the current task is not a command task that has never called suspend().";
+    {?msg = "", ?abort_mode = this.ABORT, ?kill_verb = "", ?kill_args = {}} = args;
     c = callers();
     p = c[$][5];
-    p:notify(tostr(args ? args[1] + " " | "", "[Enter `yes' or `no']"));
+    p:notify(tostr(msg ? msg + " " | "", "[Enter `yes' or `no']"));
     try
+      dude = player;
       ans = read(@caller == p || $perm_utils:controls(caller_perms(), p) ? {p} | {});
       if (ans = $string_utils:trim(ans))
-        if (ans == "@abort")
+        if (abort_mode != this.NO_ABORT && ans == "@abort")
           p:notify(">> Command Aborted <<");
+          callstack = c;
+          {kill_caller, callstack} = $lu:pop(callstack);
+          kill_caller = kill_caller[1];
+          while (kill_caller == this && callstack)
+            {kill_caller, callstack} = $lu:pop(callstack);
+            kill_caller = kill_caller[1];
+          endwhile
+          if (kill_verb && $ou:has_callable_verb(kill_caller, kill_verb))
+            try
+              kill_caller:(kill_verb)(@kill_args);
+            except e (ANY)
+              $error:log(e);
+            endtry
+          endif
           kill_task(task_id());
         endif
         return index("yes", ans) == 1 || (index("no", ans) != 1 && E_INVARG);
       else
         return E_NONE;
       endif
+    except error (E_INVARG)
+      kill_task(task_id());
     except error (ANY)
       return error[1];
     endtry
@@ -263,20 +312,14 @@ object #56
     return 0;
   endverb
 
-  verb "do_huh" (this none this) owner: #2 flags: "rx"
+  verb "do_huh" (this none this) owner: #36 flags: "rx"
     ":do_huh(verb,args)  what :huh should do by default.";
     {verb, args} = args;
-    if ($perm_utils:controls(caller_perms(), player) || caller_perms() == player)
-      this.feature_task = {task_id(), verb, args, argstr, dobj, dobjstr, prepstr, iobj, iobjstr};
-    endif
+    this.feature_task = {task_id(), verb, args, argstr, dobj, dobjstr, prepstr, iobj, iobjstr};
     set_task_perms(cp = caller_perms());
     notify = $perm_utils:controls(cp, player) ? "notify" | "tell";
-    if (verb == "")
-      "should only happen if a player types backslash";
-      player:(notify)("I don't understand that.");
-      return;
-    endif
-    if (player:my_huh(verb, args))
+    testbit = player:my_huh(verb, args);
+    if (testbit)
       "... the player found something funky to do ...";
     elseif (caller:here_huh(verb, args))
       "... the room found something funky to do ...";
@@ -284,14 +327,20 @@ object #56
       "... player's second round found something to do ...";
     elseif (dobj == $ambiguous_match)
       if (iobj == $ambiguous_match)
-        player:(notify)(tostr("I don't understand that (\"", dobjstr, "\" and \"", iobjstr, "\" are both ambiguous names)."));
+        player:(notify)(tostr("I don't understand that (\"", dobjstr, "\" and \"", iobjstr, "\" refer to multiple items 'help multiples')."));
       else
-        player:(notify)(tostr("I don't understand that (\"", dobjstr, "\" is an ambiguous name)."));
+        player:(notify)(tostr("I don't understand that (\"", dobjstr, "\" refers to multiple items 'help multiples')."));
       endif
     elseif (iobj == $ambiguous_match)
-      player:(notify)(tostr("I don't understand that (\"", iobjstr, "\" is an ambiguous name)."));
+      player:(notify)(tostr("I don't understand that (\"", iobjstr, "\" refers to multiple items 'help multiples')."));
+    elseif (player.location:my_huh(verb, args))
+      "... room found something to do ...";
+    elseif (valid(dobj = dobj || player:match(dobjstr)) && dobj:my_huh(verb, args))
+      "... dobj found something to do ...";
+    elseif (valid(iobj = iobj || player:match(iobjstr)) && iobj:my_huh(verb, args))
+      "... iobj found something to do ...";
     else
-      player:(notify)("I don't understand that.");
+      player:(notify)($ru.idun_msg);
       player:my_explain_syntax(caller, verb, args) || (caller:here_explain_syntax(caller, verb, args) || this:explain_syntax(caller, verb, args));
     endif
   endverb
