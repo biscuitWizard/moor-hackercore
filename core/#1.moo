@@ -22,7 +22,7 @@ object #1
     return this.instance_id;
   endverb
 
-  verb "server_started" (this none this) owner: #2 flags: "rxd"
+  verb "on_server_started" (this none this) owner: #2 flags: "rxd"
     "generate an instance id if we don't have one.";
     this:instance_id();
   endverb
