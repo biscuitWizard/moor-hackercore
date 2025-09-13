@@ -76,8 +76,6 @@ object #0
 
   property "code_utils" (owner: #2, flags: "r") = #59;
 
-  property "help" (owner: #2, flags: "r") = #60;
-
   property "nothing" (owner: #2, flags: "r") = #-1;
 
   property "failed_match" (owner: #2, flags: "r") = #-3;
@@ -132,6 +130,10 @@ object #0
 
   property "feature_warehouse" (owner: #2, flags: "r") = #83;
 
+  property "singleton_warehouse" (owner: #2, flags: "r") = #84;
+
+  property "help" (owner: #2, flags: "r") = #97;
+
   property "pasting_feature" (owner: #2, flags: "r") = #90;
 
   property "matrix_utils" (owner: #36, flags: "r") = #91;
@@ -143,9 +145,6 @@ object #0
   property "mcp" (owner: #2, flags: "r") = #110;
 
   property "server" (owner: #2, flags: "r") = ["core_history" -> {{"HackerCore", "2.7.2", 1721211497}, {"ToastCore", "2.7.1", 1713940026}, {"a 2018 LambdaCore", "2.6.0", 1576791887}}, "last_restart_time" -> 1756637231, "name" -> "LambdaMOO-ToastStunt", "shutdown_time" -> 0];
-
-  property "help_db" (owner: #2, flags: "r") = ["ansi" -> #101, "builder" -> #84, "builtin_function" -> #28, "core" -> #19, "editor" -> #44, "frand" -> #92, "mail" -> #85, "mcp" -> #116, "prog" -> #22, "toaststunt" -> #86, "verb" -> #18, "wiz" -> #23];
-
   property "generic_help" (owner: #2, flags: "r") = #30;
 
   property "options" (owner: #2, flags: "r") = ["ansi" -> #102, "build" -> #77, "display" -> #67, "edit" -> #66, "mail" -> #65, "prog" -> #76];

@@ -10,8 +10,6 @@ object #31
 
   override "features" = {#90, #89};
 
-  override "help" = 0;
-
   override "home" = #62;
 
   override "password" = 0;

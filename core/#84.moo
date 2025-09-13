@@ -1,21 +1,20 @@
-object #83
-  name: "Feature Warehouse"
+object #84
+  name: "Singleton Warehouse"
   parent: #8
   location: #62
   owner: #36
   readable: true
   override "key" = 0;
 
-  override "aliases" = {"Feature Warehouse", "warehouse"};
+  override "aliases" = {"Singleton Warehouse", "warehouse"};
 
   override "dark" = 0;
 
   override "opened" = 1;
 
   verb "list" (any in this) owner: #36 flags: "rxd"
-    "Copied from Features Feature Object (#24300):list by Joe (#2612) Mon Oct 10 21:07:35 1994 PDT";
     if (this.contents)
-      player:tell(".features objects:");
+      player:tell(".singleton objects:");
       player:tell("----------------------");
       first = 1;
       for thing in (this.contents)

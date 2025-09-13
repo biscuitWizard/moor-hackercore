@@ -10,8 +10,6 @@ object #4
 
   override "features" = {#90, #89, #75};
 
-  override "help" = #84;
-
   override "home" = #62;
 
   property "build_options" (owner: #2, flags: "rc") = {};

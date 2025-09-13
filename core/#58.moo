@@ -10,8 +10,6 @@ object #58
 
   override "features" = {#90, #75, #73};
 
-  override "help" = {#22, #28, #18, #19, #86};
-
   override "home" = #62;
 
   property "eval_subs" (owner: #36, flags: "r") = {};

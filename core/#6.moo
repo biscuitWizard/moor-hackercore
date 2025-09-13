@@ -16,8 +16,6 @@ object #6
 
   property "last_disconnect_time" (owner: #2, flags: "r") = 0;
 
-  property "help" (owner: #2, flags: "rc") = {#116, #44};
-
   property "more_msg" (owner: #2, flags: "rc") = "*** More ***  %n lines left.  Do @more [rest|flush] for more.";
 
   property "all_connect_places" (owner: #2, flags: "") = {};
@@ -335,56 +333,7 @@ object #6
       $code_utils:show_who_listing($wiz_utils:connected_wizards()) || player:notify("No wizards currently logged in.");
     endif
   endverb
-
-  verb "?* help info*rmation @help" (any any any) owner: #2 flags: "rxd"
-    set_task_perms(callers() ? caller_perms() | player);
-    "...this code explicitly relies on being !d in several places...";
-    if (index(verb, "?") != 1 || length(verb) <= 1)
-      what = $string_utils:trimr(argstr);
-    elseif (argstr)
-      what = tostr(verb[2..$], " ", $string_utils:trimr(argstr));
-    else
-      what = verb[2..$];
-    endif
-    "...find a db that claims to know about `what'...";
-    dblist = $code_utils:help_db_list();
-    result = $code_utils:help_db_search(what, dblist);
-    if (!result)
-      "... note: all of the last-resort stuff...";
-      "... is now located on $help:find_topics/get_topic...";
-      $wiz_utils:missed_help(what, result);
-      player:notify(tostr("Sorry, but no help is available on `", what, "'."));
-    elseif (result[1] == $ambiguous_match)
-      $wiz_utils:missed_help(what, result);
-      player:notify_lines(tostr("Sorry, but the topic-name `", what, "' is ambiguous.  I don't know which of the following topics you mean:"));
-      for x in ($help:columnize(@$help:sort_topics(result[2])))
-        player:notify(tostr("   ", x));
-      endfor
-    else
-      {help, topic} = result;
-      if (topic != what)
-        player:notify(tostr("Showing help on `", topic, "':"));
-        player:notify("----");
-      endif
-      dblist = dblist[1 + (help in dblist)..$];
-      if (1 == (text = help:get_topic(topic, dblist)))
-        "...get_topic took matters into its own hands...";
-      elseif (text)
-        "...these can get long...";
-        for line in (typeof(text) == LIST ? text | {text})
-          if (typeof(line) != STR)
-            player:notify("Odd results from help -- complain to a wizard.");
-          else
-            player:notify(line);
-          endif
-        endfor
-      else
-        player:notify(tostr("Help DB ", help, " thinks it knows about `", what, "' but something's messed up."));
-        player:notify(tostr("Tell ", help.owner.wizard ? "" | tostr(help.owner.name, " (", help.owner, ") or "), "a wizard."));
-      endif
-    endif
-  endverb
-
+  
   verb "display_option" (this none this) owner: #2 flags: "rxd"
     ":display_option(name) => returns the value of the specified @display option";
     if (caller == this || $perm_utils:controls(caller_perms(), this))
@@ -1074,6 +1023,62 @@ object #6
       else
         player:notify("Pronouns unchanged.");
       endif
+    endif
+  endverb
+
+  verb "help @help help/* @help/*" (any any any) owner: #36 flags: "rd"
+    if ((switch = $su:explode(verb, "/")[$]) && switch != verb)
+      if (!$ou:has_callable_verb(this, tostr("help_", switch)))
+        switches = {};
+        for v in ($ou:all_verbs(this))
+          if (!$su:starts_with(v, "help_"))
+            continue;
+          endif
+          switches = {@switches, v[6..$]};
+        endfor
+        return this:ooc_tell("Unable to match switch '", switch, "', available switches are: ", $su:english_list(switches));
+      endif
+      return this:(tostr("help_", switch))(args);
+    endif
+    if (!args || !(spec = $code_utils:parse_verbref(args[1])))
+      if (!argstr)
+        argstr = "index";
+      endif
+      if (!(results = $help:find(argstr, $help:permitted_categories(player))))
+        return player:notify(tostr("Sorry, but no help is available on `", argstr, "'."));
+      elseif (length(results) > 1)
+        player:notify(tostr("Found multiple results for '", argstr, "', which of the following topics do you mean:"));
+        for result in (results)
+          player:notify(tostr("  ", result[$]));
+        endfor
+        return;
+      endif
+      "we only had one result";
+      result = results[1];
+      player:notify(tostr("Showing help for '", result[$], "':"));
+      player:notify_lines(result[2]);
+      return;
+    elseif ($command_utils:object_match_failed(object = this:match(spec[1]), spec[1]))
+      return;
+    elseif (!(":" in args[1]) && $recycler:valid(object = this:match(args[1])))
+      if ($ou:has_property(object, "help_msg"))
+        return player:notify_lines(object.help_msg);
+      elseif ($ou:has_property(object, "help_message"))
+        return player:notify_lines(object.help_message);
+      endif
+      return player:notify("That object does not have help available.");
+    elseif (!(hv = $object_utils:has_verb(object, spec[2])))
+      return player:notify("That object does not define that verb.");
+    elseif (typeof(verbdoc = $code_utils:verb_documentation(object = hv[1], spec[2])) == ERR)
+      return player:notify(tostr(verbdoc));
+    elseif (typeof(info = `verb_info(object, spec[2]) ! ANY') == ERR)
+      return player:notify(tostr(info));
+    endif
+    objverb = tostr(object.name, "(", object, "):", strsub(info[3], " ", "/"));
+    if (verbdoc)
+      player:notify_lines({tostr("Information about ", objverb), "----", @verbdoc});
+    else
+      player:notify(tostr("No information about ", objverb));
     endif
   endverb
 

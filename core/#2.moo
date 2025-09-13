@@ -19,8 +19,6 @@ object #2
 
   override "last_disconnect_time" = 1756637231;
 
-  override "help" = 0;
-
   override "all_connect_places" = {"192.168.1.187", "192.168.1.102"};
 
   override "last_connect_place" = "192.168.1.187";

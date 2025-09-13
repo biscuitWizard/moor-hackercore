@@ -14,8 +14,6 @@ object #36
 
   override "last_disconnect_time" = 9223372036854775807;
 
-  override "help" = 0;
-
   override "home" = #-1;
 
   override "first_connect_time" = 9223372036854775807;

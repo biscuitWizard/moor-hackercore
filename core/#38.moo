@@ -2,7 +2,7 @@
 object #38
   name: "Generic Property-Based Columnar Datastore"
   parent: #37
-  location: #-1
+  location: #84
   owner: #36
   readable: true
 
