@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # hacker.sh - Docker Compose management script for hackercore
-# Usage: ./hacker.sh [start|stop|restart|status|clean|rebuild|clean-rebuild|logs]
+# Usage: ./hacker.sh [start|stop|restart|status|clean|rebuild|clean-rebuild|logs|update]
 
 set -e
 
@@ -387,6 +387,64 @@ follow_logs() {
     docker-compose logs -f moor-daemon
 }
 
+# Function to update vendor/moor submodule to latest version
+update_submodule() {
+    print_info "Updating vendor/moor submodule to latest version..."
+    cd "$SCRIPT_DIR"
+    
+    # Check if vendor/moor directory exists
+    if [[ ! -d "vendor/moor" ]]; then
+        print_error "vendor/moor directory not found!"
+        print_info "Make sure you're in the hackercore root directory."
+        exit 1
+    fi
+    
+    # Get current commit hash before update
+    local current_commit=$(get_git_head "$SCRIPT_DIR/vendor/moor")
+    print_info "Current moor commit: $current_commit"
+    
+    # Navigate to vendor/moor and pull latest changes
+    print_info "Pulling latest changes from vendor/moor..."
+    cd "$SCRIPT_DIR/vendor/moor"
+    
+    # Check if we're on a valid branch (not detached HEAD)
+    local current_branch=$(git branch --show-current 2>/dev/null || echo "detached")
+    if [[ "$current_branch" == "detached" ]]; then
+        print_warning "Currently on detached HEAD, switching to main branch..."
+        git checkout main
+    fi
+    
+    # Pull the latest changes
+    if git pull origin main; then
+        print_success "Successfully pulled latest changes from vendor/moor!"
+        
+        # Get new commit hash
+        local new_commit=$(git rev-parse HEAD)
+        print_info "Updated moor commit: $new_commit"
+        
+        # Go back to main directory and commit the submodule update
+        cd "$SCRIPT_DIR"
+        print_info "Committing submodule update to main repository..."
+        
+        if git add vendor/moor && git commit -m "Update vendor/moor submodule to latest version
+
+Previous commit: $current_commit
+New commit: $new_commit
+
+Automated update via hacker.sh"; then
+            print_success "Submodule update committed successfully!"
+            print_info "You may want to run './hacker.sh clean-rebuild' to rebuild with the latest changes."
+        else
+            print_warning "Submodule was updated but commit failed (may already be up to date)"
+        fi
+        
+    else
+        print_error "Failed to pull latest changes from vendor/moor!"
+        print_info "Please check your network connection and try again."
+        exit 1
+    fi
+}
+
 # Main function
 main() {
     local command=${1:-""}
@@ -420,10 +478,13 @@ main() {
         "logs")
             follow_logs
             ;;
+        "update")
+            update_submodule
+            ;;
         "")
             print_error "No command specified."
             echo
-            echo "Usage: $0 [start|stop|restart|status|clean|rebuild|clean-rebuild|logs]"
+            echo "Usage: $0 [start|stop|restart|status|clean|rebuild|clean-rebuild|logs|update]"
             echo
             echo "Commands:"
             echo "  start        - Start all hackercore services (automatically follows logs)"
@@ -434,12 +495,13 @@ main() {
             echo "  rebuild      - Force rebuild all Docker images (no cache)"
             echo "  clean-rebuild - Clean everything and rebuild from scratch"
             echo "  logs         - Follow moor daemon logs"
+            echo "  update       - Update vendor/moor submodule to latest version"
             exit 1
             ;;
         *)
             print_error "Unknown command: $command"
             echo
-            echo "Usage: $0 [start|stop|restart|status|clean|rebuild|clean-rebuild|logs]"
+            echo "Usage: $0 [start|stop|restart|status|clean|rebuild|clean-rebuild|logs|update]"
             exit 1
             ;;
     esac
