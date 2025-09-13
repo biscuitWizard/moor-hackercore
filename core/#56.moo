@@ -10,9 +10,6 @@ object #56
 
   override "help_msg" = {"$command_utils is the repository for verbs that are of general usefulness to authors of all sorts of commands.  For more details about any of these verbs, use `help $command_utils:<verb-name>'.", "", "Detecting and Handling Failures in Matching", "-------------------------------------------", ":object_match_failed(match_result, name)", "    Test whether or not a :match_object() call failed and print messages if so.", ":player_match_failed(match_result, name)", "    Test whether or not a :match_player() call failed and print messages if so.", ":player_match_result(match_results, names)", "    ...similar to :player_match_failed, but does a whole list at once.", "", "Reading Input from the Player", "-----------------------------", ":read()         -- Read one line of input from the player and return it.", ":yes_or_no([prompt])", "                -- Prompt for and read a `yes' or `no' answer.", ":read_lines()   -- Read zero or more lines of input from the player.", ":dump_lines(lines) ", "                -- Return list of lines quoted so that feeding them to ", "                   :read_lines() will reproduce the original lines.", ":read_lines_escape(escapes[,help])", "                -- Like read_lines, except you can provide more escapes", "                   to terminate the read.", "", "Feature Objects", "---------------", ":validate_feature -- compare command line against feature verb argument spec", "", "Utilities for Suspending", "------------------------", ":running_out_of_time()", "                -- Return true if we're low on ticks or seconds.", ":suspend_if_needed(time)", "                -- Suspend (and return true) if we're running out of time.", "", "Client Support for Lengthy Commands", "-----------------------------------", ":suspend(args)  -- Handle PREFIX and SUFFIX for clients in long commands."};
 
-  
-  property "feature_task" (owner: #12, flags: "r") = {1391373635, "who", {}, "", #-1, "", "", #-1, ""};
-
   property "ABORT" (owner: #12, flags: "r") = 50;
 
   property "YES" (owner: #12, flags: "r") = 1;
@@ -372,6 +369,31 @@ object #56
     "While input is being read() from a player, return 1. Otherwise return 0.";
     {who} = args;
     return `who.reading_input ! ANY => 0';
+  endverb
+
+  verb "switched_command" (this none this) owner: #36 flags: "rxd"
+    {verbstr, cmd_prefix, ?default_verb = ""} = args;
+    cmd_object = callers()[1][1];
+    if ((switch = $su:explode(verbstr, "/")[$]) && switch != verbstr)
+      if (!$ou:has_callable_verb(this, tostr(cmd_prefix, "_", switch)))
+        switches = {};
+        for v in ($ou:all_verbs(cmd_object))
+          if (!$su:starts_with(v, tostr(cmd_prefix, "_")))
+            continue;
+          endif
+          switches = {@switches, v[length(cmd_prefix)+1..$]};
+        endfor
+        player:notify(tostr("Unable to match switch '", switch, "', available switches are: ", $su:english_list(switches)));
+        return $true;
+      endif
+      cmd_object:(tostr(cmd_prefix, "_", switch))(@args);
+      return $true;
+    endif
+    if (default_verb)
+      cmd_object:(default_verb)(@args);
+      return $true;
+    endif
+    return $false;
   endverb
 
 endobject

@@ -1023,18 +1023,8 @@ object #6
   endverb
 
   verb "help @help help/* @help/*" (any any any) owner: #36 flags: "rd"
-    if ((switch = $su:explode(verb, "/")[$]) && switch != verb)
-      if (!$ou:has_callable_verb(this, tostr("help_", switch)))
-        switches = {};
-        for v in ($ou:all_verbs(this))
-          if (!$su:starts_with(v, "help_"))
-            continue;
-          endif
-          switches = {@switches, v[6..$]};
-        endfor
-        return this:ooc_tell("Unable to match switch '", switch, "', available switches are: ", $su:english_list(switches));
-      endif
-      return this:(tostr("help_", switch))(args);
+    if ($cu:switched_command(verb, "help"))
+      return;
     endif
     if (!args || !(spec = $code_utils:parse_verbref(args[1])))
       if (!argstr)
