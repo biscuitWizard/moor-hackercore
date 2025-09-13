@@ -15,6 +15,7 @@ NC='\033[0m' # No Color
 # Script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE_FILE="$SCRIPT_DIR/docker-compose.yml"
+GIT_HEADS_FILE="$SCRIPT_DIR/.git_heads"
 
 # Function to print colored output
 print_info() {
@@ -210,6 +211,59 @@ check_compose_file() {
     fi
 }
 
+# Function to get git head for a directory
+get_git_head() {
+    local dir="$1"
+    if [[ -d "$dir/.git" ]] || [[ -f "$dir/.git" ]]; then
+        cd "$dir"
+        git rev-parse HEAD 2>/dev/null || echo "no-commit"
+    else
+        echo "no-git"
+    fi
+}
+
+# Function to save current git heads
+save_git_heads() {
+    print_info "Saving current git heads..."
+    
+    local local_head=$(get_git_head "$SCRIPT_DIR")
+    local moor_head=$(get_git_head "$SCRIPT_DIR/vendor/moor")
+    
+    cat > "$GIT_HEADS_FILE" << EOF
+LOCAL_HEAD=$local_head
+MOOR_HEAD=$moor_head
+EOF
+    
+    print_success "Git heads saved: local=$local_head, moor=$moor_head"
+}
+
+# Function to check if git heads have changed
+check_git_heads_changed() {
+    if [[ ! -f "$GIT_HEADS_FILE" ]]; then
+        print_info "No previous git heads found, will rebuild"
+        return 0
+    fi
+    
+    # Source the saved heads
+    source "$GIT_HEADS_FILE"
+    
+    local current_local_head=$(get_git_head "$SCRIPT_DIR")
+    local current_moor_head=$(get_git_head "$SCRIPT_DIR/vendor/moor")
+    
+    if [[ "$current_local_head" != "$LOCAL_HEAD" ]]; then
+        print_warning "Local git head changed: $LOCAL_HEAD -> $current_local_head"
+        return 0
+    fi
+    
+    if [[ "$current_moor_head" != "$MOOR_HEAD" ]]; then
+        print_warning "Moor git head changed: $MOOR_HEAD -> $current_moor_head"
+        return 0
+    fi
+    
+    print_info "Git heads unchanged, no rebuild needed"
+    return 1
+}
+
 # Function to initialize and fetch all submodules
 init_submodules() {
     print_info "Initializing and fetching submodules..."
@@ -233,10 +287,19 @@ start_services() {
     # Initialize and fetch submodules before starting
     init_submodules
     
+    # Check if git heads have changed and rebuild if necessary
+    if check_git_heads_changed; then
+        print_info "Git heads have changed, rebuilding images..."
+        rebuild_images
+    fi
+    
     docker-compose up -d
     print_success "Services started successfully!"
     print_info "You can connect to the MUD via telnet on localhost:8888"
     print_info "Or connect via websocket on localhost:8080"
+    
+    # Save current git heads after successful start
+    save_git_heads
     
     # Follow logs automatically to monitor for unexpected daemon deaths
     print_info "Following moor daemon logs (Ctrl+C to exit)..."

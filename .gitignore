@@ -7,3 +7,6 @@
 
 # If the docker compose mounts a db we don't want to commit it
 db/
+
+# hacker.sh convenience tracking for changes
+.git_heads
