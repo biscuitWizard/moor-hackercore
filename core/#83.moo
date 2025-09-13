@@ -19,8 +19,6 @@ object #83
       player:tell("----------------------");
       first = 1;
       for thing in (this.contents)
-        $command_utils:kill_if_laggy(10, "Sorry, the MOO is very laggy, and there are too many feature objects in here to list!");
-        $command_utils:suspend_if_needed(0);
         if (!first)
           player:tell();
         endif

@@ -386,15 +386,6 @@ object #56
     return E_INVARG;
   endverb
 
-  verb "kill_if_laggy" (this none this) owner: #36 flags: "rxd"
-    "Kills this task if the current lag is greater than args[1].  Args[2..n] will be passed to player:tell.";
-    cutoff = args[1];
-    if ($login:current_lag() > cutoff)
-      player:tell(@listdelete(args, 1));
-      kill_task(task_id());
-    endif
-  endverb
-
   verb "validate_feature" (this none this) owner: #36 flags: "rxd"
     ":validate_feature(verb, args)";
     "  (where `verb' and `args' are the arguments passed to :my_huh)";
