@@ -128,22 +128,31 @@ impl VcsProcessor {
     
     /// Load meta configuration from file, creating it with default values if it doesn't exist
     fn load_or_create_meta_config(&self, meta_path: &std::path::Path) -> Result<crate::meta_config::MetaConfig, Box<dyn std::error::Error>> {
+        info!("Loading or creating meta config at: {:?}", meta_path);
+        
         // Try to load existing meta config
         match crate::meta_config::MetaConfig::from_file(meta_path) {
-            Ok(config) => Ok(config),
-            Err(_) => {
+            Ok(config) => {
+                info!("Successfully loaded existing meta config from: {:?}", meta_path);
+                Ok(config)
+            },
+            Err(e) => {
+                info!("Meta config file doesn't exist or can't be loaded: {}, creating new one", e);
+                
                 // If file doesn't exist or can't be loaded, create a new default config
                 let default_config = crate::meta_config::MetaConfig::new();
                 
                 // Create the directory if it doesn't exist
                 if let Some(parent) = meta_path.parent() {
+                    info!("Creating parent directory: {:?}", parent);
                     std::fs::create_dir_all(parent)?;
                 }
                 
                 // Write the default config to file
+                info!("Writing default meta config to: {:?}", meta_path);
                 default_config.to_file(meta_path)?;
                 
-                info!("Created new meta config file: {:?}", meta_path);
+                info!("Successfully created new meta config file: {:?}", meta_path);
                 Ok(default_config)
             }
         }
@@ -168,13 +177,17 @@ impl VcsProcessor {
         };
         
         // Load or create meta configuration
-        let meta_full_path = repo.work_dir().join(repo.meta_path(&object_name));
+        let meta_relative_path = repo.meta_path(&object_name);
+        let meta_full_path = repo.work_dir().join(&meta_relative_path);
         let meta_config = match self.load_or_create_meta_config(&meta_full_path) {
-            Ok(config) => config,
+            Ok(config) => {
+                info!("Successfully loaded/created meta config at: {:?}", meta_full_path);
+                config
+            },
             Err(e) => {
-                error!("Failed to load or create meta config: {}", e);
+                error!("Failed to load or create meta config at {:?}: {}", meta_full_path, e);
                 return VcsResult::Error { 
-                    message: format!("Failed to load or create meta config: {}", e) 
+                    message: format!("Failed to load or create meta config at {:?}: {}", meta_full_path, e) 
                 };
             }
         };
@@ -209,7 +222,6 @@ impl VcsProcessor {
             };
         }
         
-        
         // Add files to git
         if let Err(e) = repo.add_file(&object_full_path) {
             error!("Failed to add MOO file to git: {}", e);
@@ -218,10 +230,11 @@ impl VcsProcessor {
             };
         }
         
+        info!("Attempting to add meta file to git: {:?}", meta_full_path);
         if let Err(e) = repo.add_file(&meta_full_path) {
-            error!("Failed to add meta file to git: {}", e);
+            error!("Failed to add meta file to git at {:?}: {}", meta_full_path, e);
             return VcsResult::Error { 
-                message: format!("Failed to add meta file to git: {}", e) 
+                message: format!("Failed to add meta file to git at {:?}: {}", meta_full_path, e) 
             };
         }
         

@@ -35,7 +35,7 @@ impl MetaConfig {
     pub fn from_file<P: Into<PathBuf>>(path: P) -> Result<Self, Box<dyn std::error::Error>> {
         let path = path.into();
         if !path.exists() {
-            return Ok(Self::new());
+            return Err(format!("Meta config file does not exist: {:?}", path).into());
         }
         
         let content = std::fs::read_to_string(&path)?;
