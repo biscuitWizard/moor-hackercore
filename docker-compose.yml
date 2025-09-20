@@ -112,6 +112,8 @@ services:
     environment:
       - RUST_BACKTRACE=1
     working_dir: /moor
+    volumes:
+      - ./game:/game
     command: >
       ./moor-vms-worker 
         --rpc-address=tcp://moor-daemon:7899 
