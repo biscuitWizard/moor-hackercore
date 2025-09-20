@@ -7,13 +7,13 @@ object #9
 
   override "aliases" = {"Version", "Management", "System", "Feature", "Version Management System Feature"};
 
-  verb "@vms @vms/*" (any any any) owner: #36 flags: "rd"
+  verb "@vms @vms/*" (any any any) owner: #36 flags: "rdx"
     if ($cu:switched_command(verb, "vms"))
       return;
     endif
     repo = worker_request("vms", {"repository_status"});
     output = {};
-    output = {@output, tostr($su:left("Game", 15), ":  ", `repo["game"] ! E_RANGE => $server["core_history"][1] + " (Local)`)};
+    output = {@output, tostr($su:left("Game", 15), ":  ", `repo["game"] ! E_RANGE => $server["core_history"][1] + " (Local)"')};
     output = {@output, tostr($su:right("Upstream", 15), ":  ", repo["upstream"])};
     output = {@output, ""};
     output = {@output, tostr($su:left("Last Change", 15), ":  ", "")};
