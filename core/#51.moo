@@ -1,22 +1,22 @@
 object #51
-  name: "Matching Utilities"
+  name: "matching utilities"
   parent: #78
   location: #-1
   owner: #36
   readable: true
-  override "aliases" = {"Matching Utilities"};
+  override "aliases" = {"matching utilities"};
 
   override "help_msg" = {"$match_utils defines the following verbs:", "", "match", "match_nth", "match_verb", "match_list", "parse_ordinal_reference (alias parse_ordref)", "parse_possessive_reference", "object_match_failed", "", "For more documentation, see help $match_utils:<specific verb>."};
 
-  property "ordn" (owner: #36, flags: "rc") = {"first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth"};
+  property "ordn" (owner: #12, flags: "r") = {"first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth"};
 
-  property "ordw" (owner: #36, flags: "rc") = {"1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th", "9th", "10th"};
+  property "ordw" (owner: #12, flags: "r") = {"1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th", "9th", "10th"};
 
-  property "ordinal_regexp" (owner: #36, flags: "rc") = "%<%(first%|second%|third%|fourth%|fifth%|sixth%|seventh%|eighth%|ninth%|tenth%|1st%|2nd%|3rd%|4th%|5th%|6th%|7th%|8th%|9th%|10th%)%>";
+  property "ordinal_regexp" (owner: #12, flags: "r") = "%<%(first%|second%|third%|fourth%|fifth%|sixth%|seventh%|eighth%|ninth%|tenth%|1st%|2nd%|3rd%|4th%|5th%|6th%|7th%|8th%|9th%|10th%)%>";
 
-  property "matching_room" (owner: #36, flags: "r") = #-1;
+  property "matching_room" (owner: #12, flags: "r") = #-1;
 
-  verb "match" (this none this) owner: #36 flags: "rxd"
+  verb "nmatch" (this none this) owner: #36 flags: "rxd"
     ":match(string, object-list)";
     "Return object in 'object-list' aliased to 'string'.";
     "Matches on a wide variety of syntax, including:";
@@ -27,6 +27,9 @@ object #51
     "Ordinal matches are determined according to the match's position in 'object-list' or, if a possessive (such as \"where\" above) is given, then the ordinal is the nth match in that object's inventory.";
     "In the matching room (#3879@LambdaMOO), the 'object-list' consists of first the player's contents, then the room's, and finally all exits leading from the room.";
     {string, olist} = args;
+    if (!$wiz_utils:is_admin(caller) && `string[1] == "#" ! E_RANGE => 0')
+      return $nothing;
+    endif
     if (!string)
       return $nothing;
     elseif (string == "me")
@@ -39,7 +42,10 @@ object #51
       return object;
     elseif (parsed = this:parse_ordinal_reference(string))
       return this:match_nth(parsed[2], olist, parsed[1]);
-    elseif (parsed = this:parse_possessive_reference(string))
+    else
+      return object;
+    endif
+    if (parsed = this:parse_possessive_reference(string))
       {whostr, objstr} = parsed;
       if (valid(whose = this:match(whostr, olist)))
         return this:match(objstr, whose.contents);
@@ -49,8 +55,6 @@ object #51
     else
       return object;
     endif
-    "Profane (#30788) - Sat Jan  3, 1998 - Changed so literals get returned ONLY if in the passed object list.";
-    "Profane (#30788) - Sat Jan  3, 1998 - OK, that broke lots of stuff, so changed it back.";
   endverb
 
   verb "match_nth" (this none this) owner: #36 flags: "rxd"
@@ -69,7 +73,7 @@ object #51
     return $failed_match;
   endverb
 
-  verb "match_verb" (this none this) owner: #2 flags: "rxd"
+  verb "match_verb" (this none this) owner: #36 flags: "rxd"
     "$match_utils:match_verb(verbname, object) => Looks for a command-line style verb named <verbname> on <object> with current values of prepstr, dobjstr, dobj, iobjstr, and iobj.  If a match is made, the verb is called with @args[3] as arguments and 1 is returned.  Otherwise, 0 is returned.";
     {vrb, what, rest} = args;
     if (where = $object_utils:has_verb(what, vrb))
@@ -181,6 +185,50 @@ object #51
       return 0;
     endif
     return 1;
+  endverb
+
+  verb "match_object_or_character" (this none this) owner: #36 flags: "rxd"
+    "this command will take either an obj# as a string or a character as a string and attempt to find the correct obj#";
+    {object_string, ?suppress_messages = 0} = args;
+    what = toobj(object_string) == $sysobj ? $nothing | toobj(object_string);
+    if (!$recycler:valid(what) && typeof(what = this:match_character(object_string)) != OBJ)
+      return;
+    endif
+    return what;
+  endverb
+
+  verb "match_character" (this none this) owner: #36 flags: "rxd"
+    ":match_character(STR name) => OBJ character";
+    "  Matches any character in the entire game.";
+    {?character_name = ""} = args;
+    return `player:matches(character_name, $ou:descendants($player))[1] ! ANY => $failed_match';
+  endverb
+
+  verb "match_map" (this none this) owner: #36 flags: "rxd"
+    ":match_map(STR search, MAP obj_map[, STR prop_name]) => STR key if match";
+    "  special matcher like $su:match that works with maps";
+    "  keys should be a string we want to return, and the values should be objects";
+    {search, obj_map, ?prop_name = "aliases"} = args;
+    if (parsed = $match_utils:parse_ordinal_reference(search))
+      search = parsed[2];
+    endif
+    ordinal = 0;
+    for key in (mapkeys(obj_map))
+      object = obj_map[key];
+      subject = `object:(prop_name)() ! E_VERBNF => object.(prop_name)';
+      if (prop_name == "realname")
+        subject = {subject, @$su:explode(subject)};
+      endif
+      subject = typeof(subject) == LIST ? subject | {subject};
+      if (search in subject)
+        ordinal = ordinal + 1;
+        if (parsed && parsed[1] != ordinal)
+          continue;
+        endif
+        return key;
+      endif
+    endfor
+    return $failed_match;
   endverb
 
 endobject

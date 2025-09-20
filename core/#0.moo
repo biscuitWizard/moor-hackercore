@@ -76,6 +76,8 @@ object #0
 
   property "player" (owner: #2, flags: "r") = #6;
 
+  property "player_class" (owner: #2, flags: "r") = #6;
+
   property "wiz" (owner: #2, flags: "r") = #57;
 
   property "prog" (owner: #2, flags: "r") = #58;
