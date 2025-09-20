@@ -10,6 +10,8 @@ object #0
 
   property "builder" (owner: #2, flags: "r") = #4;
 
+  property "vms" (owner: #2, flags: "r") = #9;
+
   property "login" (owner: #2, flags: "r") = #10;
 
   property "last_huh" (owner: #2, flags: "r") = #11;
