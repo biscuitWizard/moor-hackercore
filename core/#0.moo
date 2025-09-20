@@ -32,6 +32,8 @@ object #0
 
   property "math_utils" (owner: #2, flags: "r") = #26;
 
+  property "mu" (owner: #2, flags: "r") = #26;
+
   property "set_utils" (owner: #2, flags: "r") = #27;
 
   property "guest" (owner: #2, flags: "r") = #31;
@@ -65,6 +67,8 @@ object #0
   property "list_utils" (owner: #2, flags: "r") = #55;
 
   property "command_utils" (owner: #2, flags: "r") = #56;
+
+  property "cu" (owner: #2, flags: "r") = #56;
 
   property "code_scanner" (owner: #2, flags: "r") = #95;
 
