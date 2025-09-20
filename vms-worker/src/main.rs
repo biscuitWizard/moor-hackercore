@@ -1,7 +1,7 @@
 use clap::Parser;
 use clap_derive::Parser;
 use moor_common::tasks::WorkerError;
-use moor_var::{Obj, Symbol, Var, v_str};
+use moor_var::{Obj, Symbol, Var, v_str, v_map};
 use rpc_async_client::{make_worker_token, worker_loop};
 use rpc_common::client_args::RpcClientArgs;
 use rpc_common::{WorkerToken, load_keypair};
@@ -234,14 +234,12 @@ async fn process_vcs_request(
         }
         VcsResult::RepositoryStatusMap { status_map } => {
             info!("VCS repository status operation succeeded");
-            
-            // Convert HashMap to a list of key-value pairs for MOO consumption
-            let mut result = Vec::new();
-            for (key, value) in status_map {
-                result.push(v_str(&format!("{}: {}", key, value)));
-            }
-            
-            Ok(result)
+            // Convert HashMap<String, String> to Vec<(Var, Var)> for v_map
+            let map_pairs: Vec<(Var, Var)> = status_map
+                .iter()
+                .map(|(k, v)| (v_str(k), v_str(v)))
+                .collect();
+            Ok(vec![v_map(&map_pairs)])
         }
         VcsResult::Error { message } => {
             error!("VCS operation failed: {}", message);
