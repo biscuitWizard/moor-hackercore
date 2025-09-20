@@ -8,7 +8,7 @@ object #4
 
   override "description" = "You see a player who should type '@describe me as ...'.";
 
-  override "features" = {#90, #89, #75};
+  override "features" = {#90, #89, #75, #9};
 
   override "home" = #62;
 

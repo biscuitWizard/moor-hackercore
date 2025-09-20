@@ -8,7 +8,7 @@ object #58
 
   override "description" = "You see a player who is too experienced to have any excuse for not having a description.";
 
-  override "features" = {#90, #75, #73};
+  override "features" = {#90, #75, #73, #9};
 
   override "home" = #62;
 

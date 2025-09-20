@@ -8,7 +8,7 @@ object #57
 
   override "description" = "You see a wizard who chooses not to reveal its true appearance.";
 
-  override "features" = {#90, #75, #73};
+  override "features" = {#90, #75, #73, #9};
 
   override "home" = #62;
 
