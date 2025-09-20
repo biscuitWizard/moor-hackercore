@@ -208,6 +208,100 @@ impl GitRepository {
         
         meta_path
     }
+    
+    /// Get the current branch name
+    pub fn get_current_branch(&self) -> Result<Option<String>, Box<dyn std::error::Error>> {
+        match self.repo.head() {
+            Ok(head) => {
+                if let Some(branch_name) = head.shorthand() {
+                    Ok(Some(branch_name.to_string()))
+                } else {
+                    Ok(None)
+                }
+            }
+            Err(e) => {
+                // Handle unborn branch case
+                if e.code() == git2::ErrorCode::UnbornBranch {
+                    // For unborn branches, try to get the symbolic reference
+                    match self.repo.head_detached() {
+                        Ok(_) => Ok(None), // Detached HEAD
+                        Err(_) => {
+                            // Try to get the symbolic reference name
+                            match self.repo.references_glob("refs/heads/*") {
+                                Ok(mut refs) => {
+                                    if let Some(reference) = refs.next() {
+                                        if let Ok(reference) = reference {
+                                            if let Some(name) = reference.name() {
+                                                if let Some(branch_name) = name.strip_prefix("refs/heads/") {
+                                                    return Ok(Some(branch_name.to_string()));
+                                                }
+                                            }
+                                        }
+                                    }
+                                    Ok(None)
+                                }
+                                Err(_) => Ok(None),
+                            }
+                        }
+                    }
+                } else {
+                    Err(e.into())
+                }
+            }
+        }
+    }
+    
+    /// Get upstream information for the current branch
+    pub fn get_upstream_info(&self) -> Result<Option<String>, Box<dyn std::error::Error>> {
+        match self.repo.head() {
+            Ok(head) => {
+                if let Some(branch_name) = head.shorthand() {
+                    if let Ok(branch) = self.repo.find_branch(branch_name, git2::BranchType::Local) {
+                        if let Ok(upstream) = branch.upstream() {
+                            if let Some(upstream_name) = upstream.name()? {
+                                return Ok(Some(upstream_name.to_string()));
+                            }
+                        }
+                    }
+                }
+                Ok(None)
+            }
+            Err(e) => {
+                // Handle unborn branch case
+                if e.code() == git2::ErrorCode::UnbornBranch {
+                    Ok(None) // No upstream for unborn branches
+                } else {
+                    Err(e.into())
+                }
+            }
+        }
+    }
+    
+    /// Get information about the last commit
+    pub fn get_last_commit_info(&self) -> Result<Option<crate::vcs_operations::CommitInfo>, Box<dyn std::error::Error>> {
+        match self.get_head_commit() {
+            Ok(commit) => {
+                let id = commit.id().to_string();
+                let short_id = &id[..8]; // First 8 characters
+                let datetime = commit.time();
+                let timestamp = chrono::DateTime::from_timestamp(datetime.seconds(), 0)
+                    .unwrap_or_else(|| chrono::Utc::now())
+                    .format("%Y-%m-%d %H:%M:%S UTC")
+                    .to_string();
+                let message = commit.message().unwrap_or("No message").to_string();
+                let author = commit.author().name().unwrap_or("Unknown").to_string();
+                
+                Ok(Some(crate::vcs_operations::CommitInfo {
+                    id: short_id.to_string(),
+                    full_id: id,
+                    datetime: timestamp,
+                    message: message.trim().to_string(),
+                    author,
+                }))
+            }
+            Err(_) => Ok(None), // No commits yet
+        }
+    }
 
     
 }

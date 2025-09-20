@@ -205,6 +205,10 @@ async fn process_vcs_request(
             VcsOperation::Status
         }
         
+        "repository_status" => {
+            VcsOperation::RepositoryStatus
+        }
+        
         _ => {
             return Err(WorkerError::RequestError(format!(
                 "Unknown operation: {}",
@@ -226,6 +230,17 @@ async fn process_vcs_request(
             for item in data {
                 result.push(v_str(&item));
             }
+            Ok(result)
+        }
+        VcsResult::RepositoryStatusMap { status_map } => {
+            info!("VCS repository status operation succeeded");
+            
+            // Convert HashMap to a list of key-value pairs for MOO consumption
+            let mut result = Vec::new();
+            for (key, value) in status_map {
+                result.push(v_str(&format!("{}: {}", key, value)));
+            }
+            
             Ok(result)
         }
         VcsResult::Error { message } => {

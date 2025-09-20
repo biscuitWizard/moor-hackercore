@@ -28,6 +28,37 @@ pub enum VcsOperation {
     
     /// Get repository status
     Status,
+    
+    /// Get comprehensive repository status including upstream, last commit, and changes
+    RepositoryStatus,
+}
+
+/// Comprehensive repository status information
+#[derive(Debug, Clone)]
+pub struct RepositoryStatusInfo {
+    /// Current upstream remote information
+    pub upstream: Option<String>,
+    /// Last commit information
+    pub last_commit: Option<CommitInfo>,
+    /// List of current changes
+    pub changes: Vec<String>,
+    /// Current branch name
+    pub current_branch: Option<String>,
+}
+
+/// Information about a commit
+#[derive(Debug, Clone)]
+pub struct CommitInfo {
+    /// Commit hash (short)
+    pub id: String,
+    /// Commit hash (full)
+    pub full_id: String,
+    /// Commit timestamp
+    pub datetime: String,
+    /// Commit message
+    pub message: String,
+    /// Author name
+    pub author: String,
 }
 
 /// Result of a VCS operation
@@ -38,6 +69,9 @@ pub enum VcsResult {
     
     /// Operation completed with additional data
     SuccessWithData { message: String, data: Vec<String> },
+    
+    /// Operation completed with repository status data as a map
+    RepositoryStatusMap { status_map: std::collections::HashMap<String, String> },
     
     /// Operation failed
     Error { message: String },
@@ -117,6 +151,16 @@ impl VcsProcessor {
             VcsOperation::Status => {
                 if let Some(ref repo) = self.git_repo {
                     self.get_status(repo)
+                } else {
+                    VcsResult::Error { 
+                        message: "Git repository not available at /game".to_string() 
+                    }
+                }
+            }
+            
+            VcsOperation::RepositoryStatus => {
+                if let Some(ref repo) = self.git_repo {
+                    self.get_repository_status(repo)
                 } else {
                     VcsResult::Error { 
                         message: "Git repository not available at /game".to_string() 
@@ -316,6 +360,99 @@ impl VcsProcessor {
                 }
             }
         }
+    }
+    
+    /// Get comprehensive repository status
+    fn get_repository_status(&self, repo: &crate::git_ops::GitRepository) -> VcsResult {
+        match self.collect_repository_status_map(repo) {
+            Ok(status_map) => {
+                VcsResult::RepositoryStatusMap { status_map }
+            }
+            Err(e) => {
+                error!("Failed to get repository status: {}", e);
+                VcsResult::Error { 
+                    message: format!("Failed to get repository status: {}", e) 
+                }
+            }
+        }
+    }
+    
+    /// Collect comprehensive repository status information as a map
+    fn collect_repository_status_map(&self, repo: &crate::git_ops::GitRepository) -> Result<std::collections::HashMap<String, String>, Box<dyn std::error::Error>> {
+        use std::collections::HashMap;
+        
+        let mut status_map = HashMap::new();
+        
+        // Get current branch
+        match repo.get_current_branch() {
+            Ok(Some(branch)) => {
+                status_map.insert("current_branch".to_string(), branch);
+            }
+            Ok(None) => {
+                status_map.insert("current_branch".to_string(), "(detached HEAD)".to_string());
+            }
+            Err(e) => {
+                error!("Failed to get current branch: {}", e);
+                status_map.insert("current_branch".to_string(), "(error)".to_string());
+            }
+        }
+        
+        // Get upstream information
+        match repo.get_upstream_info() {
+            Ok(Some(upstream)) => {
+                status_map.insert("upstream".to_string(), upstream);
+            }
+            Ok(None) => {
+                status_map.insert("upstream".to_string(), "(none)".to_string());
+            }
+            Err(e) => {
+                error!("Failed to get upstream info: {}", e);
+                status_map.insert("upstream".to_string(), "(error)".to_string());
+            }
+        }
+        
+        // Get last commit information
+        match repo.get_last_commit_info() {
+            Ok(Some(commit)) => {
+                status_map.insert("last_commit_id".to_string(), commit.id);
+                status_map.insert("last_commit_full_id".to_string(), commit.full_id);
+                status_map.insert("last_commit_message".to_string(), commit.message);
+                status_map.insert("last_commit_author".to_string(), commit.author);
+                status_map.insert("last_commit_datetime".to_string(), commit.datetime);
+            }
+            Ok(None) => {
+                status_map.insert("last_commit_id".to_string(), "(no commits yet)".to_string());
+                status_map.insert("last_commit_full_id".to_string(), "(no commits yet)".to_string());
+                status_map.insert("last_commit_message".to_string(), "(no commits yet)".to_string());
+                status_map.insert("last_commit_author".to_string(), "(no commits yet)".to_string());
+                status_map.insert("last_commit_datetime".to_string(), "(no commits yet)".to_string());
+            }
+            Err(e) => {
+                error!("Failed to get last commit info: {}", e);
+                status_map.insert("last_commit_id".to_string(), "(error)".to_string());
+                status_map.insert("last_commit_full_id".to_string(), "(error)".to_string());
+                status_map.insert("last_commit_message".to_string(), "(error)".to_string());
+                status_map.insert("last_commit_author".to_string(), "(error)".to_string());
+                status_map.insert("last_commit_datetime".to_string(), "(error)".to_string());
+            }
+        }
+        
+        // Get current changes
+        match repo.status() {
+            Ok(changes) => {
+                if changes.is_empty() {
+                    status_map.insert("changes".to_string(), "(working tree clean)".to_string());
+                } else {
+                    status_map.insert("changes".to_string(), changes.join("\n"));
+                }
+            }
+            Err(e) => {
+                error!("Failed to get status: {}", e);
+                status_map.insert("changes".to_string(), "(error)".to_string());
+            }
+        }
+        
+        Ok(status_map)
     }
     
     /// Parse a MOO object dump string into an ObjectDefinition using objdef
