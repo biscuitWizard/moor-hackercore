@@ -1,9 +1,10 @@
 use std::path::PathBuf;
 use std::collections::HashMap;
-use tracing::{info, error};
+use tracing::{info, error, warn};
 use moor_compiler::{ObjectDefinition, CompileOptions};
 use moor_objdef::{ObjectDefinitionLoader, dump_object};
 use moor_common::model::loader::LoaderInterface;
+use crate::config::Config;
 
 /// VCS operation types
 #[derive(Debug, Clone)]
@@ -80,39 +81,116 @@ pub enum VcsResult {
 /// Process VCS operations
 pub struct VcsProcessor {
     git_repo: Option<crate::git_ops::GitRepository>,
+    config: Config,
 }
 
 impl VcsProcessor {
     pub fn new() -> Self {
-        let mut processor = Self { git_repo: None };
+        let config = Config::from_env();
+        let mut processor = Self { 
+            git_repo: None,
+            config,
+        };
         processor.initialize_repository();
         processor
     }
     
-    /// Initialize the git repository in /game directory
+    pub fn with_config(config: Config) -> Self {
+        let mut processor = Self { 
+            git_repo: None,
+            config,
+        };
+        processor.initialize_repository();
+        processor
+    }
+    
+    /// Initialize the git repository using configuration
     pub fn initialize_repository(&mut self) {
-        let game_dir = PathBuf::from("/game");
+        let repo_path = self.config.repository_path();
         
         // Try to open existing repository first
-        match crate::git_ops::GitRepository::open(&game_dir) {
+        match crate::git_ops::GitRepository::open(repo_path) {
             Ok(repo) => {
-                info!("Opened existing git repository at /game");
+                info!("Opened existing git repository at {:?}", repo_path);
                 self.git_repo = Some(repo);
+                return;
             }
             Err(_) => {
-                // If no existing repo, try to initialize one
-                match crate::git_ops::GitRepository::init(&game_dir) {
-                    Ok(repo) => {
-                        info!("Initialized new git repository at /game");
-                        self.git_repo = Some(repo);
-                    }
-                    Err(e) => {
-                        error!("Failed to initialize git repository at /game: {}", e);
-                        // Continue without git repo - operations will fail gracefully
-                    }
+                info!("No existing repository found at {:?}", repo_path);
+            }
+        }
+        
+        // If we have a repository URL configured, try to clone it
+        if let Some(repo_url) = self.config.repository_url() {
+            info!("Attempting to clone repository from: {}", repo_url);
+            match self.clone_repository(repo_url, repo_path) {
+                Ok(repo) => {
+                    info!("Successfully cloned repository from {} to {:?}", repo_url, repo_path);
+                    self.git_repo = Some(repo);
+                    return;
+                }
+                Err(e) => {
+                    error!("Failed to clone repository from {}: {}", repo_url, e);
+                    warn!("Falling back to initializing empty repository");
                 }
             }
         }
+        
+        // If no URL or clone failed, initialize an empty repository
+        match crate::git_ops::GitRepository::init(repo_path) {
+            Ok(repo) => {
+                info!("Initialized new empty git repository at {:?}", repo_path);
+                self.git_repo = Some(repo);
+            }
+            Err(e) => {
+                error!("Failed to initialize git repository at {:?}: {}", repo_path, e);
+                // Continue without git repo - operations will fail gracefully
+            }
+        }
+    }
+    
+    /// Clone a repository from a URL
+    fn clone_repository(&self, url: &str, path: &std::path::Path) -> Result<crate::git_ops::GitRepository, Box<dyn std::error::Error>> {
+        use git2::build::RepoBuilder;
+        use std::fs;
+        
+        // Remove the directory if it exists
+        if path.exists() {
+            info!("Removing existing directory at {:?} before cloning", path);
+            fs::remove_dir_all(path)?;
+        }
+        
+        // Create parent directories if they don't exist
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        
+        // Clone the repository
+        info!("Cloning repository from {} to {:?}", url, path);
+        let repo = RepoBuilder::new()
+            .clone(url, path)?;
+        
+        // Create our GitRepository wrapper
+        let git_repo = crate::git_ops::GitRepository::open(path)?;
+        
+        Ok(git_repo)
+    }
+    
+    /// Get the path for a .meta file corresponding to a .moo file in the objects directory
+    fn meta_path(&self, moo_path: &str) -> PathBuf {
+        let objects_dir = self.config.objects_directory();
+        let mut meta_path = PathBuf::from(objects_dir).join(moo_path);
+        
+        // Replace .moo extension with .meta
+        if let Some(ext) = meta_path.extension() {
+            if ext == "moo" {
+                meta_path.set_extension("meta");
+            }
+        } else {
+            meta_path.set_extension("meta");
+        }
+        
+        meta_path
     }
     
     /// Process a VCS operation
@@ -221,7 +299,7 @@ impl VcsProcessor {
         };
         
         // Load or create meta configuration
-        let meta_relative_path = repo.meta_path(&object_name);
+        let meta_relative_path = self.meta_path(&object_name);
         let meta_full_path = repo.work_dir().join(&meta_relative_path);
         let meta_config = match self.load_or_create_meta_config(&meta_full_path) {
             Ok(config) => {
@@ -250,7 +328,9 @@ impl VcsProcessor {
             }
         };
         
-        let mut object_full_path = repo.work_dir().join(&object_name);
+        // Create the objects directory path
+        let objects_dir = self.config.objects_directory();
+        let mut object_full_path = repo.work_dir().join(objects_dir).join(&object_name);
         if let Some(ext) = object_full_path.extension() {
             if ext == "moo" {
                 object_full_path.set_extension("moo");
@@ -294,10 +374,11 @@ impl VcsProcessor {
         object_name: String,
         _commit_message: Option<String>,
     ) -> VcsResult {
-        let meta_path = repo.meta_path(&object_name);
+        let meta_path = self.meta_path(&object_name);
         
         // Remove files from git
-        let object_full_path = repo.work_dir().join(&object_name);
+        let objects_dir = self.config.objects_directory();
+        let object_full_path = repo.work_dir().join(objects_dir).join(&object_name);
         if let Err(e) = repo.remove_file(&object_full_path) {
             error!("Failed to remove MOO file from git: {}", e);
             return VcsResult::Error { 

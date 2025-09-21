@@ -12,7 +12,7 @@ use tokio::signal::unix::{SignalKind, signal};
 use tracing::{error, info};
 use uuid::Uuid;
 
-use moor_vms_worker::{VcsOperation, VcsResult, VcsProcessor};
+use moor_vms_worker::{VcsOperation, VcsResult, VcsProcessor, Config};
 
 // TODO: timeouts, and generally more error handling
 #[derive(Parser, Debug)]
@@ -29,10 +29,12 @@ async fn main() -> Result<(), eyre::Error> {
     color_eyre::install()?;
     let args: Args = Args::parse();
 
-    moor_common::tracing::init_tracing(args.debug).expect("Unable to configure logging");
+    // Load configuration from environment variables
+    let config = Config::from_env();
+    
+    moor_common::tracing::init_tracing(config.is_debug_enabled()).expect("Unable to configure logging");
 
-    let mut processor = VcsProcessor::new();
-    processor.initialize_repository();
+    let mut processor = VcsProcessor::with_config(config);
 
     let mut hup_signal = match signal(SignalKind::hangup()) {
         Ok(signal) => signal,
@@ -122,7 +124,8 @@ async fn process_vcs_request(
         WorkerError::RequestError("First argument must be a symbol (operation name)".to_string())
     })?;
 
-    let mut processor = VcsProcessor::new();
+    let config = Config::from_env();
+    let mut processor = VcsProcessor::with_config(config);
     let operation = match operation_name.as_arc_string().to_lowercase().as_str() {
         "add_object" => {
             if arguments.len() < 3 {

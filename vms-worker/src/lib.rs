@@ -1,8 +1,10 @@
 #![recursion_limit = "256"]
 
+pub mod config;
 pub mod git_ops;
 pub mod meta_config;
 pub mod vcs_operations;
+pub use config::Config;
 pub use git_ops::GitRepository;
 pub use meta_config::MetaConfig;
 pub use vcs_operations::{VcsOperation, VcsResult, VcsProcessor};
