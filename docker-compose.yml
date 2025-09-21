@@ -29,21 +29,21 @@ services:
       target: backend
       network: host
       args:
-        BUILD_PROFILE: ${BUILD_PROFILE:-release}
+        BUILD_PROFILE: ${BUILD_PROFILE:-debug}
     container_name: "moor-daemon"
     environment:
       - RUST_BACKTRACE=1
     working_dir: /moor
     volumes:
-      - ./db:/db
-      - ./core:/db/hackercore
+      - ./game/db:/db
+      - ./game/objects:/core
     command: >
        ./moor-daemon /db/development.db 
         --rpc-listen=tcp://0.0.0.0:7899 
         --events-listen=tcp://0.0.0.0:7898 
         --workers-response-listen=tcp://0.0.0.0:7897 
         --workers-request-listen=tcp://0.0.0.0:7896 
-        --import=/db/hackercore --import-format=objdef
+        --import=/core --import-format=objdef
         --use-symbols-in-builtins false
         --symbol-type=false
         --custom-errors true
@@ -63,7 +63,7 @@ services:
       target: backend
       network: host
       args:
-        BUILD_PROFILE: ${BUILD_PROFILE:-release}
+        BUILD_PROFILE: ${BUILD_PROFILE:-debug}
     container_name: "moor-telnet-host"
     environment:
       - RUST_BACKTRACE=1
@@ -87,7 +87,7 @@ services:
       target: backend
       network: host
       args:
-        BUILD_PROFILE: ${BUILD_PROFILE:-release}
+        BUILD_PROFILE: ${BUILD_PROFILE:-debug}
     container_name: "moor-curl-worker"
     environment:
       - RUST_BACKTRACE=1
@@ -107,10 +107,11 @@ services:
       target: backend
       network: host
       args:
-        BUILD_PROFILE: ${BUILD_PROFILE:-release}
+        BUILD_PROFILE: ${BUILD_PROFILE:-debug}
     container_name: "moor-vms-worker"
     environment:
       - RUST_BACKTRACE=1
+      - VMS_REPOSITORY_URL=git@github.com:biscuitWizard/moor-hackercore-core.git
     working_dir: /moor
     volumes:
       - ./game:/game
