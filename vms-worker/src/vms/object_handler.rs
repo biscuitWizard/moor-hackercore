@@ -260,9 +260,12 @@ impl ObjectHandler {
             return Ok(vec![v_str("No valid object definitions found in .moo files")]);
         }
         
-        // Sort objects by dependency chain
+        // Sort objects by dependency chain (reversed)
         let sorted_objects = match self.sort_by_dependencies(objects) {
-            Ok(sorted) => sorted,
+            Ok(mut sorted) => {
+                sorted.reverse(); // Reverse the dependency order
+                sorted
+            },
             Err(e) => {
                 error!("Failed to sort objects by dependencies: {}", e);
                 return Err(WorkerError::RequestError(format!("Failed to sort objects by dependencies: {}", e)));
@@ -287,72 +290,56 @@ impl ObjectHandler {
             result.push(obj_info);
         }
         
-        info!("Listed {} objects in dependency order", result.len());
+        info!("Listed {} objects in reverse dependency order", result.len());
         Ok(result)
     }
 
     /// Get the full dump contents for specified object names (returns just content strings)
     pub fn get_objects(&self, repo: &GitRepository, object_names: Vec<String>) -> Result<Vec<Var>, WorkerError> {
+        info!("GetObjects called with {} object names: {:?}", object_names.len(), object_names);
+        
         if object_names.is_empty() {
+            info!("No object names provided, returning empty result");
             return Ok(vec![v_str("No object names provided")]);
         }
 
         let objects_dir = self.config.objects_directory();
         let objects_path = repo.work_dir().join(objects_dir);
-        
-        // Find all .moo files
-        let moo_files = match self.find_moo_files(&objects_path) {
-            Ok(files) => files,
-            Err(e) => {
-                error!("Failed to find .moo files: {}", e);
-                return Err(WorkerError::RequestError(format!("Failed to find .moo files: {}", e)));
-            }
-        };
+        info!("Looking for object files in directory: {:?}", objects_path);
 
         let mut results = Vec::new();
-        let mut found_names = HashSet::new();
-        let total_names = object_names.len();
+        let mut found_count = 0;
 
-        // Look for each requested object name
-        for requested_name in object_names {
-            let mut found = false;
+        // Process each requested object name
+        for (index, object_name) in object_names.iter().enumerate() {
+            info!("Processing object #{}: '{}'", index + 1, object_name);
             
-            for file_path in &moo_files {
-                // Try to parse the file and see if it contains the requested object
-                if let Ok(obj_defs) = self.parse_moo_file(repo, file_path) {
-                    for obj_def in obj_defs {
-                        if obj_def.name == requested_name {
-                            // Read the full file content
-                            match repo.read_file(file_path) {
-                                Ok(content) => {
-                                    results.push(v_str(&content));
-                                    found_names.insert(requested_name.clone());
-                                    found = true;
-                                    break;
-                                }
-                                Err(e) => {
-                                    error!("Failed to read file {}: {}", file_path.display(), e);
-                                }
-                            }
-                        }
+            // Map object name to filename by adding .moo extension
+            let filename = format!("{}.moo", object_name);
+            let file_path = objects_path.join(&filename);
+            
+            info!("Looking for file: {:?}", file_path);
+            
+            // Check if file exists and read its content
+            if repo.file_exists(&file_path) {
+                match repo.read_file(&file_path) {
+                    Ok(content) => {
+                        info!("Successfully read file '{}', {} bytes", filename, content.len());
+                        results.push(v_str(&content));
+                        found_count += 1;
+                    }
+                    Err(e) => {
+                        error!("Failed to read file '{}': {}", filename, e);
+                        results.push(v_str("")); // Add empty string for failed read
                     }
                 }
-                
-                if found {
-                    break;
-                }
-            }
-            
-            if !found {
-                // Object not found - add empty string
-                results.push(v_str(""));
+            } else {
+                info!("File '{}' not found", filename);
+                results.push(v_str("")); // Add empty string for missing file
             }
         }
 
-        info!("Retrieved dumps for {} objects ({} found, {} not found)", 
-              total_names, 
-              found_names.len(), 
-              total_names - found_names.len());
+        info!("GetObjects completed: Retrieved {} files out of {} requested", found_count, object_names.len());
         
         Ok(results)
     }
