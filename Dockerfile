@@ -4,7 +4,7 @@ WORKDIR /moor-frontend
 COPY /vendor/moor/package.json /vendor/moor/package-lock.json* ./
 RUN npm ci
 COPY /vendor/moor/web-client/ ./web-client/
-COPY /vendor/moor/tsconfig.json /vendor/moor/vite.config.ts /vendor/moor/.eslintrc.json ./
+COPY /vendor/moor/tsconfig.json /vendor/moor/vite.config.ts ./
 RUN npm run build
 
 # Backend build stage
