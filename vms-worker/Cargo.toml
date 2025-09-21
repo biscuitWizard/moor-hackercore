@@ -64,3 +64,6 @@ regex = "1.11"
 
 ## Lazy static initialization
 lazy_static = "1.4"
+
+## System calls for user/group operations
+libc = "0.2"

@@ -110,7 +110,10 @@ impl VcsProcessor {
         
         // Check if the path exists and contains a git repository
         if repo_path.exists() && repo_path.join(".git").exists() {
-            // Try to open existing repository first
+            // Chown the repository to current user first, before trying to open it
+            self.chown_repository_to_current_user(repo_path);
+            
+            // Try to open existing repository
             match crate::git_ops::GitRepository::open(repo_path) {
                 Ok(repo) => {
                     info!("Opened existing git repository at {:?}", repo_path);
@@ -134,6 +137,8 @@ impl VcsProcessor {
                 Ok(repo) => {
                     info!("Successfully cloned repository from {} to {:?}", repo_url, repo_path);
                     self.git_repo = Some(repo);
+                    // Chown the repository to current user
+                    self.chown_repository_to_current_user(repo_path);
                     return;
                 }
                 Err(e) => {
@@ -148,6 +153,8 @@ impl VcsProcessor {
             Ok(repo) => {
                 info!("Initialized new empty git repository at {:?}", repo_path);
                 self.git_repo = Some(repo);
+                // Chown the repository to current user
+                self.chown_repository_to_current_user(repo_path);
             }
             Err(e) => {
                 error!("Failed to initialize git repository at {:?}: {}", repo_path, e);
@@ -198,6 +205,39 @@ impl VcsProcessor {
         let git_repo = crate::git_ops::GitRepository::open(path)?;
         
         Ok(git_repo)
+    }
+    
+    /// Change ownership of the repository to the current user
+    fn chown_repository_to_current_user(&self, repo_path: &std::path::Path) {
+        use std::process::Command;
+        use std::os::unix::fs::MetadataExt;
+        
+        // Get current user UID and GID
+        let current_uid = unsafe { libc::getuid() };
+        let current_gid = unsafe { libc::getgid() };
+        
+        info!("Chowning repository at {:?} to UID:{} GID:{}", repo_path, current_uid, current_gid);
+        
+        // Use chown command to recursively change ownership
+        let output = Command::new("chown")
+            .arg("-R")
+            .arg(format!("{}:{}", current_uid, current_gid))
+            .arg(repo_path)
+            .output();
+            
+        match output {
+            Ok(output) => {
+                if output.status.success() {
+                    info!("Successfully chowned repository at {:?} to current user", repo_path);
+                } else {
+                    let error_msg = String::from_utf8_lossy(&output.stderr);
+                    warn!("Failed to chown repository at {:?}: {}", repo_path, error_msg);
+                }
+            }
+            Err(e) => {
+                warn!("Failed to execute chown command for repository at {:?}: {}", repo_path, e);
+            }
+        }
     }
     
     /// Get the path for a .meta file corresponding to a .moo file in the objects directory
