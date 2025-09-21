@@ -108,18 +108,25 @@ impl VcsProcessor {
     pub fn initialize_repository(&mut self) {
         let repo_path = self.config.repository_path();
         
-        // Try to open existing repository first
-        match crate::git_ops::GitRepository::open(repo_path) {
-            Ok(repo) => {
-                info!("Opened existing git repository at {:?}", repo_path);
-                self.git_repo = Some(repo);
-                return;
-            }
-            Err(_) => {
-                info!("No existing repository found at {:?}", repo_path);
+        // Check if the path exists and contains a git repository
+        if repo_path.exists() && repo_path.join(".git").exists() {
+            // Try to open existing repository first
+            match crate::git_ops::GitRepository::open(repo_path) {
+                Ok(repo) => {
+                    info!("Opened existing git repository at {:?}", repo_path);
+                    self.git_repo = Some(repo);
+                    return; // Exit early - repository already exists, do nothing else
+                }
+                Err(e) => {
+                    warn!("Found .git directory at {:?} but failed to open as repository: {}", repo_path, e);
+                    // Don't try to clone/init if there's already a .git directory
+                    // This prevents clearing existing repositories
+                    return;
+                }
             }
         }
         
+        // Only attempt to clone or initialize if no existing repository was found
         // If we have a repository URL configured, try to clone it
         if let Some(repo_url) = self.config.repository_url() {
             info!("Attempting to clone repository from: {}", repo_url);
@@ -154,10 +161,27 @@ impl VcsProcessor {
         use git2::build::RepoBuilder;
         use std::fs;
         
-        // Remove the directory if it exists
+        // Check if the directory exists and contains a valid git repository
         if path.exists() {
-            info!("Removing existing directory at {:?} before cloning", path);
-            fs::remove_dir_all(path)?;
+            // Check if there's a .git directory first
+            if path.join(".git").exists() {
+                // Try to open as a git repository
+                match crate::git_ops::GitRepository::open(path) {
+                    Ok(_) => {
+                        info!("Directory {:?} already contains a valid git repository, skipping clone", path);
+                        return crate::git_ops::GitRepository::open(path);
+                    }
+                    Err(e) => {
+                        warn!("Directory {:?} contains .git but is not a valid repository: {}", path, e);
+                        // Don't remove directories that contain .git - this could be a corrupted repo
+                        return Err(format!("Directory {:?} contains .git but is not a valid repository: {}", path, e).into());
+                    }
+                }
+            } else {
+                // Directory exists but has no .git directory, safe to remove
+                info!("Removing existing non-git directory at {:?} before cloning", path);
+                fs::remove_dir_all(path)?;
+            }
         }
         
         // Create parent directories if they don't exist
