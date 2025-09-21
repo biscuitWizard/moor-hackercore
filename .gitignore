@@ -5,8 +5,8 @@
 /.idea
 .vscode/
 
-# If the docker compose mounts a db we don't want to commit it
-db/
+# game is used as a working directory for a locally running copy of the game
+game/
 
 # hacker.sh convenience tracking for changes
 .git_heads
