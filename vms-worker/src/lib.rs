@@ -3,11 +3,11 @@
 pub mod config;
 pub mod git_ops;
 pub mod meta_config;
-pub mod vcs_operations;
+pub mod vms;
 pub use config::Config;
 pub use git_ops::GitRepository;
 pub use meta_config::MetaConfig;
-pub use vcs_operations::{VcsOperation, VcsResult, VcsProcessor};
+pub use vms::{VmsOperation, VmsProcessor};
 pub use moor_objdef::{ObjectDefinitionLoader, dump_object, collect_object_definitions};
 
 // Re-export moor types for convenience

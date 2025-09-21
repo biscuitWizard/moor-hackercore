@@ -12,7 +12,7 @@ use tokio::signal::unix::{SignalKind, signal};
 use tracing::{error, info};
 use uuid::Uuid;
 
-use moor_vms_worker::{VcsOperation, VcsResult, VcsProcessor, Config};
+use moor_vms_worker::{VmsOperation, VmsProcessor, Config};
 
 // TODO: timeouts, and generally more error handling
 #[derive(Parser, Debug)]
@@ -34,7 +34,7 @@ async fn main() -> Result<(), eyre::Error> {
     
     moor_common::tracing::init_tracing(config.is_debug_enabled()).expect("Unable to configure logging");
 
-    let mut processor = VcsProcessor::with_config(config);
+    let mut processor = VmsProcessor::with_config(config);
 
     let mut hup_signal = match signal(SignalKind::hangup()) {
         Ok(signal) => signal,
@@ -71,7 +71,7 @@ async fn main() -> Result<(), eyre::Error> {
     let worker_request_rpc_addr = args.client_args.workers_request_address.clone();
     let worker_type = Symbol::mk("vms");
     let ks = kill_switch.clone();
-    let perform_func = Arc::new(process_vcs_request);
+    let perform_func = Arc::new(process_vms_request);
     let worker_loop_thread = tokio::spawn(async move {
         if let Err(e) = worker_loop(
             &ks,
@@ -105,7 +105,7 @@ async fn main() -> Result<(), eyre::Error> {
     Ok(())
 }
 
-async fn process_vcs_request(
+async fn process_vms_request(
     _token: WorkerToken,
     _request_id: Uuid,
     _worker_type: Symbol,
@@ -125,7 +125,7 @@ async fn process_vcs_request(
     })?;
 
     let config = Config::from_env();
-    let mut processor = VcsProcessor::with_config(config);
+    let mut processor = VmsProcessor::with_config(config);
     let operation = match operation_name.as_arc_string().to_lowercase().as_str() {
         "add_object" => {
             if arguments.len() < 3 {
@@ -158,7 +158,7 @@ async fn process_vcs_request(
                 ));
             };
 
-            VcsOperation::AddOrUpdateObject { 
+            VmsOperation::AddOrUpdateObject { 
                 object_dump: object_dump.to_string(), 
                 object_name: object_name.to_string(),
             }
@@ -173,7 +173,7 @@ async fn process_vcs_request(
             let object_name = arguments[1].as_string().ok_or_else(|| {
                 WorkerError::RequestError("Second argument must be a string (object_name)".to_string())
             })?;
-            VcsOperation::DeleteObject { 
+            VmsOperation::DeleteObject { 
                 object_name: object_name.to_string(),
             }
         }
@@ -197,7 +197,7 @@ async fn process_vcs_request(
             } else {
                 "vms-worker@system"
             };
-            VcsOperation::Commit { 
+            VmsOperation::Commit { 
                 message: message.to_string(), 
                 author_name: author_name.to_string(), 
                 author_email: author_email.to_string() 
@@ -205,11 +205,7 @@ async fn process_vcs_request(
         }
         
         "status" => {
-            VcsOperation::Status
-        }
-        
-        "repository_status" => {
-            VcsOperation::RepositoryStatus
+            VmsOperation::Status
         }
         
         _ => {
@@ -223,30 +219,13 @@ async fn process_vcs_request(
     let result = processor.process_operation(operation);
     
     match result {
-        VcsResult::Success { message } => {
-            info!("VCS operation succeeded: {}", message);
-            Ok(vec![v_str(&message)])
+        Ok(vars) => {
+            info!("VMS operation succeeded");
+            Ok(vars)
         }
-        VcsResult::SuccessWithData { message, data } => {
-            info!("VCS operation succeeded with data: {}", message);
-            let mut result = vec![v_str(&message)];
-            for item in data {
-                result.push(v_str(&item));
-            }
-            Ok(result)
-        }
-        VcsResult::RepositoryStatusMap { status_map } => {
-            info!("VCS repository status operation succeeded");
-            // Convert HashMap<String, String> to Vec<(Var, Var)> for v_map
-            let map_pairs: Vec<(Var, Var)> = status_map
-                .iter()
-                .map(|(k, v)| (v_str(k), v_str(v)))
-                .collect();
-            Ok(vec![v_map(&map_pairs)])
-        }
-        VcsResult::Error { message } => {
-            error!("VCS operation failed: {}", message);
-            Err(WorkerError::RequestError(message))
+        Err(e) => {
+            error!("VMS operation failed: {}", e);
+            Err(e)
         }
     }
 }

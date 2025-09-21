@@ -278,7 +278,7 @@ impl GitRepository {
     }
     
     /// Get information about the last commit
-    pub fn get_last_commit_info(&self) -> Result<Option<crate::vcs_operations::CommitInfo>, Box<dyn std::error::Error>> {
+    pub fn get_last_commit_info(&self) -> Result<Option<crate::vms::types::CommitInfo>, Box<dyn std::error::Error>> {
         match self.get_head_commit() {
             Ok(commit) => {
                 let id = commit.id().to_string();
@@ -291,7 +291,7 @@ impl GitRepository {
                 let message = commit.message().unwrap_or("No message").to_string();
                 let author = commit.author().name().unwrap_or("Unknown").to_string();
                 
-                Ok(Some(crate::vcs_operations::CommitInfo {
+                Ok(Some(crate::vms::types::CommitInfo {
                     id: short_id.to_string(),
                     full_id: id,
                     datetime: timestamp,
