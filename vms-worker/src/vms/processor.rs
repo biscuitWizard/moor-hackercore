@@ -1,5 +1,5 @@
 use tracing::{info, error};
-use moor_var::{Var, v_str, v_map};
+use moor_var::{Var, v_str};
 use crate::config::Config;
 use crate::git_ops::GitRepository;
 use super::types::VmsOperation;
@@ -80,6 +80,22 @@ impl VmsProcessor {
                     Err(WorkerError::RequestError("Git repository not available at /game".to_string()))
                 }
             }
+            
+            VmsOperation::ListObjects => {
+                if let Some(ref repo) = self.git_repo {
+                    self.object_handler.list_objects(repo)
+                } else {
+                    Err(WorkerError::RequestError("Git repository not available at /game".to_string()))
+                }
+            }
+            
+            VmsOperation::GetObjects { object_names } => {
+                if let Some(ref repo) = self.git_repo {
+                    self.object_handler.get_objects(repo, object_names)
+                } else {
+                    Err(WorkerError::RequestError("Git repository not available at /game".to_string()))
+                }
+            }
         }
     }
     
@@ -102,4 +118,5 @@ impl VmsProcessor {
             }
         }
     }
+    
 }

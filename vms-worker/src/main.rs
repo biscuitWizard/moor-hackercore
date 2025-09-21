@@ -208,6 +208,28 @@ async fn process_vms_request(
             VmsOperation::Status
         }
         
+        "list_objects" => {
+            VmsOperation::ListObjects
+        }
+        
+        "get_objects" => {
+            if arguments.len() < 2 {
+                return Err(WorkerError::RequestError(
+                    "get_objects requires at least one object_name argument".to_string(),
+                ));
+            }
+            
+            let mut object_names = Vec::new();
+            for i in 1..arguments.len() {
+                let object_name = arguments[i].as_string().ok_or_else(|| {
+                    WorkerError::RequestError(format!("Argument {} must be a string (object_name)", i + 1))
+                })?;
+                object_names.push(object_name.to_string());
+            }
+            
+            VmsOperation::GetObjects { object_names }
+        }
+        
         _ => {
             return Err(WorkerError::RequestError(format!(
                 "Unknown operation: {}",

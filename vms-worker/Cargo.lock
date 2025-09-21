@@ -1673,6 +1673,7 @@ dependencies = [
  "semver",
  "thiserror 2.0.16",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -1709,6 +1710,7 @@ dependencies = [
  "eyre",
  "git2",
  "lazy_static",
+ "libc",
  "moor-common",
  "moor-compiler",
  "moor-db",

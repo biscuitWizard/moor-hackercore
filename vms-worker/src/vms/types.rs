@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 
 /// VMS operation types
 #[derive(Debug, Clone)]
@@ -23,6 +22,14 @@ pub enum VmsOperation {
     
     /// Get repository status
     Status,
+    
+    /// List all .moo objects with dependency ordering
+    ListObjects,
+    
+    /// Get full dump contents for specified object names
+    GetObjects {
+        object_names: Vec<String>,
+    },
 }
 
 /// Comprehensive repository status information
