@@ -1,6 +1,5 @@
-use std::collections::HashMap;
 use tracing::error;
-use moor_var::{Var, v_str, v_map};
+use moor_var::{Var, v_str, v_map, v_list, v_int};
 use crate::git_ops::GitRepository;
 use moor_common::tasks::WorkerError;
 
@@ -10,14 +9,9 @@ pub struct StatusHandler;
 impl StatusHandler {    
     /// Get comprehensive repository status
     pub fn get_repository_status(&self, repo: &GitRepository) -> Result<Vec<Var>, WorkerError> {
-        match self.collect_repository_status_map(repo) {
-            Ok(status_map) => {
-                // Convert HashMap<String, String> to Vec<(Var, Var)> for v_map
-                let map_pairs: Vec<(Var, Var)> = status_map
-                    .iter()
-                    .map(|(k, v)| (v_str(k), v_str(v)))
-                    .collect();
-                Ok(vec![v_map(&map_pairs)])
+        match self.collect_repository_status_vars(repo) {
+            Ok(status_pairs) => {
+                Ok(vec![v_map(&status_pairs)])
             }
             Err(e) => {
                 error!("Failed to get repository status: {}", e);
@@ -26,79 +20,95 @@ impl StatusHandler {
         }
     }
     
-    /// Collect comprehensive repository status information as a map
-    fn collect_repository_status_map(&self, repo: &GitRepository) -> Result<HashMap<String, String>, Box<dyn std::error::Error>> {
-        let mut status_map = HashMap::new();
+    /// Collect comprehensive repository status information as Var pairs
+    fn collect_repository_status_vars(&self, repo: &GitRepository) -> Result<Vec<(Var, Var)>, Box<dyn std::error::Error>> {
+        let mut status_pairs = Vec::new();
         
         // Get current branch
         match repo.get_current_branch() {
             Ok(Some(branch)) => {
-                status_map.insert("current_branch".to_string(), branch);
+                status_pairs.push((v_str("current_branch"), v_str(&branch)));
             }
             Ok(None) => {
-                status_map.insert("current_branch".to_string(), "(detached HEAD)".to_string());
+                status_pairs.push((v_str("current_branch"), v_str("(detached HEAD)")));
             }
             Err(e) => {
                 error!("Failed to get current branch: {}", e);
-                status_map.insert("current_branch".to_string(), "(error)".to_string());
+                status_pairs.push((v_str("current_branch"), v_str("(error)")));
             }
         }
         
         // Get upstream information
         match repo.get_upstream_info() {
             Ok(Some(upstream)) => {
-                status_map.insert("upstream".to_string(), upstream);
+                status_pairs.push((v_str("upstream"), v_str(&upstream)));
             }
             Ok(None) => {
-                status_map.insert("upstream".to_string(), "(none)".to_string());
+                status_pairs.push((v_str("upstream"), v_str("(none)")));
             }
             Err(e) => {
                 error!("Failed to get upstream info: {}", e);
-                status_map.insert("upstream".to_string(), "(error)".to_string());
+                status_pairs.push((v_str("upstream"), v_str("(error)")));
             }
         }
         
         // Get last commit information
         match repo.get_last_commit_info() {
             Ok(Some(commit)) => {
-                status_map.insert("last_commit_id".to_string(), commit.id);
-                status_map.insert("last_commit_full_id".to_string(), commit.full_id);
-                status_map.insert("last_commit_message".to_string(), commit.message);
-                status_map.insert("last_commit_author".to_string(), commit.author);
-                status_map.insert("last_commit_datetime".to_string(), commit.datetime);
+                status_pairs.push((v_str("last_commit_id"), v_str(&commit.id)));
+                status_pairs.push((v_str("last_commit_full_id"), v_str(&commit.full_id)));
+                status_pairs.push((v_str("last_commit_message"), v_str(&commit.message)));
+                status_pairs.push((v_str("last_commit_author"), v_str(&commit.author)));
+                status_pairs.push((v_str("last_commit_datetime"), v_int(commit.datetime)));
             }
             Ok(None) => {
-                status_map.insert("last_commit_id".to_string(), "(no commits yet)".to_string());
-                status_map.insert("last_commit_full_id".to_string(), "(no commits yet)".to_string());
-                status_map.insert("last_commit_message".to_string(), "(no commits yet)".to_string());
-                status_map.insert("last_commit_author".to_string(), "(no commits yet)".to_string());
-                status_map.insert("last_commit_datetime".to_string(), "(no commits yet)".to_string());
+                status_pairs.push((v_str("last_commit_id"), v_str("(no commits yet)")));
+                status_pairs.push((v_str("last_commit_full_id"), v_str("(no commits yet)")));
+                status_pairs.push((v_str("last_commit_message"), v_str("(no commits yet)")));
+                status_pairs.push((v_str("last_commit_author"), v_str("(no commits yet)")));
+                status_pairs.push((v_str("last_commit_datetime"), v_int(0)));
             }
             Err(e) => {
                 error!("Failed to get last commit info: {}", e);
-                status_map.insert("last_commit_id".to_string(), "(error)".to_string());
-                status_map.insert("last_commit_full_id".to_string(), "(error)".to_string());
-                status_map.insert("last_commit_message".to_string(), "(error)".to_string());
-                status_map.insert("last_commit_author".to_string(), "(error)".to_string());
-                status_map.insert("last_commit_datetime".to_string(), "(error)".to_string());
+                status_pairs.push((v_str("last_commit_id"), v_str("(error)")));
+                status_pairs.push((v_str("last_commit_full_id"), v_str("(error)")));
+                status_pairs.push((v_str("last_commit_message"), v_str("(error)")));
+                status_pairs.push((v_str("last_commit_author"), v_str("(error)")));
+                status_pairs.push((v_str("last_commit_datetime"), v_int(0)));
             }
         }
         
         // Get current changes
         match repo.status() {
             Ok(changes) => {
-                if changes.is_empty() {
-                    status_map.insert("changes".to_string(), "(working tree clean)".to_string());
+                let change_list = if changes.is_empty() {
+                    v_list(&[])
                 } else {
-                    status_map.insert("changes".to_string(), changes.join("\n"));
-                }
+                    let change_vars: Vec<Var> = changes
+                        .iter()
+                        .map(|change_line| {
+                            // Parse the change line to extract type and file
+                            // Format is typically "Type: filepath" (e.g., "Added: src/main.rs")
+                            if let Some(colon_pos) = change_line.find(':') {
+                                let change_type = &change_line[..colon_pos];
+                                let file_path = &change_line[colon_pos + 1..].trim();
+                                v_list(&[v_str(change_type), v_str(file_path)])
+                            } else {
+                                // Fallback if format is unexpected
+                                v_list(&[v_str("unknown"), v_str(change_line)])
+                            }
+                        })
+                        .collect();
+                    v_list(&change_vars)
+                };
+                status_pairs.push((v_str("changes"), change_list));
             }
             Err(e) => {
                 error!("Failed to get status: {}", e);
-                status_map.insert("changes".to_string(), "(error)".to_string());
+                status_pairs.push((v_str("changes"), v_list(&[v_str("error"), v_str(&format!("Failed to get status: {}", e))])));
             }
         }
         
-        Ok(status_map)
+        Ok(status_pairs)
     }
 }

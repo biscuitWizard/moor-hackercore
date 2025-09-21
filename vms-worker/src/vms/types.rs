@@ -45,8 +45,8 @@ pub struct CommitInfo {
     pub id: String,
     /// Commit hash (full)
     pub full_id: String,
-    /// Commit timestamp
-    pub datetime: String,
+    /// Commit timestamp (Linux epoch)
+    pub datetime: i64,
     /// Commit message
     pub message: String,
     /// Author name

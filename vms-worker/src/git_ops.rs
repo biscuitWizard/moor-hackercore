@@ -284,10 +284,7 @@ impl GitRepository {
                 let id = commit.id().to_string();
                 let short_id = &id[..8]; // First 8 characters
                 let datetime = commit.time();
-                let timestamp = chrono::DateTime::from_timestamp(datetime.seconds(), 0)
-                    .unwrap_or_else(|| chrono::Utc::now())
-                    .format("%Y-%m-%d %H:%M:%S UTC")
-                    .to_string();
+                let timestamp = datetime.seconds();
                 let message = commit.message().unwrap_or("No message").to_string();
                 let author = commit.author().name().unwrap_or("Unknown").to_string();
                 
