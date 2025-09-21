@@ -258,6 +258,26 @@ check_git_heads_changed() {
     return 1
 }
 
+# Function to check and clone game directory if needed
+check_game_directory() {
+    print_info "Checking for game directory..."
+    cd "$SCRIPT_DIR"
+    
+    if [[ ! -d "game" ]]; then
+        print_warning "game/ directory not found, cloning repository..."
+        if git clone git@github.com:biscuitWizard/moor-hackercore-core.git game; then
+            print_success "Successfully cloned game repository to game/ directory!"
+        else
+            print_error "Failed to clone game repository!"
+            print_info "Please check your SSH key setup and network connection."
+            print_info "Make sure you have access to git@github.com:biscuitWizard/moor-hackercore-core.git"
+            exit 1
+        fi
+    else
+        print_info "game/ directory already exists"
+    fi
+}
+
 # Function to initialize and fetch all submodules
 init_submodules() {
     print_info "Initializing and fetching submodules..."
@@ -277,6 +297,9 @@ init_submodules() {
 start_services() {
     print_info "Starting hackercore services..."
     cd "$SCRIPT_DIR"
+    
+    # Check and clone game directory if needed
+    check_game_directory
     
     # Initialize and fetch submodules before starting
     init_submodules
