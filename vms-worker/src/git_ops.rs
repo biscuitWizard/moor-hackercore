@@ -1,17 +1,19 @@
-use git2::{Repository, Signature, Commit};
+use git2::{Repository, Signature, Commit, CertificateCheckStatus};
 use std::path::{Path, PathBuf};
 use std::fs;
-use tracing::info;
+use tracing::{info, warn, error};
+use crate::config::Config;
 
 /// Git repository wrapper for VMS operations
 pub struct GitRepository {
     repo: Repository,
     work_dir: PathBuf,
+    config: Config,
 }
 
 impl GitRepository {
     /// Initialize a new git repository in the given directory
-    pub fn init<P: AsRef<Path>>(path: P) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn init<P: AsRef<Path>>(path: P, config: Config) -> Result<Self, Box<dyn std::error::Error>> {
         let path = path.as_ref();
         
         // Create directory if it doesn't exist
@@ -24,18 +26,34 @@ impl GitRepository {
         
         info!("Initialized git repository at {:?}", work_dir);
         
-        Ok(GitRepository { repo, work_dir })
+        let git_repo = GitRepository { repo, work_dir, config };
+        
+        // Configure git user name and email
+        git_repo.configure_git_user()?;
+        
+        // Ensure keys directory is in .gitignore
+        git_repo.ensure_keys_gitignore()?;
+        
+        Ok(git_repo)
     }
     
     /// Open an existing git repository
-    pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn open<P: AsRef<Path>>(path: P, config: Config) -> Result<Self, Box<dyn std::error::Error>> {
         let path = path.as_ref();
         let repo = Repository::open(path)?;
         let work_dir = path.to_path_buf();
         
         info!("Opened git repository at {:?}", work_dir);
         
-        Ok(GitRepository { repo, work_dir })
+        let git_repo = GitRepository { repo, work_dir, config };
+        
+        // Configure git user name and email
+        git_repo.configure_git_user()?;
+        
+        // Ensure keys directory is in .gitignore
+        git_repo.ensure_keys_gitignore()?;
+        
+        Ok(git_repo)
     }
     
     /// Get the working directory path
@@ -300,5 +318,273 @@ impl GitRepository {
         }
     }
 
+    /// Configure git user name and email in the repository
+    pub fn configure_git_user(&self) -> Result<(), Box<dyn std::error::Error>> {
+        let mut config = self.repo.config()?;
+        
+        config.set_str("user.name", self.config.git_user_name())?;
+        config.set_str("user.email", self.config.git_user_email())?;
+        
+        info!("Configured git user: {} <{}>", self.config.git_user_name(), self.config.git_user_email());
+        Ok(())
+    }
+    
+    /// Ensure the keys directory is in .gitignore for security
+    fn ensure_keys_gitignore(&self) -> Result<(), Box<dyn std::error::Error>> {
+        let gitignore_path = self.work_dir.join(".gitignore");
+        let keys_entry = "keys/\n";
+        
+        // Read existing .gitignore content
+        let existing_content = if gitignore_path.exists() {
+            fs::read_to_string(&gitignore_path)?
+        } else {
+            String::new()
+        };
+        
+        // Check if keys/ is already ignored
+        if existing_content.lines().any(|line| line.trim() == "keys/") {
+            info!("Keys directory already in .gitignore");
+            return Ok(());
+        }
+        
+        // Add keys/ to .gitignore
+        let new_content = if existing_content.is_empty() {
+            keys_entry.to_string()
+        } else if existing_content.ends_with('\n') {
+            format!("{}{}", existing_content, keys_entry)
+        } else {
+            format!("{}\n{}", existing_content, keys_entry)
+        };
+        
+        fs::write(&gitignore_path, new_content)?;
+        info!("Added keys/ to .gitignore for security");
+        
+        // Add .gitignore to git index
+        self.add_file(".gitignore")?;
+        
+        Ok(())
+    }
+    
+    /// Configure SSH to handle host key verification for the given host
+    fn configure_ssh_for_host(&self, hostname: &str) -> Result<(), Box<dyn std::error::Error>> {
+        info!("Configuring SSH for host: {}", hostname);
+        
+        // Create .ssh directory if it doesn't exist
+        let ssh_dir = std::path::Path::new("/root/.ssh");
+        if !ssh_dir.exists() {
+            info!("Creating SSH directory: {:?}", ssh_dir);
+            std::fs::create_dir_all(ssh_dir)?;
+        }
+        
+        // Set proper permissions on .ssh directory
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = std::fs::metadata(ssh_dir)?.permissions();
+        perms.set_mode(0o700);
+        std::fs::set_permissions(ssh_dir, perms)?;
+        
+        // Create SSH config to disable host key checking for this specific host
+        let ssh_config_path = ssh_dir.join("config");
+        let mut existing_config = String::new();
+        
+        // Read existing config if it exists
+        if ssh_config_path.exists() {
+            existing_config = std::fs::read_to_string(&ssh_config_path)?;
+        }
+        
+        // Check if hostname already exists in config
+        let hostname_exists = existing_config.lines()
+            .any(|line| line.trim().starts_with(&format!("Host {}", hostname)));
+        
+        if !hostname_exists {
+            // Append new host configuration
+            let mut new_config = existing_config;
+            if !new_config.is_empty() && !new_config.ends_with('\n') {
+                new_config.push('\n');
+            }
+            new_config.push_str(&format!(
+                "Host {}\n\
+                 \tStrictHostKeyChecking no\n\
+                 \tUserKnownHostsFile /dev/null\n\
+                 \tLogLevel ERROR\n",
+                hostname
+            ));
+            
+            std::fs::write(&ssh_config_path, new_config)?;
+            
+            // Set proper permissions on SSH config
+            let mut perms = std::fs::metadata(&ssh_config_path)?.permissions();
+            perms.set_mode(0o600);
+            std::fs::set_permissions(&ssh_config_path, perms)?;
+            
+            info!("Added SSH configuration for {}", hostname);
+        } else {
+            info!("SSH configuration for {} already exists", hostname);
+        }
+        
+        // Set environment variable for git to use our SSH config
+        unsafe {
+            std::env::set_var("GIT_SSH_COMMAND", "ssh -F /root/.ssh/config");
+        }
+        
+        Ok(())
+    }
+    fn get_ssh_credentials(&self, url: Option<&str>, username_from_url: Option<&str>, _allowed_types: git2::CredentialType) -> Result<git2::Cred, git2::Error> {
+        info!("Attempting SSH authentication for URL: {:?}", url);
+        
+        // Try configured SSH key first
+        if let Some(ssh_key_path) = self.config.ssh_key_path() {
+            info!("Trying configured SSH key: {}", ssh_key_path);
+            if let Ok(cred) = git2::Cred::ssh_key(
+                username_from_url.unwrap_or("git"),
+                None,
+                std::path::Path::new(ssh_key_path),
+                None,
+            ) {
+                info!("Successfully authenticated with configured SSH key: {}", ssh_key_path);
+                return Ok(cred);
+            } else {
+                warn!("Failed to authenticate with configured SSH key: {}", ssh_key_path);
+            }
+        }
+        
+        // Try keys directory
+        let keys_dir = self.config.keys_directory();
+        info!("Checking keys directory: {:?}", keys_dir);
+        let default_keys = [
+            keys_dir.join("id_rsa"),
+            keys_dir.join("id_ed25519"),
+            keys_dir.join("id_ecdsa"),
+        ];
+        
+        for key_path in &default_keys {
+            if key_path.exists() {
+                info!("Trying SSH key from keys directory: {:?}", key_path);
+                if let Ok(cred) = git2::Cred::ssh_key(
+                    username_from_url.unwrap_or("git"),
+                    None,
+                    key_path,
+                    None,
+                ) {
+                    info!("Successfully authenticated with key from keys directory: {:?}", key_path);
+                    return Ok(cred);
+                } else {
+                    warn!("Failed to authenticate with key from keys directory: {:?}", key_path);
+                }
+            }
+        }
+        
+        // Try default SSH key locations in container
+        let home_keys = [
+            "/root/.ssh/id_rsa",
+            "/root/.ssh/id_ed25519",
+            "/root/.ssh/id_ecdsa",
+        ];
+        
+        for key_path in &home_keys {
+            if std::path::Path::new(key_path).exists() {
+                info!("Trying default SSH key: {}", key_path);
+                if let Ok(cred) = git2::Cred::ssh_key(
+                    username_from_url.unwrap_or("git"),
+                    None,
+                    std::path::Path::new(key_path),
+                    None,
+                ) {
+                    info!("Successfully authenticated with default SSH key: {}", key_path);
+                    return Ok(cred);
+                } else {
+                    warn!("Failed to authenticate with default SSH key: {}", key_path);
+                }
+            }
+        }
+        
+        // Try git credential helper
+        if let Ok(cred) = git2::Cred::credential_helper(&self.repo.config()?, url.unwrap_or(""), url) {
+            info!("Successfully authenticated with git credential helper");
+            return Ok(cred);
+        } else {
+            warn!("Git credential helper authentication failed");
+        }
+        
+        // Fall back to default credential helper
+        warn!("No SSH authentication available, trying default credentials");
+        git2::Cred::default()
+    }
+
+    /// Push commits to the remote repository
+    pub fn push(&self) -> Result<(), Box<dyn std::error::Error>> {
+        info!("Starting git push operation");
+        
+        // Get the current branch name
+        let branch_name = match self.get_current_branch()? {
+            Some(name) => {
+                info!("Current branch: {}", name);
+                name
+            },
+            None => {
+                error!("No current branch found");
+                return Err("No current branch found".into());
+            }
+        };
+
+        // Get the upstream remote name (default to "origin")
+        let remote_name = "origin";
+        info!("Using remote: {}", remote_name);
+        
+        // Find the remote
+        let mut remote = self.repo.find_remote(remote_name)?;
+        info!("Found remote: {}", remote_name);
+        
+        // Push the current branch to its upstream
+        let refspec = format!("refs/heads/{}:refs/heads/{}", branch_name, branch_name);
+        let refspecs = [refspec.as_str()];
+        info!("Pushing refspec: {}", refspec);
+        
+        let mut callbacks = git2::RemoteCallbacks::new();
+        callbacks.credentials(|url, username_from_url, allowed_types| {
+            info!("Git requesting credentials for URL: {:?}, username: {:?}, allowed_types: {:?}", url, username_from_url, allowed_types);
+            self.get_ssh_credentials(Some(url), username_from_url, allowed_types)
+        });
+        
+        // Certificate (host key) check callback
+        callbacks.certificate_check(|_cert, _host| {
+            Ok(CertificateCheckStatus::CertificateOk)
+        });
+        
+        let mut push_options = git2::PushOptions::new();
+        push_options.remote_callbacks(callbacks);
+        
+        remote.push(&refspecs, Some(&mut push_options))?;
+        
+        info!("Successfully pushed branch '{}' to remote '{}'", branch_name, remote_name);
+        Ok(())
+    }
+    
+    /// Test SSH connection to remote
+    pub fn test_ssh_connection(&self) -> Result<(), Box<dyn std::error::Error>> {
+        info!("Testing SSH connection to remote repository");
+        
+        let mut remote = self.repo.find_remote("origin")?;
+        info!("Found remote 'origin' for SSH test");
+        
+        let mut callbacks = git2::RemoteCallbacks::new();
+        callbacks.credentials(|url, username_from_url, allowed_types| {
+            info!("SSH test requesting credentials for URL: {:?}, username: {:?}, allowed_types: {:?}", url, username_from_url, allowed_types);
+            self.get_ssh_credentials(Some(url), username_from_url, allowed_types)
+        });
+        
+        // Certificate (host key) check callback
+        callbacks.certificate_check(|_cert, _host| {
+            Ok(CertificateCheckStatus::CertificateOk)
+        });
+        
+        let mut fetch_options = git2::FetchOptions::new();
+        fetch_options.remote_callbacks(callbacks);
+
+        remote.fetch(&["main"], Some(&mut fetch_options), None)?;
+        
+        info!("SSH connection test successful");
+        Ok(())
+    }
     
 }
+

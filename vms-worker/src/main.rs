@@ -127,10 +127,10 @@ async fn process_vms_request(
     let config = Config::from_env();
     let mut processor = VmsProcessor::with_config(config);
     let operation = match operation_name.as_arc_string().to_lowercase().as_str() {
-        "add_object" => {
+        "update_object" => {
             if arguments.len() < 3 {
                 return Err(WorkerError::RequestError(
-                    "add_object requires object_name and object_dump arguments".to_string(),
+                    "update_object requires object_name and object_dump arguments".to_string(),
                 ));
             }
             
@@ -228,6 +228,55 @@ async fn process_vms_request(
             }
             
             VmsOperation::GetObjects { object_names }
+        }
+        
+        // Credential management operations
+        "set_ssh_key" => {
+            if arguments.len() < 3 {
+                return Err(WorkerError::RequestError(
+                    "set_ssh_key requires key_content and key_name arguments".to_string(),
+                ));
+            }
+            let key_content = arguments[1].as_string().ok_or_else(|| {
+                WorkerError::RequestError("Second argument must be a string (key_content)".to_string())
+            })?;
+            let key_name = arguments[2].as_string().ok_or_else(|| {
+                WorkerError::RequestError("Third argument must be a string (key_name)".to_string())
+            })?;
+            VmsOperation::SetSshKey { 
+                key_content: key_content.to_string(), 
+                key_name: key_name.to_string() 
+            }
+        }
+        
+        "clear_ssh_key" => {
+            VmsOperation::ClearSshKey
+        }
+        
+        "set_git_user" => {
+            if arguments.len() < 3 {
+                return Err(WorkerError::RequestError(
+                    "set_git_user requires name and email arguments".to_string(),
+                ));
+            }
+            let name = arguments[1].as_string().ok_or_else(|| {
+                WorkerError::RequestError("Second argument must be a string (name)".to_string())
+            })?;
+            let email = arguments[2].as_string().ok_or_else(|| {
+                WorkerError::RequestError("Third argument must be a string (email)".to_string())
+            })?;
+            VmsOperation::SetGitUser { 
+                name: name.to_string(), 
+                email: email.to_string() 
+            }
+        }
+        
+        "credential_status" => {
+            VmsOperation::GetCredentialStatus
+        }
+        
+        "test_ssh" => {
+            VmsOperation::TestSshConnection
         }
         
         _ => {

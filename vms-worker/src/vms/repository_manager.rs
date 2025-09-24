@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use tracing::{info, error, warn};
 use crate::config::Config;
 use crate::git_ops::GitRepository;
@@ -23,7 +22,7 @@ impl RepositoryManager {
             self.chown_repository_to_current_user(&repo_path);
             
             // Try to open existing repository
-            match GitRepository::open(&repo_path) {
+            match GitRepository::open(&repo_path, self.config.clone()) {
                 Ok(repo) => {
                     info!("Opened existing git repository at {:?}", repo_path);
                     return Some(repo);
@@ -56,7 +55,7 @@ impl RepositoryManager {
         }
         
         // If no URL or clone failed, initialize an empty repository
-        match GitRepository::init(&repo_path) {
+        match GitRepository::init(&repo_path, self.config.clone()) {
             Ok(repo) => {
                 info!("Initialized new empty git repository at {:?}", repo_path);
                 // Chown the repository to current user
@@ -81,10 +80,10 @@ impl RepositoryManager {
             // Check if there's a .git directory first
             if path.join(".git").exists() {
                 // Try to open as a git repository
-                match GitRepository::open(path) {
+                match GitRepository::open(path, self.config.clone()) {
                     Ok(_) => {
                         info!("Directory {:?} already contains a valid git repository, skipping clone", path);
-                        return GitRepository::open(path);
+                        return GitRepository::open(path, self.config.clone());
                     }
                     Err(e) => {
                         warn!("Directory {:?} contains .git but is not a valid repository: {}", path, e);
@@ -106,11 +105,11 @@ impl RepositoryManager {
         
         // Clone the repository
         info!("Cloning repository from {} to {:?}", url, path);
-        let repo = RepoBuilder::new()
+        let _repo = RepoBuilder::new()
             .clone(url, path)?;
         
         // Create our GitRepository wrapper
-        let git_repo = GitRepository::open(path)?;
+        let git_repo = GitRepository::open(path, self.config.clone())?;
         
         Ok(git_repo)
     }

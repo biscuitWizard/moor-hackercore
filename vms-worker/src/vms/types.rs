@@ -30,6 +30,13 @@ pub enum VmsOperation {
     GetObjects {
         object_names: Vec<String>,
     },
+    
+    /// Credential management operations
+    SetSshKey { key_content: String, key_name: String },
+    ClearSshKey,
+    SetGitUser { name: String, email: String },
+    GetCredentialStatus,
+    TestSshConnection,
 }
 
 /// Comprehensive repository status information

@@ -404,11 +404,19 @@ impl ObjectHandler {
                         .unwrap_or_default()
                         .to_string_lossy()
                         .to_string();
+                    
+                    // Remove .moo extension from filename
+                    let filename_without_ext = if filename.ends_with(".moo") {
+                        filename.trim_end_matches(".moo").to_string()
+                    } else {
+                        filename
+                    };
+                    
                     let byte_size = content.len();
                     
                     for obj_def in obj_defs {
                         file_info_map.insert(obj_def.oid, FileInfo {
-                            filename: filename.clone(),
+                            filename: filename_without_ext.clone(),
                             byte_size,
                         });
                     }
@@ -419,7 +427,7 @@ impl ObjectHandler {
         // Return file info for each object in the same order
         objects.iter()
             .map(|obj| file_info_map.get(&obj.oid).cloned().unwrap_or_else(|| FileInfo {
-                filename: "unknown.moo".to_string(),
+                filename: "unknown".to_string(),
                 byte_size: 0,
             }))
             .collect()
