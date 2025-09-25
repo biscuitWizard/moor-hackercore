@@ -1,0 +1,42 @@
+# Game directory - contains runtime data that shouldn't be in Docker image
+game/
+
+# Git directory - not needed in Docker image
+.git/
+
+# Documentation and development files
+README.md
+*.md
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# Build artifacts (if any)
+target/
+*.o
+*.so
+*.dylib
+*.dll
+
+# Environment files
+.env
+.env.local
+.env.*.local
