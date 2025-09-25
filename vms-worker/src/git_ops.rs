@@ -202,16 +202,16 @@ impl GitRepository {
             let status = entry.status();
             let path = entry.path().unwrap_or("unknown");
             
-            let status_str = if status.is_index_new() {
+            let status_str = if status.is_wt_new() || status.is_index_new() {
                 "Added"
-            } else if status.is_index_modified() {
+            } else if status.is_index_modified() || status.is_wt_modified() {
                 "Modified"
-            } else if status.is_wt_new() {
-                "Untracked"
-            } else if status.is_wt_modified() {
-                "Modified"
-            } else if status.is_wt_deleted() {
+            } else if status.is_wt_deleted() || status.is_index_deleted() {
                 "Deleted"
+            } else if status.is_wt_renamed() || status.is_index_renamed() {
+                "Renamed"
+            } else if status.is_ignored() {
+                continue;
             } else {
                 "Unknown"
             };
