@@ -1,3 +1,6 @@
 [submodule "vendor/moor"]
 	path = vendor/moor
 	url = https://github.com/rdaum/moor.git
+[submodule "vendor/dome-client"]
+	path = vendor/dome-client
+	url = git@github.com:Torchship/dome-client.js.git
