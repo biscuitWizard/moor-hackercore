@@ -228,13 +228,15 @@ save_git_heads() {
     
     local local_head=$(get_git_head "$SCRIPT_DIR")
     local moor_head=$(get_git_head "$SCRIPT_DIR/vendor/moor")
+    local dome_client_head=$(get_git_head "$SCRIPT_DIR/vendor/dome-client")
     
     cat > "$GIT_HEADS_FILE" << EOF
 LOCAL_HEAD=$local_head
 MOOR_HEAD=$moor_head
+DOME_CLIENT_HEAD=$dome_client_head
 EOF
     
-    print_success "Git heads saved: local=$local_head, moor=$moor_head"
+    print_success "Git heads saved: local=$local_head, moor=$moor_head, dome-client=$dome_client_head"
 }
 
 # Function to check if git heads have changed
@@ -248,13 +250,19 @@ check_git_heads_changed() {
     source "$GIT_HEADS_FILE"
     
     local current_moor_head=$(get_git_head "$SCRIPT_DIR/vendor/moor")
-    
+        
     if [[ "$current_moor_head" != "$MOOR_HEAD" ]]; then
         print_warning "Moor git head changed: $MOOR_HEAD -> $current_moor_head"
         return 0
     fi
     
-    print_info "Moor git head unchanged, no rebuild needed"
+    local current_dome_client_head=$(get_git_head "$SCRIPT_DIR/vendor/dome-client")
+    if [[ "$current_dome_client_head" != "$DOME_CLIENT_HEAD" ]]; then
+        print_warning "Dome-client git head changed: $DOME_CLIENT_HEAD -> $current_dome_client_head"
+        return 0
+    fi
+    
+    print_info "Moor and dome-client git heads unchanged, no rebuild needed"
     return 1
 }
 
@@ -387,6 +395,9 @@ rebuild_images() {
     docker-compose build --no-cache
     
     print_success "All images rebuilt successfully!"
+
+    # Save get heads on successful rebuild
+    save_git_heads
 }
 
 # Function to clean and rebuild
@@ -404,46 +415,71 @@ follow_logs() {
     docker-compose logs -f moor-daemon
 }
 
-# Function to update vendor/moor submodule to latest version
+# Function to update a submodule to latest version
 update_submodule() {
-    print_info "Updating vendor/moor submodule to latest version..."
+    local submodule_path=${1:-"vendor/moor"}  # Default to vendor/moor for backward compatibility
+    
+    # Extract submodule name from path for display purposes
+    local submodule_name=$(basename "$submodule_path")
+    
+    print_info "Updating $submodule_path submodule to latest version..."
     cd "$SCRIPT_DIR"
     
-    # Check if vendor/moor directory exists
-    if [[ ! -d "vendor/moor" ]]; then
-        print_error "vendor/moor directory not found!"
-        print_info "Make sure you're in the hackercore root directory."
+    # Check if submodule directory exists
+    if [[ ! -d "$submodule_path" ]]; then
+        print_error "$submodule_path directory not found!"
+        print_info "Available submodules:"
+        if [[ -f ".gitmodules" ]]; then
+            git config --file .gitmodules --get-regexp path | cut -d' ' -f2 | sed 's/^/  /'
+        else
+            print_info "  No submodules found (.gitmodules not present)"
+        fi
         exit 1
     fi
     
     # Get current commit hash before update
-    local current_commit=$(get_git_head "$SCRIPT_DIR/vendor/moor")
-    print_info "Current moor commit: $current_commit"
+    local current_commit=$(get_git_head "$SCRIPT_DIR/$submodule_path")
+    print_info "Current $submodule_name commit: $current_commit"
     
-    # Navigate to vendor/moor and pull latest changes
-    print_info "Pulling latest changes from vendor/moor..."
-    cd "$SCRIPT_DIR/vendor/moor"
+    # Navigate to submodule and pull latest changes
+    print_info "Pulling latest changes from $submodule_path..."
+    cd "$SCRIPT_DIR/$submodule_path"
     
     # Check if we're on a valid branch (not detached HEAD)
     local current_branch=$(git branch --show-current 2>/dev/null || echo "detached")
     if [[ "$current_branch" == "detached" ]]; then
-        print_warning "Currently on detached HEAD, switching to main branch..."
-        git checkout main
+        # Try to determine the default branch (main or master)
+        local default_branch="main"
+        if ! git show-ref --verify --quiet refs/remotes/origin/main; then
+            if git show-ref --verify --quiet refs/remotes/origin/master; then
+                default_branch="master"
+            fi
+        fi
+        print_warning "Currently on detached HEAD, switching to $default_branch branch..."
+        git checkout "$default_branch"
+    fi
+    
+    # Determine the default branch for pulling
+    local remote_branch="main"
+    if ! git show-ref --verify --quiet refs/remotes/origin/main; then
+        if git show-ref --verify --quiet refs/remotes/origin/master; then
+            remote_branch="master"
+        fi
     fi
     
     # Pull the latest changes
-    if git pull origin main; then
-        print_success "Successfully pulled latest changes from vendor/moor!"
+    if git pull origin "$remote_branch"; then
+        print_success "Successfully pulled latest changes from $submodule_path!"
         
         # Get new commit hash
         local new_commit=$(git rev-parse HEAD)
-        print_info "Updated moor commit: $new_commit"
+        print_info "Updated $submodule_name commit: $new_commit"
         
         # Go back to main directory and commit the submodule update
         cd "$SCRIPT_DIR"
         print_info "Committing submodule update to main repository..."
         
-        if git add vendor/moor && git commit -m "Update vendor/moor submodule to latest version
+        if git add "$submodule_path" && git commit -m "Update $submodule_path submodule to latest version
 
 Previous commit: $current_commit
 New commit: $new_commit
@@ -456,7 +492,7 @@ Automated update via hacker.sh"; then
         fi
         
     else
-        print_error "Failed to pull latest changes from vendor/moor!"
+        print_error "Failed to pull latest changes from $submodule_path!"
         print_info "Please check your network connection and try again."
         exit 1
     fi
@@ -496,12 +532,13 @@ main() {
             follow_logs
             ;;
         "update")
-            update_submodule
+            local submodule_path=${2:-""}
+            update_submodule "$submodule_path"
             ;;
         "")
             print_error "No command specified."
             echo
-            echo "Usage: $0 [start|stop|restart|status|clean|rebuild|clean-rebuild|logs|update]"
+            echo "Usage: $0 [start|stop|restart|status|clean|rebuild|clean-rebuild|logs|update [submodule_path]]"
             echo
             echo "Commands:"
             echo "  start        - Start all hackercore services (automatically follows logs)"
@@ -512,13 +549,13 @@ main() {
             echo "  rebuild      - Force rebuild all Docker images (no cache)"
             echo "  clean-rebuild - Clean everything and rebuild from scratch"
             echo "  logs         - Follow moor daemon logs"
-            echo "  update       - Update vendor/moor submodule to latest version"
+            echo "  update [path] - Update submodule to latest version (default: vendor/moor)"
             exit 1
             ;;
         *)
             print_error "Unknown command: $command"
             echo
-            echo "Usage: $0 [start|stop|restart|status|clean|rebuild|clean-rebuild|logs|update]"
+            echo "Usage: $0 [start|stop|restart|status|clean|rebuild|clean-rebuild|logs|update [submodule_path]]"
             exit 1
             ;;
     esac
