@@ -198,25 +198,74 @@ impl GitRepository {
         let statuses = self.repo.statuses(Some(&mut status_options))?;
         let mut result = Vec::new();
         
+        // First pass: collect all status entries and categorize them
+        let mut added_files = Vec::new();
+        let mut deleted_files = Vec::new();
+        
         for entry in statuses.iter() {
             let status = entry.status();
             let path = entry.path().unwrap_or("unknown");
             
-            let status_str = if status.is_wt_new() || status.is_index_new() {
-                "Added"
-            } else if status.is_index_modified() || status.is_wt_modified() {
-                "Modified"
+            if status.is_wt_new() || status.is_index_new() {
+                added_files.push((path.to_string(), entry));
             } else if status.is_wt_deleted() || status.is_index_deleted() {
-                "Deleted"
+                deleted_files.push((path.to_string(), entry));
             } else if status.is_wt_renamed() || status.is_index_renamed() {
-                "Renamed"
+                result.push(format!("Renamed: {}", path));
+            } else if status.is_index_modified() || status.is_wt_modified() {
+                result.push(format!("Modified: {}", path));
             } else if status.is_ignored() {
                 continue;
             } else {
-                "Unknown"
+                result.push(format!("Unknown: {}", path));
+            }
+        }
+        
+        // Second pass: detect renames by comparing first lines
+        let mut matched_deleted = std::collections::HashSet::new();
+        let mut matched_added = std::collections::HashSet::new();
+        
+        for (added_path, _) in &added_files {
+            // Read first line of added file
+            let added_first_line = match self.read_file(added_path) {
+                Ok(content) => content.lines().next().unwrap_or("").to_string(),
+                Err(_) => continue, // Skip if we can't read the file
             };
             
-            result.push(format!("{}: {}", status_str, path));
+            // Look for a matching deleted file with the same first line
+            for (deleted_path, _) in &deleted_files {
+                if matched_deleted.contains(deleted_path) {
+                    continue; // Already matched
+                }
+                
+                // Read first line of deleted file from git history
+                let deleted_first_line = match self.get_file_first_line_from_history(deleted_path) {
+                    Ok(line) => line,
+                    Err(_) => continue, // Skip if we can't read from history
+                };
+                
+                if added_first_line == deleted_first_line && !added_first_line.is_empty() {
+                    // Found a match! This is a rename
+                    result.push(format!("Renamed: {} -> {}", deleted_path, added_path));
+                    matched_deleted.insert(deleted_path.clone());
+                    matched_added.insert(added_path.clone());
+                    break;
+                }
+            }
+        }
+        
+        // Add remaining added files (not matched as renames)
+        for (added_path, _) in &added_files {
+            if !matched_added.contains(added_path) {
+                result.push(format!("Added: {}", added_path));
+            }
+        }
+        
+        // Add remaining deleted files (not matched as renames)
+        for (deleted_path, _) in &deleted_files {
+            if !matched_deleted.contains(deleted_path) {
+                result.push(format!("Deleted: {}", deleted_path));
+            }
         }
         
         Ok(result)
@@ -251,6 +300,25 @@ impl GitRepository {
         let path = path.as_ref();
         let full_path = self.work_dir.join(path);
         full_path.exists()
+    }
+    
+    /// Get the first line of a file from git history (for deleted files)
+    fn get_file_first_line_from_history(&self, path: &str) -> Result<String, Box<dyn std::error::Error>> {
+        // Get the HEAD commit to read the file from the last committed state
+        let head_commit = self.get_head_commit()?;
+        let tree = head_commit.tree()?;
+        
+        // Find the file in the tree
+        if let Ok(entry) = tree.get_path(std::path::Path::new(path)) {
+            // Get the blob (file content) from the tree entry
+            let blob = self.repo.find_blob(entry.id())?;
+            let content = String::from_utf8_lossy(blob.content());
+            
+            // Return the first line
+            Ok(content.lines().next().unwrap_or("").to_string())
+        } else {
+            Err("File not found in git history".into())
+        }
     }
     
     /// Rename a file in the git index and working directory
