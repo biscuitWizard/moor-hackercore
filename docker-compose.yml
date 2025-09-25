@@ -123,3 +123,18 @@ services:
         --workers-response-address=tcp://moor-daemon:7897
     networks:
       - moor_net
+  
+  dome-client:
+    build:
+      context: vendor/dome-client
+    container_name: "dome-client"
+    environment:
+      - DOME_NODE_MODE=production
+      - DOME_NODE_PORT=9999
+      - DOME_MOO_HOST=moor-telnet-host
+      - DOME_MOO_PORT=8888
+      - DOME_NODE_SOCKETURL=http://localhost:9999
+    ports:
+      - "9999:9999"
+    networks:
+      - moor_net
