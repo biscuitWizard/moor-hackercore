@@ -65,6 +65,14 @@ impl VmsProcessor {
                 }
             }
             
+            VmsOperation::RenameObject { old_name, new_name } => {
+                if let Some(ref repo) = self.git_repo {
+                    self.object_handler.rename_object(repo, old_name, new_name)
+                } else {
+                    Err(WorkerError::RequestError("Git repository not available at /game".to_string()))
+                }
+            }
+            
             VmsOperation::Commit { message, author_name, author_email } => {
                 if let Some(ref repo) = self.git_repo {
                     self.create_commit(repo, message, author_name, author_email)

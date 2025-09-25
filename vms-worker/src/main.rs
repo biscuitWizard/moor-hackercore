@@ -178,6 +178,24 @@ async fn process_vms_request(
             }
         }
         
+        "rename_object" => {
+            if arguments.len() < 3 {
+                return Err(WorkerError::RequestError(
+                    "rename_object requires old_name and new_name arguments".to_string(),
+                ));
+            }
+            let old_name = arguments[1].as_string().ok_or_else(|| {
+                WorkerError::RequestError("Second argument must be a string (old_name)".to_string())
+            })?;
+            let new_name = arguments[2].as_string().ok_or_else(|| {
+                WorkerError::RequestError("Third argument must be a string (new_name)".to_string())
+            })?;
+            VmsOperation::RenameObject { 
+                old_name: old_name.to_string(),
+                new_name: new_name.to_string(),
+            }
+        }
+        
         "commit" => {
             if arguments.len() < 2 {
                 return Err(WorkerError::RequestError(

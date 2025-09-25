@@ -176,6 +176,68 @@ impl ObjectHandler {
         Ok(vec![v_str(&format!("Deleted object {} from staging area", object_name))])
     }
     
+    /// Rename a tracked MOO object file
+    pub fn rename_object(
+        &self, 
+        repo: &GitRepository, 
+        old_name: String,
+        new_name: String,
+    ) -> Result<Vec<Var>, WorkerError> {
+        info!("Renaming object from '{}' to '{}'", old_name, new_name);
+        
+        // Ensure both names have .moo extension for file operations
+        let old_filename = if old_name.ends_with(".moo") {
+            old_name.clone()
+        } else {
+            format!("{}.moo", old_name)
+        };
+        
+        let new_filename = if new_name.ends_with(".moo") {
+            new_name.clone()
+        } else {
+            format!("{}.moo", new_name)
+        };
+        
+        let objects_dir = self.config.objects_directory();
+        let old_object_path = repo.work_dir().join(objects_dir).join(&old_filename);
+        let new_object_path = repo.work_dir().join(objects_dir).join(&new_filename);
+        
+        // Check if the old file exists
+        if !repo.file_exists(&old_object_path) {
+            error!("Source object file does not exist: {:?}", old_object_path);
+            return Err(WorkerError::RequestError(format!("Source object file does not exist: {}", old_name)));
+        }
+        
+        // Check if the new file already exists
+        if repo.file_exists(&new_object_path) {
+            error!("Target object file already exists: {:?}", new_object_path);
+            return Err(WorkerError::RequestError(format!("Target object file already exists: {}", new_name)));
+        }
+        
+        // Handle meta files
+        let old_meta_path = self.meta_path(&old_name);
+        let new_meta_path = self.meta_path(&new_name);
+        let old_meta_full_path = repo.work_dir().join(&old_meta_path);
+        let new_meta_full_path = repo.work_dir().join(&new_meta_path);
+        
+        // Use git mv to rename the main object file
+        if let Err(e) = repo.rename_file(&old_object_path, &new_object_path) {
+            error!("Failed to rename MOO file in git: {}", e);
+            return Err(WorkerError::RequestError(format!("Failed to rename MOO file in git: {}", e)));
+        }
+        
+        // Rename the meta file if it exists
+        if repo.file_exists(&old_meta_full_path) {
+            if let Err(e) = repo.rename_file(&old_meta_full_path, &new_meta_full_path) {
+                error!("Failed to rename meta file in git: {}", e);
+                return Err(WorkerError::RequestError(format!("Failed to rename meta file in git: {}", e)));
+            }
+        }
+        
+        info!("Successfully renamed object from '{}' to '{}'", old_name, new_name);
+        Ok(vec![v_str(&format!("Renamed object from '{}' to '{}'", old_name, new_name))])
+    }
+    
     /// Parse a MOO object dump string into an ObjectDefinition using objdef
     fn parse_object_dump(&self, dump: &str) -> Result<ObjectDefinition, Box<dyn std::error::Error>> {
         // Use the compiler directly to parse the object definition

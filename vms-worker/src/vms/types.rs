@@ -13,6 +13,12 @@ pub enum VmsOperation {
         object_name: String,
     },
     
+    /// Rename a tracked MOO object file
+    RenameObject { 
+        old_name: String,
+        new_name: String,
+    },
+    
     /// Create a commit with current changes
     Commit { 
         message: String,
