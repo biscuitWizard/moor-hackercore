@@ -97,6 +97,14 @@ impl VmsProcessor {
                 }
             }
             
+            VmsOperation::GetCommits { limit, offset } => {
+                if let Some(ref repo) = self.git_repo {
+                    self.get_commits(repo, limit, offset)
+                } else {
+                    Err(WorkerError::RequestError("Git repository not available at /game".to_string()))
+                }
+            }
+            
             // Credential management operations
             VmsOperation::SetSshKey { key_content, key_name } => {
                 info!("Setting SSH key: {} ({} bytes)", key_name, key_content.len());
@@ -271,6 +279,39 @@ impl VmsProcessor {
             Err(e) => {
                 error!("Failed to create commit: {}", e);
                 Err(WorkerError::RequestError(format!("Failed to create commit: {}", e)))
+            }
+        }
+    }
+    
+    /// Get paginated list of commits
+    fn get_commits(
+        &self, 
+        repo: &GitRepository, 
+        limit: Option<usize>,
+        offset: Option<usize>,
+    ) -> Result<Vec<Var>, WorkerError> {
+        match repo.get_commits(limit, offset) {
+            Ok(commits) => {
+                use moor_var::v_map;
+                
+                let mut result = Vec::new();
+                for commit in commits {
+                    let commit_info = v_map(&[
+                        (v_str("id"), v_str(&commit.id)),
+                        (v_str("full_id"), v_str(&commit.full_id)),
+                        (v_str("datetime"), v_str(&commit.datetime.to_string())),
+                        (v_str("message"), v_str(&commit.message)),
+                        (v_str("author"), v_str(&commit.author)),
+                    ]);
+                    result.push(commit_info);
+                }
+                
+                info!("Retrieved {} commits", result.len());
+                Ok(result)
+            }
+            Err(e) => {
+                error!("Failed to get commits: {}", e);
+                Err(WorkerError::RequestError(format!("Failed to get commits: {}", e)))
             }
         }
     }

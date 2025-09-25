@@ -31,6 +31,12 @@ pub enum VmsOperation {
         object_names: Vec<String>,
     },
     
+    /// Get paginated list of commits
+    GetCommits {
+        limit: Option<usize>,
+        offset: Option<usize>,
+    },
+    
     /// Credential management operations
     SetSshKey { key_content: String, key_name: String },
     ClearSshKey,

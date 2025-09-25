@@ -586,5 +586,59 @@ impl GitRepository {
         Ok(())
     }
     
+    /// Get paginated list of commits
+    pub fn get_commits(&self, limit: Option<usize>, offset: Option<usize>) -> Result<Vec<crate::vms::types::CommitInfo>, Box<dyn std::error::Error>> {
+        let limit = limit.unwrap_or(5); // Default to 5 commits
+        let offset = offset.unwrap_or(0); // Default to no offset
+        
+        info!("Getting {} commits starting from offset {}", limit, offset);
+        
+        // Get the HEAD reference
+        let head = self.repo.head()?;
+        let mut revwalk = self.repo.revwalk()?;
+        revwalk.push(head.target().unwrap())?;
+        revwalk.set_sorting(git2::Sort::TIME)?;
+        
+        let mut commits = Vec::new();
+        let mut count = 0;
+        let mut skipped = 0;
+        
+        for commit_id in revwalk {
+            let commit_id = commit_id?;
+            
+            // Skip commits until we reach the offset
+            if skipped < offset {
+                skipped += 1;
+                continue;
+            }
+            
+            // Stop if we've reached the limit
+            if count >= limit {
+                break;
+            }
+            
+            let commit = self.repo.find_commit(commit_id)?;
+            let id = commit.id().to_string();
+            let short_id = &id[..8]; // First 8 characters
+            let datetime = commit.time();
+            let timestamp = datetime.seconds();
+            let message = commit.message().unwrap_or("No message").to_string();
+            let author = commit.author().name().unwrap_or("Unknown").to_string();
+            
+            commits.push(crate::vms::types::CommitInfo {
+                id: short_id.to_string(),
+                full_id: id,
+                datetime: timestamp,
+                message: message.trim().to_string(),
+                author,
+            });
+            
+            count += 1;
+        }
+        
+        info!("Retrieved {} commits (skipped {}, total requested: {})", count, skipped, limit);
+        Ok(commits)
+    }
+    
 }
 

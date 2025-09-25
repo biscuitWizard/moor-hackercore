@@ -230,6 +230,22 @@ async fn process_vms_request(
             VmsOperation::GetObjects { object_names }
         }
         
+        "get_commits" => {
+            let limit = if arguments.len() > 1 {
+                arguments[1].as_integer().map(|i| i as usize)
+            } else {
+                None
+            };
+            
+            let offset = if arguments.len() > 2 {
+                arguments[2].as_integer().map(|i| i as usize)
+            } else {
+                None
+            };
+            
+            VmsOperation::GetCommits { limit, offset }
+        }
+        
         // Credential management operations
         "set_ssh_key" => {
             if arguments.len() < 3 {
