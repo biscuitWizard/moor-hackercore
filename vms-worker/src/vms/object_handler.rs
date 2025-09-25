@@ -219,7 +219,7 @@ impl ObjectHandler {
     fn to_dump(&self, object_def: &ObjectDefinition) -> Result<String, Box<dyn std::error::Error>> {
         // Create a simple index for object names
         let mut index_names = HashMap::new();
-        index_names.insert(object_def.oid, object_def.name.clone());
+        index_names.insert(object_def.oid, object_def.oid.to_string());
         
         // Use the existing dump_object function from objdef
         let lines = dump_object(&index_names, object_def)?;
