@@ -850,6 +850,7 @@ impl GitRepository {
     /// Get commits ahead and behind between two branches
     pub fn get_commits_ahead_behind(&self, local_branch: &str, remote_branch: &str) -> Result<(usize, usize), Box<dyn std::error::Error>> {
         let local_oid = self.repo.refname_to_id(&format!("refs/heads/{}", local_branch))?;
+        // remote_branch is already in the format "origin/main", so we need the full ref path
         let remote_oid = self.repo.refname_to_id(&format!("refs/remotes/{}", remote_branch))?;
         
         let (ahead, behind) = self.repo.graph_ahead_behind(local_oid, remote_oid)?;
@@ -860,7 +861,13 @@ impl GitRepository {
     /// Get commits between two references
     pub fn get_commits_between(&self, from: &str, to: &str) -> Result<Vec<crate::vcs::types::CommitInfo>, Box<dyn std::error::Error>> {
         let from_oid = self.repo.refname_to_id(from)?;
-        let to_oid = self.repo.refname_to_id(to)?;
+        // Handle remote branch format (e.g., "origin/main" -> "refs/remotes/origin/main")
+        let to_ref = if to.contains("/") && !to.starts_with("refs/") {
+            format!("refs/remotes/{}", to)
+        } else {
+            to.to_string()
+        };
+        let to_oid = self.repo.refname_to_id(&to_ref)?;
         
         let mut revwalk = self.repo.revwalk()?;
         revwalk.push(to_oid)?;
