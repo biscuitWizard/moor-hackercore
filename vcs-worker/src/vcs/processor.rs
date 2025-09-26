@@ -1,4 +1,4 @@
-use tracing::{info, error};
+use tracing::{info, error, warn};
 use moor_var::{Var, v_str};
 use crate::config::Config;
 use crate::git_ops::GitRepository;
@@ -691,15 +691,46 @@ impl VcsProcessor {
     
     /// Reset working tree, discarding all changes
     fn reset_working_tree(&self, repo: &GitRepository) -> Result<Vec<Var>, WorkerError> {
-        info!("Resetting working tree, discarding all changes");
+        info!("VCS Processor: Starting reset working tree operation");
+        
+        // Check repository status before reset
+        match repo.status() {
+            Ok(changes) => {
+                if changes.is_empty() {
+                    info!("VCS Processor: No changes to discard, working tree is already clean");
+                    return Ok(vec![v_str("Working tree is already clean - no changes to discard")]);
+                } else {
+                    info!("VCS Processor: Found {} changes to discard: {:?}", changes.len(), changes);
+                }
+            }
+            Err(e) => {
+                warn!("VCS Processor: Could not check repository status before reset: {}", e);
+            }
+        }
         
         match repo.reset_working_tree() {
             Ok(_) => {
-                info!("Successfully reset working tree");
-                Ok(vec![v_str("Working tree reset - all changes discarded")])
+                info!("VCS Processor: Successfully reset working tree");
+                
+                // Verify the reset worked
+                match repo.status() {
+                    Ok(changes) => {
+                        if changes.is_empty() {
+                            info!("VCS Processor: Reset verification successful - working tree is now clean");
+                            Ok(vec![v_str("Working tree reset - all changes discarded")])
+                        } else {
+                            warn!("VCS Processor: Reset completed but {} changes remain: {:?}", changes.len(), changes);
+                            Ok(vec![v_str(&format!("Working tree reset completed, but {} changes remain", changes.len()))])
+                        }
+                    }
+                    Err(e) => {
+                        warn!("VCS Processor: Could not verify reset status: {}", e);
+                        Ok(vec![v_str("Working tree reset completed (verification failed)")])
+                    }
+                }
             }
             Err(e) => {
-                error!("Failed to reset working tree: {}", e);
+                error!("VCS Processor: Failed to reset working tree: {}", e);
                 Err(WorkerError::RequestError(format!("Failed to reset working tree: {}", e)))
             }
         }

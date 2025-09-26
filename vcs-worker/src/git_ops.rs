@@ -1086,18 +1086,65 @@ impl GitRepository {
     
     /// Reset working tree to HEAD, discarding all changes
     pub fn reset_working_tree(&self) -> Result<(), Box<dyn std::error::Error>> {
-        info!("Resetting working tree to HEAD");
+        info!("Starting reset working tree operation");
         
-        // Get the current HEAD commit
-        let head_commit = self.get_head_commit()?;
-        let head_oid = head_commit.id();
-        
-        // Reset the working tree to match HEAD (hard reset)
-        let head_obj = self.repo.find_object(head_oid, None)?;
-        self.repo.reset(&head_obj, git2::ResetType::Hard, None)?;
-        
-        info!("Successfully reset working tree to HEAD");
-        Ok(())
+        // Check if repository has any commits
+        match self.get_head_commit() {
+            Ok(head_commit) => {
+                let head_oid = head_commit.id();
+                info!("Found HEAD commit: {}", head_oid);
+                
+                // Reset the working tree to match HEAD (hard reset)
+                let head_obj = self.repo.find_object(head_oid, None)?;
+                self.repo.reset(&head_obj, git2::ResetType::Hard, None)?;
+                
+                info!("Successfully reset working tree to HEAD commit: {}", head_oid);
+                Ok(())
+            }
+            Err(e) => {
+                // Handle unborn branch case (no commits yet)
+                if let Some(git_err) = e.downcast_ref::<git2::Error>() {
+                    if git_err.code() == git2::ErrorCode::UnbornBranch {
+                    info!("Repository has no commits yet, clearing working tree and index");
+                    
+                    // Clear the index
+                    let mut index = self.repo.index()?;
+                    index.clear()?;
+                    index.write()?;
+                    
+                    // Remove all untracked files
+                    let mut status_options = git2::StatusOptions::new();
+                    status_options.include_ignored(false);
+                    status_options.include_untracked(true);
+                    
+                    let statuses = self.repo.statuses(Some(&mut status_options))?;
+                    for entry in statuses.iter() {
+                        if let Some(path) = entry.path() {
+                            let file_path = self.repo.workdir().unwrap().join(path);
+                            if file_path.exists() {
+                                if file_path.is_file() {
+                                    std::fs::remove_file(&file_path)?;
+                                    info!("Removed untracked file: {}", path);
+                                } else if file_path.is_dir() {
+                                    std::fs::remove_dir_all(&file_path)?;
+                                    info!("Removed untracked directory: {}", path);
+                                }
+                            }
+                        }
+                    }
+                    
+                        info!("Successfully cleared working tree (no commits to reset to)");
+                        Ok(())
+                    } else {
+                        error!("Failed to get HEAD commit: {}", e);
+                        Err(e)
+                    }
+                } else {
+                    error!("Failed to get HEAD commit: {}", e);
+                    Err(e)
+                }
+            }
+        }
     }
     
 }

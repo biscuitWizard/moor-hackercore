@@ -126,7 +126,10 @@ async fn process_vcs_request(
 
     let config = Config::from_env();
     let mut processor = VcsProcessor::with_config(config);
-    let operation = match operation_name.as_arc_string().to_lowercase().as_str() {
+    let operation_name_str = operation_name.as_arc_string().to_lowercase();
+    info!("VCS Worker: Processing operation: '{}' with {} arguments", operation_name_str, arguments.len());
+    
+    let operation = match operation_name_str.as_str() {
         "update_object" => {
             if arguments.len() < 3 {
                 return Err(WorkerError::RequestError(
@@ -362,6 +365,11 @@ async fn process_vcs_request(
             VcsOperation::Pull { dry_run }
         }
         
+        "reset" => {
+            info!("VCS Worker: Creating Reset operation");
+            VcsOperation::Reset
+        }
+        
         _ => {
             return Err(WorkerError::RequestError(format!(
                 "Unknown operation: {}",
@@ -370,6 +378,7 @@ async fn process_vcs_request(
         }
     };
 
+    info!("VCS Worker: About to process operation: {:?}", operation);
     let result = processor.process_operation(operation);
     
     match result {
