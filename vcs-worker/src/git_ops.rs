@@ -546,6 +546,7 @@ impl GitRepository {
     }
     
     /// Configure SSH to handle host key verification for the given host
+    #[allow(dead_code)]
     fn configure_ssh_for_host(&self, hostname: &str) -> Result<(), Box<dyn std::error::Error>> {
         info!("Configuring SSH for host: {}", hostname);
         
@@ -818,6 +819,220 @@ impl GitRepository {
         
         info!("Retrieved {} commits (skipped {}, total requested: {})", count, skipped, limit);
         Ok(commits)
+    }
+    
+    /// Fetch from remote repository
+    pub fn fetch_remote(&self) -> Result<(), Box<dyn std::error::Error>> {
+        info!("Fetching from remote repository");
+        
+        let mut remote = self.repo.find_remote("origin")?;
+        
+        let mut callbacks = git2::RemoteCallbacks::new();
+        callbacks.credentials(|url, username_from_url, allowed_types| {
+            info!("Git requesting credentials for fetch URL: {:?}, username: {:?}, allowed_types: {:?}", url, username_from_url, allowed_types);
+            self.get_ssh_credentials(Some(url), username_from_url, allowed_types)
+        });
+        
+        // Certificate (host key) check callback
+        callbacks.certificate_check(|_cert, _host| {
+            Ok(CertificateCheckStatus::CertificateOk)
+        });
+        
+        let mut fetch_options = git2::FetchOptions::new();
+        fetch_options.remote_callbacks(callbacks);
+        
+        remote.fetch(&["refs/heads/*:refs/remotes/origin/*"], Some(&mut fetch_options), None)?;
+        
+        info!("Successfully fetched from remote");
+        Ok(())
+    }
+    
+    /// Get commits ahead and behind between two branches
+    pub fn get_commits_ahead_behind(&self, local_branch: &str, remote_branch: &str) -> Result<(usize, usize), Box<dyn std::error::Error>> {
+        let local_oid = self.repo.refname_to_id(&format!("refs/heads/{}", local_branch))?;
+        let remote_oid = self.repo.refname_to_id(&format!("refs/remotes/{}", remote_branch))?;
+        
+        let (ahead, behind) = self.repo.graph_ahead_behind(local_oid, remote_oid)?;
+        
+        Ok((ahead, behind))
+    }
+    
+    /// Get commits between two references
+    pub fn get_commits_between(&self, from: &str, to: &str) -> Result<Vec<crate::vcs::types::CommitInfo>, Box<dyn std::error::Error>> {
+        let from_oid = self.repo.refname_to_id(from)?;
+        let to_oid = self.repo.refname_to_id(to)?;
+        
+        let mut revwalk = self.repo.revwalk()?;
+        revwalk.push(to_oid)?;
+        revwalk.hide(from_oid)?;
+        revwalk.set_sorting(git2::Sort::TIME)?;
+        
+        let mut commits = Vec::new();
+        
+        for commit_id in revwalk {
+            let commit_id = commit_id?;
+            let commit = self.repo.find_commit(commit_id)?;
+            
+            let id = commit.id().to_string();
+            let short_id = &id[..8];
+            let datetime = commit.time();
+            let timestamp = datetime.seconds();
+            let message = commit.message().unwrap_or("No message").to_string();
+            let author = commit.author().name().unwrap_or("Unknown").to_string();
+            
+            commits.push(crate::vcs::types::CommitInfo {
+                id: short_id.to_string(),
+                full_id: id,
+                datetime: timestamp,
+                message: message.trim().to_string(),
+                author,
+            });
+        }
+        
+        Ok(commits)
+    }
+    
+    /// Get changes in a specific commit
+    pub fn get_commit_changes(&self, commit_id: &str) -> Result<Vec<crate::vcs::types::CommitChange>, Box<dyn std::error::Error>> {
+        let oid = commit_id.parse::<git2::Oid>()?;
+        let commit = self.repo.find_commit(oid)?;
+        
+        let mut changes = Vec::new();
+        
+        if commit.parent_count() > 0 {
+            let parent = commit.parent(0)?;
+            let parent_tree = parent.tree()?;
+            let commit_tree = commit.tree()?;
+            
+            let diff = self.repo.diff_tree_to_tree(Some(&parent_tree), Some(&commit_tree), None)?;
+            
+            for delta in diff.deltas() {
+                let old_path = delta.old_file().path().map(|p| p.to_string_lossy().to_string());
+                let new_path = delta.new_file().path().map(|p| p.to_string_lossy().to_string());
+                
+                let status = match delta.status() {
+                    git2::Delta::Added => crate::vcs::types::ChangeStatus::Added,
+                    git2::Delta::Modified => crate::vcs::types::ChangeStatus::Modified,
+                    git2::Delta::Deleted => crate::vcs::types::ChangeStatus::Deleted,
+                    git2::Delta::Renamed => crate::vcs::types::ChangeStatus::Renamed,
+                    _ => continue, // Skip other types of changes
+                };
+                
+                if let Some(path) = new_path.or_else(|| old_path.clone()) {
+                    changes.push(crate::vcs::types::CommitChange {
+                        path,
+                        old_path,
+                        status,
+                    });
+                }
+            }
+        } else {
+            // First commit - all files are added
+            let tree = commit.tree()?;
+            let _ = self.collect_tree_files(&tree, "", &mut changes);
+        }
+        
+        Ok(changes)
+    }
+    
+    /// Recursively collect files from a tree
+    fn collect_tree_files(&self, tree: &git2::Tree, prefix: &str, changes: &mut Vec<crate::vcs::types::CommitChange>) -> Result<(), Box<dyn std::error::Error>> {
+        for entry in tree.iter() {
+            let name = entry.name().unwrap_or("");
+            let path = if prefix.is_empty() {
+                name.to_string()
+            } else {
+                format!("{}/{}", prefix, name)
+            };
+            
+            match entry.kind() {
+                Some(git2::ObjectType::Tree) => {
+                    let subtree = self.repo.find_tree(entry.id())?;
+                    self.collect_tree_files(&subtree, &path, changes)?;
+                }
+                Some(git2::ObjectType::Blob) => {
+                    changes.push(crate::vcs::types::CommitChange {
+                        path,
+                        old_path: None,
+                        status: crate::vcs::types::ChangeStatus::Added,
+                    });
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+    
+    /// Get file content at a specific commit
+    pub fn get_file_content_at_commit(&self, commit_id: &str, file_path: &str) -> Result<String, Box<dyn std::error::Error>> {
+        let oid = commit_id.parse::<git2::Oid>()?;
+        let commit = self.repo.find_commit(oid)?;
+        let tree = commit.tree()?;
+        
+        let entry = tree.get_path(std::path::Path::new(file_path))?;
+        let blob = self.repo.find_blob(entry.id())?;
+        
+        let content = String::from_utf8_lossy(blob.content()).to_string();
+        Ok(content)
+    }
+    
+    /// Rebase onto a specific branch
+    pub fn rebase_onto(&self, upstream_branch: &str) -> Result<(), Box<dyn std::error::Error>> {
+        info!("Starting rebase onto {}", upstream_branch);
+        
+        let upstream_oid = self.repo.refname_to_id(&format!("refs/remotes/{}", upstream_branch))?;
+        let upstream_commit = self.repo.find_commit(upstream_oid)?;
+        
+        // Get the current HEAD
+        let head = self.repo.head()?;
+        let head_commit = head.peel_to_commit()?;
+        
+        // Find the common ancestor
+        let merge_base = self.repo.merge_base(head_commit.id(), upstream_commit.id())?;
+        let _base_commit = self.repo.find_commit(merge_base)?;
+        
+        // Get commits to rebase (from merge base to HEAD, excluding the base)
+        let mut revwalk = self.repo.revwalk()?;
+        revwalk.push(head_commit.id())?;
+        revwalk.hide(merge_base)?;
+        revwalk.set_sorting(git2::Sort::TIME)?;
+        
+        let mut commits_to_rebase = Vec::new();
+        for commit_id in revwalk {
+            let commit_id = commit_id?;
+            let commit = self.repo.find_commit(commit_id)?;
+            commits_to_rebase.push(commit);
+        }
+        
+        // Reverse the order to apply commits in chronological order
+        commits_to_rebase.reverse();
+        
+        // Apply each commit on top of the upstream
+        let mut current_commit = upstream_commit;
+        for commit in commits_to_rebase {
+            // Create a new commit with the same changes but new parent
+            let tree = commit.tree()?;
+            let signature = commit.author();
+            let message = commit.message().unwrap_or("No message");
+            
+            let new_commit_id = self.repo.commit(
+                None,
+                &signature,
+                &signature,
+                message,
+                &tree,
+                &[&current_commit],
+            )?;
+            
+            current_commit = self.repo.find_commit(new_commit_id)?;
+        }
+        
+        // Update HEAD to point to the new commit
+        let mut head_ref = self.repo.head()?;
+        head_ref.set_target(current_commit.id(), "Rebase completed")?;
+        
+        info!("Successfully completed rebase onto {}", upstream_branch);
+        Ok(())
     }
     
 }

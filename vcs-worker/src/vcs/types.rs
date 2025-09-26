@@ -52,6 +52,9 @@ pub enum VcsOperation {
     /// Meta file operations
     UpdateIgnoredProperties { object_name: String, properties: Vec<String> },
     UpdateIgnoredVerbs { object_name: String, verbs: Vec<String> },
+    
+    /// Pull operation with rebase strategy
+    Pull { dry_run: bool },
 }
 
 /// Comprehensive repository status information
@@ -80,4 +83,35 @@ pub struct CommitInfo {
     pub message: String,
     /// Author name
     pub author: String,
+}
+
+/// Information about a file change in a commit
+#[derive(Debug, Clone)]
+pub struct CommitChange {
+    /// Path to the file
+    pub path: String,
+    /// Old path (for renames)
+    pub old_path: Option<String>,
+    /// Type of change
+    pub status: ChangeStatus,
+}
+
+/// Type of change in a commit
+#[derive(Debug, Clone, PartialEq)]
+pub enum ChangeStatus {
+    Added,
+    Modified,
+    Deleted,
+    Renamed,
+}
+
+/// Impact analysis for a pull operation
+#[derive(Debug, Clone)]
+pub struct PullImpact {
+    /// Objects that would be modified
+    pub modified_objects: Vec<String>,
+    /// Objects that would be deleted
+    pub deleted_objects: Vec<String>,
+    /// Objects that would be renamed
+    pub renamed_objects: Vec<String>,
 }

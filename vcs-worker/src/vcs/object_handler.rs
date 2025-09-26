@@ -18,7 +18,7 @@ struct FileInfo {
 
 /// Handles MOO object parsing, filtering, and file operations
 pub struct ObjectHandler {
-    config: Config,
+    pub config: Config,
 }
 
 impl ObjectHandler {
@@ -239,7 +239,7 @@ impl ObjectHandler {
     }
     
     /// Parse a MOO object dump string into an ObjectDefinition using objdef
-    fn parse_object_dump(&self, dump: &str) -> Result<ObjectDefinition, Box<dyn std::error::Error>> {
+    pub fn parse_object_dump(&self, dump: &str) -> Result<ObjectDefinition, Box<dyn std::error::Error>> {
         // Use the compiler directly to parse the object definition
         use moor_compiler::{compile_object_definitions, ObjFileContext};
         
@@ -259,7 +259,7 @@ impl ObjectHandler {
     }
     
     /// Apply meta configuration filtering to an ObjectDefinition
-    fn apply_meta_config(&self, object_def: &mut ObjectDefinition, config: &MetaConfig) {
+    pub fn apply_meta_config(&self, object_def: &mut ObjectDefinition, config: &MetaConfig) {
         // Filter property definitions
         object_def.property_definitions.retain(|prop| {
             !config.is_property_ignored(&prop.name.to_string())
@@ -278,7 +278,7 @@ impl ObjectHandler {
     }
     
     /// Convert ObjectDefinition back to MOO dump format using objdef
-    fn to_dump(&self, object_def: &ObjectDefinition) -> Result<String, Box<dyn std::error::Error>> {
+    pub fn to_dump(&self, object_def: &ObjectDefinition) -> Result<String, Box<dyn std::error::Error>> {
         // Create a simple index for object names
         let mut index_names = HashMap::new();
         index_names.insert(object_def.oid, object_def.oid.to_string());

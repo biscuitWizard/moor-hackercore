@@ -1,7 +1,7 @@
 use clap::Parser;
 use clap_derive::Parser;
 use moor_common::tasks::WorkerError;
-use moor_var::{Obj, Symbol, Var, v_str, v_map};
+use moor_var::{Obj, Symbol, Var};
 use rpc_async_client::{make_worker_token, worker_loop};
 use rpc_common::client_args::RpcClientArgs;
 use rpc_common::{WorkerToken, load_keypair};
@@ -34,7 +34,7 @@ async fn main() -> Result<(), eyre::Error> {
     
     moor_common::tracing::init_tracing(config.is_debug_enabled()).expect("Unable to configure logging");
 
-    let mut processor = VcsProcessor::with_config(config);
+    let _processor = VcsProcessor::with_config(config);
 
     let mut hup_signal = match signal(SignalKind::hangup()) {
         Ok(signal) => signal,
@@ -351,6 +351,15 @@ async fn process_vcs_request(
         
         "test_ssh" => {
             VcsOperation::TestSshConnection
+        }
+        
+        "pull" => {
+            let dry_run = if arguments.len() > 1 {
+                arguments[1].as_bool().unwrap_or(false)
+            } else {
+                false
+            };
+            VcsOperation::Pull { dry_run }
         }
         
         _ => {

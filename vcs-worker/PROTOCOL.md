@@ -49,7 +49,7 @@ worker_request("vcs", {"rename_object", "player.moo", "character.moo"})
 ## Repository Operations
 
 ### commit
-Create a commit with current changes.
+Create a commit with current changes. Automatically pulls remote changes before committing to avoid conflicts.
 
 ```lisp
 worker_request("vcs", {"commit", "commit_message", "author_name", "author_email"})
@@ -64,6 +64,8 @@ worker_request("vcs", {"commit", "commit_message", "author_name", "author_email"
 ```lisp
 worker_request("vcs", {"commit", "Added new player object", "John Doe", "john@example.com"})
 ```
+
+**Note:** The commit operation automatically performs a pull before committing to ensure the local repository is up to date and to avoid conflicts when pushing.
 
 ### status
 Get repository status information.
@@ -113,6 +115,44 @@ worker_request("vcs", {"get_commits", limit, offset})
 ```lisp
 worker_request("vcs", {"get_commits", 10, 0})
 ```
+
+### pull
+Pull remote changes with rebase strategy and automatic conflict resolution.
+
+```lisp
+worker_request("vcs", {"pull", dry_run})
+```
+
+**Parameters:**
+- `dry_run` (boolean, optional): If true, returns analysis of what would be modified without making changes
+
+**Returns:**
+- If `dry_run` is true: Analysis of objects that would be modified, deleted, or renamed
+- If `dry_run` is false: Success message with number of commits pulled and conflicts resolved
+
+**Example:**
+```lisp
+worker_request("vcs", {"pull", false})
+worker_request("vcs", {"pull", true})
+```
+
+**Pull Strategy:**
+The pull operation uses a rebase strategy with automatic conflict resolution:
+
+1. **Fetch**: Downloads latest changes from remote repository
+2. **Analysis**: Determines which commits need to be pulled
+3. **Replay**: For each commit to be pulled:
+   - Loads the complete object dump (.moo file) from the commit
+   - Parses the object using the existing object handler
+   - Applies current meta configuration filtering
+   - Overwrites the local object with the filtered version
+4. **Conflict Resolution**: Automatically resolves conflicts by:
+   - Loading complete object dumps from remote commits
+   - Overwriting local changes with remote changes
+   - Detecting and handling deletions and renames
+5. **Rebase**: Applies the replayed commits on top of the current branch
+
+This strategy ensures that conflicts are automatically resolved by always taking the remote version of object dumps, which is appropriate for MOO object files where the complete dump represents the authoritative state.
 
 ## Credential Management Operations
 

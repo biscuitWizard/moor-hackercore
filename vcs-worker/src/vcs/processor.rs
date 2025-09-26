@@ -2,7 +2,7 @@ use tracing::{info, error};
 use moor_var::{Var, v_str};
 use crate::config::Config;
 use crate::git_ops::GitRepository;
-use super::types::VcsOperation;
+use super::types::{VcsOperation, PullImpact, ChangeStatus};
 use super::repository_manager::RepositoryManager;
 use super::object_handler::ObjectHandler;
 use super::status_handler::StatusHandler;
@@ -235,6 +235,14 @@ impl VcsProcessor {
                 }
             }
             
+            VcsOperation::Pull { dry_run } => {
+                if let Some(ref repo) = self.git_repo {
+                    self.pull_with_rebase(repo, dry_run)
+                } else {
+                    Err(WorkerError::RequestError("Git repository not available at /game".to_string()))
+                }
+            }
+            
         }
     }
     
@@ -246,6 +254,18 @@ impl VcsProcessor {
         author_name: String,
         author_email: String,
     ) -> Result<Vec<Var>, WorkerError> {
+        // First, pull any remote changes to avoid conflicts
+        info!("Pulling remote changes before committing and pushing");
+        match self.pull_with_rebase(repo, false) {
+            Ok(pull_result) => {
+                info!("Pull completed: {:?}", pull_result);
+            }
+            Err(e) => {
+                error!("Failed to pull remote changes: {}", e);
+                // Continue with commit even if pull fails - let push handle it
+            }
+        }
+        
         match repo.commit(&message, &author_name, &author_email) {
             Ok(_) => {
                 info!("Created commit: {}", message);
@@ -301,6 +321,354 @@ impl VcsProcessor {
                 Err(WorkerError::RequestError(format!("Failed to get commits: {}", e)))
             }
         }
+    }
+    
+    /// Pull with rebase strategy and automatic conflict resolution
+    fn pull_with_rebase(&self, repo: &GitRepository, dry_run: bool) -> Result<Vec<Var>, WorkerError> {
+        info!("Starting pull operation with rebase strategy (dry_run: {})", dry_run);
+        
+        if dry_run {
+            return self.pull_dry_run(repo);
+        }
+        
+        // First, fetch the latest changes from remote
+        match repo.fetch_remote() {
+            Ok(_) => {
+                info!("Successfully fetched from remote");
+            }
+            Err(e) => {
+                error!("Failed to fetch from remote: {}", e);
+                return Err(WorkerError::RequestError(format!("Failed to fetch from remote: {}", e)));
+            }
+        }
+        
+        // Get the current branch and upstream
+        let current_branch = match repo.get_current_branch() {
+            Ok(Some(branch)) => branch,
+            Ok(None) => {
+                error!("No current branch found");
+                return Err(WorkerError::RequestError("No current branch found".to_string()));
+            }
+            Err(e) => {
+                error!("Failed to get current branch: {}", e);
+                return Err(WorkerError::RequestError(format!("Failed to get current branch: {}", e)));
+            }
+        };
+        
+        let upstream_branch = format!("origin/{}", current_branch);
+        info!("Current branch: {}, upstream: {}", current_branch, upstream_branch);
+        
+        // Check if there are any commits to pull
+        match repo.get_commits_ahead_behind(&current_branch, &upstream_branch) {
+            Ok((ahead, behind)) => {
+                info!("Branch is {} commits ahead, {} commits behind upstream", ahead, behind);
+                
+                if behind == 0 {
+                    info!("No commits to pull");
+                    return Ok(vec![v_str("No commits to pull - repository is up to date")]);
+                }
+                
+                // Perform rebase with automatic conflict resolution
+                match self.rebase_with_auto_resolution(repo, &upstream_branch) {
+                    Ok(modified_objects) => {
+                        let message = if modified_objects.is_empty() {
+                            format!("Successfully pulled {} commits with no conflicts", behind)
+                        } else {
+                            format!("Successfully pulled {} commits, automatically resolved conflicts in {} objects", behind, modified_objects.len())
+                        };
+                        info!("{}", message);
+                        Ok(vec![v_str(&message)])
+                    }
+                    Err(e) => {
+                        error!("Failed to rebase: {}", e);
+                        Err(WorkerError::RequestError(format!("Failed to rebase: {}", e)))
+                    }
+                }
+            }
+            Err(e) => {
+                error!("Failed to check commits ahead/behind: {}", e);
+                Err(WorkerError::RequestError(format!("Failed to check commits ahead/behind: {}", e)))
+            }
+        }
+    }
+    
+    /// Dry run for pull operation - returns what would be modified
+    fn pull_dry_run(&self, repo: &GitRepository) -> Result<Vec<Var>, WorkerError> {
+        info!("Performing pull dry run");
+        
+        // Fetch to get latest remote info
+        match repo.fetch_remote() {
+            Ok(_) => {
+                info!("Successfully fetched from remote for dry run");
+            }
+            Err(e) => {
+                error!("Failed to fetch from remote for dry run: {}", e);
+                return Err(WorkerError::RequestError(format!("Failed to fetch from remote: {}", e)));
+            }
+        }
+        
+        let current_branch = match repo.get_current_branch() {
+            Ok(Some(branch)) => branch,
+            Ok(None) => {
+                error!("No current branch found");
+                return Err(WorkerError::RequestError("No current branch found".to_string()));
+            }
+            Err(e) => {
+                error!("Failed to get current branch: {}", e);
+                return Err(WorkerError::RequestError(format!("Failed to get current branch: {}", e)));
+            }
+        };
+        
+        let upstream_branch = format!("origin/{}", current_branch);
+        
+        match repo.get_commits_ahead_behind(&current_branch, &upstream_branch) {
+            Ok((ahead, behind)) => {
+                if behind == 0 {
+                    return Ok(vec![v_str("No commits to pull - repository is up to date")]);
+                }
+                
+                // Analyze what objects would be affected
+                match self.analyze_pull_impact(repo, &upstream_branch) {
+                    Ok(impact) => {
+                        use moor_var::v_map;
+                        
+                        let result = v_map(&[
+                            (v_str("commits_to_pull"), v_str(&behind.to_string())),
+                            (v_str("commits_ahead"), v_str(&ahead.to_string())),
+                            (v_str("modified_objects"), v_str(&impact.modified_objects.join(", "))),
+                            (v_str("deleted_objects"), v_str(&impact.deleted_objects.join(", "))),
+                            (v_str("renamed_objects"), v_str(&impact.renamed_objects.join(", "))),
+                        ]);
+                        
+                        Ok(vec![result])
+                    }
+                    Err(e) => {
+                        error!("Failed to analyze pull impact: {}", e);
+                        Err(WorkerError::RequestError(format!("Failed to analyze pull impact: {}", e)))
+                    }
+                }
+            }
+            Err(e) => {
+                error!("Failed to check commits ahead/behind: {}", e);
+                Err(WorkerError::RequestError(format!("Failed to check commits ahead/behind: {}", e)))
+            }
+        }
+    }
+    
+    /// Analyze what objects would be affected by a pull
+    fn analyze_pull_impact(&self, repo: &GitRepository, upstream_branch: &str) -> Result<PullImpact, WorkerError> {
+        // Get the list of commits that would be pulled
+        let commits_to_pull = match repo.get_commits_between("HEAD", upstream_branch) {
+            Ok(commits) => commits,
+            Err(e) => {
+                error!("Failed to get commits between HEAD and {}: {}", upstream_branch, e);
+                return Err(WorkerError::RequestError(format!("Failed to get commits: {}", e)));
+            }
+        };
+        
+        let mut modified_objects = std::collections::HashSet::new();
+        let mut deleted_objects = std::collections::HashSet::new();
+        let mut renamed_objects = std::collections::HashSet::new();
+        
+        // Analyze each commit to see what objects it affects
+        for commit in commits_to_pull {
+            match repo.get_commit_changes(&commit.full_id) {
+                Ok(changes) => {
+                    for change in changes {
+                        if let Some(object_name) = self.extract_object_name_from_path(&change.path) {
+                            match change.status {
+                                ChangeStatus::Added | ChangeStatus::Modified => {
+                                    modified_objects.insert(object_name);
+                                }
+                                ChangeStatus::Deleted => {
+                                    deleted_objects.insert(object_name);
+                                }
+                                ChangeStatus::Renamed => {
+                                    if let Some(old_name) = change.old_path.as_ref() {
+                                        if let Some(old_object_name) = self.extract_object_name_from_path(old_name) {
+                                            renamed_objects.insert(format!("{} -> {}", old_object_name, object_name));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    error!("Failed to get changes for commit {}: {}", commit.full_id, e);
+                    // Continue with other commits
+                }
+            }
+        }
+        
+        Ok(PullImpact {
+            modified_objects: modified_objects.into_iter().collect(),
+            deleted_objects: deleted_objects.into_iter().collect(),
+            renamed_objects: renamed_objects.into_iter().collect(),
+        })
+    }
+    
+    /// Extract object name from file path (e.g., "objects/player.moo" -> "player")
+    fn extract_object_name_from_path(&self, path: &str) -> Option<String> {
+        if let Some(filename) = std::path::Path::new(path).file_name() {
+            if let Some(filename_str) = filename.to_str() {
+                if filename_str.ends_with(".moo") {
+                    return Some(filename_str.trim_end_matches(".moo").to_string());
+                }
+            }
+        }
+        None
+    }
+    
+    /// Rebase with automatic conflict resolution using object dump replay
+    fn rebase_with_auto_resolution(&self, repo: &GitRepository, upstream_branch: &str) -> Result<Vec<String>, WorkerError> {
+        info!("Starting rebase with automatic conflict resolution");
+        
+        // Get the list of commits to rebase
+        let commits_to_rebase = match repo.get_commits_between("HEAD", upstream_branch) {
+            Ok(commits) => commits,
+            Err(e) => {
+                error!("Failed to get commits to rebase: {}", e);
+                return Err(WorkerError::RequestError(format!("Failed to get commits: {}", e)));
+            }
+        };
+        
+        let mut modified_objects = Vec::new();
+        
+        // Replay each commit by loading object dumps and applying them
+        for commit in commits_to_rebase {
+            info!("Replaying commit: {} - {}", commit.id, commit.message);
+            
+            match self.replay_commit(repo, &commit) {
+                Ok(commit_modified) => {
+                    modified_objects.extend(commit_modified);
+                }
+                Err(e) => {
+                    error!("Failed to replay commit {}: {}", commit.id, e);
+                    return Err(WorkerError::RequestError(format!("Failed to replay commit {}: {}", commit.id, e)));
+                }
+            }
+        }
+        
+        // Perform the actual rebase
+        match repo.rebase_onto(upstream_branch) {
+            Ok(_) => {
+                info!("Successfully completed rebase");
+                Ok(modified_objects)
+            }
+            Err(e) => {
+                error!("Failed to complete rebase: {}", e);
+                Err(WorkerError::RequestError(format!("Failed to complete rebase: {}", e)))
+            }
+        }
+    }
+    
+    /// Replay a single commit by loading object dumps and applying them
+    fn replay_commit(&self, repo: &GitRepository, commit: &crate::vcs::types::CommitInfo) -> Result<Vec<String>, WorkerError> {
+        let mut modified_objects = Vec::new();
+        
+        // Get the changes in this commit
+        let changes = match repo.get_commit_changes(&commit.full_id) {
+            Ok(changes) => changes,
+            Err(e) => {
+                error!("Failed to get changes for commit {}: {}", commit.full_id, e);
+                return Err(WorkerError::RequestError(format!("Failed to get commit changes: {}", e)));
+            }
+        };
+        
+        // Process each change
+        for change in changes {
+            if let Some(object_name) = self.extract_object_name_from_path(&change.path) {
+                match change.status {
+                    ChangeStatus::Added | ChangeStatus::Modified => {
+                        // Load the object dump from the commit
+                        match repo.get_file_content_at_commit(&commit.full_id, &change.path) {
+                            Ok(content) => {
+                                // Parse and apply the object dump
+                                match self.object_handler.parse_object_dump(&content) {
+                                    Ok(mut object_def) => {
+                                        // Load current meta config
+                                        let meta_path = self.object_handler.meta_path(&object_name);
+                                        let meta_full_path = repo.work_dir().join(&meta_path);
+                                        let meta_config = match self.object_handler.load_or_create_meta_config(&meta_full_path) {
+                                            Ok(config) => config,
+                                            Err(e) => {
+                                                error!("Failed to load meta config for {}: {}", object_name, e);
+                                                continue;
+                                            }
+                                        };
+                                        
+                                        // Apply meta configuration filtering
+                                        self.object_handler.apply_meta_config(&mut object_def, &meta_config);
+                                        
+                                        // Convert back to dump format
+                                        match self.object_handler.to_dump(&object_def) {
+                                            Ok(filtered_dump) => {
+                                                // Write the filtered object
+                                                let objects_dir = self.object_handler.config.objects_directory();
+                                                let object_path = repo.work_dir().join(objects_dir).join(&format!("{}.moo", object_name));
+                                                
+                                                if let Err(e) = repo.write_file(&object_path, &filtered_dump) {
+                                                    error!("Failed to write object {}: {}", object_name, e);
+                                                    continue;
+                                                }
+                                                
+                                                // Add to git
+                                                if let Err(e) = repo.add_file(&object_path) {
+                                                    error!("Failed to add object {} to git: {}", object_name, e);
+                                                    continue;
+                                                }
+                                                
+                                                modified_objects.push(object_name.clone());
+                                                info!("Applied object dump for: {}", object_name);
+                                            }
+                                            Err(e) => {
+                                                error!("Failed to convert object {} to dump: {}", object_name, e);
+                                                continue;
+                                            }
+                                        }
+                                    }
+                                    Err(e) => {
+                                        error!("Failed to parse object dump for {}: {}", object_name, e);
+                                        continue;
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                error!("Failed to get file content for {}: {}", object_name, e);
+                                continue;
+                            }
+                        }
+                    }
+                    ChangeStatus::Deleted => {
+                        // Remove the object
+                        let object_name_clone = object_name.clone();
+                        if let Err(e) = self.object_handler.delete_object(repo, object_name, None) {
+                            error!("Failed to delete object {}: {}", object_name_clone, e);
+                            continue;
+                        }
+                        modified_objects.push(object_name_clone.clone());
+                        info!("Deleted object: {}", object_name_clone);
+                    }
+                    ChangeStatus::Renamed => {
+                        if let Some(old_path) = change.old_path {
+                            if let Some(old_object_name) = self.extract_object_name_from_path(&old_path) {
+                                let old_name_clone = old_object_name.clone();
+                                let new_name_clone = object_name.clone();
+                                if let Err(e) = self.object_handler.rename_object(repo, old_object_name, object_name) {
+                                    error!("Failed to rename object {} to {}: {}", old_name_clone, new_name_clone, e);
+                                    continue;
+                                }
+                                modified_objects.push(new_name_clone.clone());
+                                info!("Renamed object: {} -> {}", old_name_clone, new_name_clone);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        Ok(modified_objects)
     }
     
 }
