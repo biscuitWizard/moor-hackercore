@@ -277,9 +277,19 @@ impl VcsProcessor {
                         Ok(vec![v_str(&format!("Created and pushed commit: {}", message))])
                     }
                     Err(e) => {
-                        error!("Failed to push commit: {}", e);
-                        // Return success for commit but note the push failure
-                        Ok(vec![v_str(&format!("Created commit: {} (but push failed: {})", message, e))])
+                        error!("Failed to push commit: {}, rolling back commit", e);
+                        
+                        // Rollback the commit since push failed
+                        match repo.rollback_last_commit() {
+                            Ok(_) => {
+                                info!("Successfully rolled back commit after push failure");
+                                Err(WorkerError::RequestError(format!("Commit failed: push to remote failed ({}). Changes have been restored to staged state.", e)))
+                            }
+                            Err(rollback_error) => {
+                                error!("Failed to rollback commit after push failure: {}", rollback_error);
+                                Err(WorkerError::RequestError(format!("Commit failed: push to remote failed ({}). Additionally, rollback failed ({}). Repository may be in an inconsistent state.", e, rollback_error)))
+                            }
+                        }
                     }
                 }
             }

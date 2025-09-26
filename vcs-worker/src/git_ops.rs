@@ -1042,5 +1042,42 @@ impl GitRepository {
         Ok(())
     }
     
+    /// Rollback the last commit and restore files to staged state
+    /// This is used when a commit succeeds but push fails
+    pub fn rollback_last_commit(&self) -> Result<(), Box<dyn std::error::Error>> {
+        info!("Rolling back last commit");
+        
+        // Get the current HEAD commit
+        let head_commit = self.get_head_commit()?;
+        let head_oid = head_commit.id();
+        
+        // Get the parent commit (the one we want to reset to)
+        let parent_commit = match head_commit.parent(0) {
+            Ok(parent) => parent,
+            Err(_) => {
+                // If there's no parent, this is the first commit
+                // We need to reset to an empty state
+                info!("No parent commit found, resetting to empty state");
+                let mut index = self.repo.index()?;
+                index.clear()?;
+                index.write()?;
+                
+                // Reset HEAD to point to nothing (unborn branch state)
+                self.repo.set_head_detached(git2::Oid::zero())?;
+                return Ok(());
+            }
+        };
+        
+        let parent_oid = parent_commit.id();
+        info!("Rolling back from commit {} to {}", head_oid, parent_oid);
+        
+        // Reset HEAD to the parent commit (soft reset to keep changes staged)
+        let parent_obj = self.repo.find_object(parent_oid, None)?;
+        self.repo.reset(&parent_obj, git2::ResetType::Soft, None)?;
+        
+        info!("Successfully rolled back last commit");
+        Ok(())
+    }
+    
 }
 
