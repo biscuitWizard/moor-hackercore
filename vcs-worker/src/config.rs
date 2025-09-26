@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 
-/// Configuration for the VMS Worker
+/// Configuration for the VCS Worker
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     /// URL to clone the repository from instead of initializing an empty one
@@ -23,11 +23,11 @@ pub struct Config {
     pub debug: bool,
     
     /// Git user name for commits
-    /// Defaults to "vms-worker"
+    /// Defaults to "vcs-worker"
     pub git_user_name: String,
     
     /// Git user email for commits
-    /// Defaults to "vms-worker@system"
+    /// Defaults to "vcs-worker@system"
     pub git_user_email: String,
     
     /// Path to SSH private key for git authentication
@@ -42,8 +42,8 @@ impl Default for Config {
             repository_path: PathBuf::from("/game"),
             objects_directory: "objects".to_string(),
             debug: false,
-            git_user_name: "vms-worker".to_string(),
-            git_user_email: "vms-worker@system".to_string(),
+            git_user_name: "vcs-worker".to_string(),
+            git_user_email: "vcs-worker@system".to_string(),
             ssh_key_path: None,
         }
     }
@@ -55,83 +55,83 @@ impl Config {
         let mut config = Self::default();
         
         // Read repository URL from environment
-        if let Ok(repo_url) = env::var("VMS_REPOSITORY_URL") {
+        if let Ok(repo_url) = env::var("VCS_REPOSITORY_URL") {
             if !repo_url.trim().is_empty() {
                 config.repository_url = Some(repo_url.trim().to_string());
-                info!("Repository URL configured from VMS_REPOSITORY_URL: {}", repo_url);
+                info!("Repository URL configured from VCS_REPOSITORY_URL: {}", repo_url);
             } else {
-                warn!("VMS_REPOSITORY_URL is empty, will initialize empty repository");
+                warn!("VCS_REPOSITORY_URL is empty, will initialize empty repository");
             }
         } else {
-            info!("VMS_REPOSITORY_URL not set, will initialize empty repository");
+            info!("VCS_REPOSITORY_URL not set, will initialize empty repository");
         }
         
         // Read repository path from environment
-        if let Ok(repo_path) = env::var("VMS_REPOSITORY_PATH") {
+        if let Ok(repo_path) = env::var("VCS_REPOSITORY_PATH") {
             if !repo_path.trim().is_empty() {
                 config.repository_path = PathBuf::from(repo_path.trim());
-                info!("Repository path configured from VMS_REPOSITORY_PATH: {:?}", config.repository_path);
+                info!("Repository path configured from VCS_REPOSITORY_PATH: {:?}", config.repository_path);
             } else {
-                warn!("VMS_REPOSITORY_PATH is empty, using default: {:?}", config.repository_path);
+                warn!("VCS_REPOSITORY_PATH is empty, using default: {:?}", config.repository_path);
             }
         } else {
-            info!("VMS_REPOSITORY_PATH not set, using default: {:?}", config.repository_path);
+            info!("VCS_REPOSITORY_PATH not set, using default: {:?}", config.repository_path);
         }
         
         // Read objects directory from environment
-        if let Ok(objects_dir) = env::var("VMS_OBJECTS_DIRECTORY") {
+        if let Ok(objects_dir) = env::var("VCS_OBJECTS_DIRECTORY") {
             if !objects_dir.trim().is_empty() {
                 config.objects_directory = objects_dir.trim().to_string();
-                info!("Objects directory configured from VMS_OBJECTS_DIRECTORY: {}", config.objects_directory);
+                info!("Objects directory configured from VCS_OBJECTS_DIRECTORY: {}", config.objects_directory);
             } else {
-                warn!("VMS_OBJECTS_DIRECTORY is empty, using default: {}", config.objects_directory);
+                warn!("VCS_OBJECTS_DIRECTORY is empty, using default: {}", config.objects_directory);
             }
         } else {
-            info!("VMS_OBJECTS_DIRECTORY not set, using default: {}", config.objects_directory);
+            info!("VCS_OBJECTS_DIRECTORY not set, using default: {}", config.objects_directory);
         }
         
         // Read debug flag from environment
-        if let Ok(debug_str) = env::var("VMS_DEBUG") {
+        if let Ok(debug_str) = env::var("VCS_DEBUG") {
             config.debug = debug_str.to_lowercase() == "true" || debug_str == "1";
-            info!("Debug logging configured from VMS_DEBUG: {}", config.debug);
+            info!("Debug logging configured from VCS_DEBUG: {}", config.debug);
         } else {
-            info!("VMS_DEBUG not set, debug logging disabled");
+            info!("VCS_DEBUG not set, debug logging disabled");
         }
         
         // Read git user name from environment
-        if let Ok(git_user_name) = env::var("VMS_GIT_USER_NAME") {
+        if let Ok(git_user_name) = env::var("VCS_GIT_USER_NAME") {
             if !git_user_name.trim().is_empty() {
                 config.git_user_name = git_user_name.trim().to_string();
-                info!("Git user name configured from VMS_GIT_USER_NAME: {}", config.git_user_name);
+                info!("Git user name configured from VCS_GIT_USER_NAME: {}", config.git_user_name);
             } else {
-                warn!("VMS_GIT_USER_NAME is empty, using default: {}", config.git_user_name);
+                warn!("VCS_GIT_USER_NAME is empty, using default: {}", config.git_user_name);
             }
         } else {
-            info!("VMS_GIT_USER_NAME not set, using default: {}", config.git_user_name);
+            info!("VCS_GIT_USER_NAME not set, using default: {}", config.git_user_name);
         }
         
         // Read git user email from environment
-        if let Ok(git_user_email) = env::var("VMS_GIT_USER_EMAIL") {
+        if let Ok(git_user_email) = env::var("VCS_GIT_USER_EMAIL") {
             if !git_user_email.trim().is_empty() {
                 config.git_user_email = git_user_email.trim().to_string();
-                info!("Git user email configured from VMS_GIT_USER_EMAIL: {}", config.git_user_email);
+                info!("Git user email configured from VCS_GIT_USER_EMAIL: {}", config.git_user_email);
             } else {
-                warn!("VMS_GIT_USER_EMAIL is empty, using default: {}", config.git_user_email);
+                warn!("VCS_GIT_USER_EMAIL is empty, using default: {}", config.git_user_email);
             }
         } else {
-            info!("VMS_GIT_USER_EMAIL not set, using default: {}", config.git_user_email);
+            info!("VCS_GIT_USER_EMAIL not set, using default: {}", config.git_user_email);
         }
         
         // Read SSH key path from environment
-        if let Ok(ssh_key_path) = env::var("VMS_SSH_KEY_PATH") {
+        if let Ok(ssh_key_path) = env::var("VCS_SSH_KEY_PATH") {
             if !ssh_key_path.trim().is_empty() {
                 config.ssh_key_path = Some(ssh_key_path.trim().to_string());
-                info!("SSH key path configured from VMS_SSH_KEY_PATH: {}", ssh_key_path);
+                info!("SSH key path configured from VCS_SSH_KEY_PATH: {}", ssh_key_path);
             } else {
-                warn!("VMS_SSH_KEY_PATH is empty, will use default SSH key discovery");
+                warn!("VCS_SSH_KEY_PATH is empty, will use default SSH key discovery");
             }
         } else {
-            info!("VMS_SSH_KEY_PATH not set, will use default SSH key discovery");
+            info!("VCS_SSH_KEY_PATH not set, will use default SSH key discovery");
         }
         
         config
@@ -251,8 +251,8 @@ mod tests {
         assert_eq!(config.repository_path, PathBuf::from("/game"));
         assert_eq!(config.objects_directory, "objects");
         assert!(!config.debug);
-        assert_eq!(config.git_user_name, "vms-worker");
-        assert_eq!(config.git_user_email, "vms-worker@system");
+        assert_eq!(config.git_user_name, "vcs-worker");
+        assert_eq!(config.git_user_email, "vcs-worker@system");
         assert!(config.ssh_key_path.is_none());
         assert!(!config.should_clone_repository());
     }
@@ -261,13 +261,13 @@ mod tests {
     fn test_config_from_env() {
         // Set environment variables
         unsafe {
-            env::set_var("VMS_REPOSITORY_URL", "https://github.com/example/repo.git");
-            env::set_var("VMS_REPOSITORY_PATH", "/custom/path");
-            env::set_var("VMS_OBJECTS_DIRECTORY", "custom_objects");
-            env::set_var("VMS_DEBUG", "true");
-            env::set_var("VMS_GIT_USER_NAME", "test-user");
-            env::set_var("VMS_GIT_USER_EMAIL", "test@example.com");
-            env::set_var("VMS_SSH_KEY_PATH", "/path/to/key");
+            env::set_var("VCS_REPOSITORY_URL", "https://github.com/example/repo.git");
+            env::set_var("VCS_REPOSITORY_PATH", "/custom/path");
+            env::set_var("VCS_OBJECTS_DIRECTORY", "custom_objects");
+            env::set_var("VCS_DEBUG", "true");
+            env::set_var("VCS_GIT_USER_NAME", "test-user");
+            env::set_var("VCS_GIT_USER_EMAIL", "test@example.com");
+            env::set_var("VCS_SSH_KEY_PATH", "/path/to/key");
         }
         
         let config = Config::from_env();
@@ -283,13 +283,13 @@ mod tests {
         
         // Clean up
         unsafe {
-            env::remove_var("VMS_REPOSITORY_URL");
-            env::remove_var("VMS_REPOSITORY_PATH");
-            env::remove_var("VMS_OBJECTS_DIRECTORY");
-            env::remove_var("VMS_DEBUG");
-            env::remove_var("VMS_GIT_USER_NAME");
-            env::remove_var("VMS_GIT_USER_EMAIL");
-            env::remove_var("VMS_SSH_KEY_PATH");
+            env::remove_var("VCS_REPOSITORY_URL");
+            env::remove_var("VCS_REPOSITORY_PATH");
+            env::remove_var("VCS_OBJECTS_DIRECTORY");
+            env::remove_var("VCS_DEBUG");
+            env::remove_var("VCS_GIT_USER_NAME");
+            env::remove_var("VCS_GIT_USER_EMAIL");
+            env::remove_var("VCS_SSH_KEY_PATH");
         }
     }
     
@@ -297,13 +297,13 @@ mod tests {
     fn test_config_from_env_empty_values() {
         // Set empty environment variables
         unsafe {
-            env::set_var("VMS_REPOSITORY_URL", "");
-            env::set_var("VMS_REPOSITORY_PATH", "");
-            env::set_var("VMS_OBJECTS_DIRECTORY", "");
-            env::set_var("VMS_DEBUG", "false");
-            env::set_var("VMS_GIT_USER_NAME", "");
-            env::set_var("VMS_GIT_USER_EMAIL", "");
-            env::set_var("VMS_SSH_KEY_PATH", "");
+            env::set_var("VCS_REPOSITORY_URL", "");
+            env::set_var("VCS_REPOSITORY_PATH", "");
+            env::set_var("VCS_OBJECTS_DIRECTORY", "");
+            env::set_var("VCS_DEBUG", "false");
+            env::set_var("VCS_GIT_USER_NAME", "");
+            env::set_var("VCS_GIT_USER_EMAIL", "");
+            env::set_var("VCS_SSH_KEY_PATH", "");
         }
         
         let config = Config::from_env();
@@ -312,20 +312,20 @@ mod tests {
         assert_eq!(config.repository_path, PathBuf::from("/game")); // Should use default
         assert_eq!(config.objects_directory, "objects"); // Should use default
         assert!(!config.debug);
-        assert_eq!(config.git_user_name, "vms-worker"); // Should use default
-        assert_eq!(config.git_user_email, "vms-worker@system"); // Should use default
+        assert_eq!(config.git_user_name, "vcs-worker"); // Should use default
+        assert_eq!(config.git_user_email, "vcs-worker@system"); // Should use default
         assert!(config.ssh_key_path.is_none()); // Should use default
         assert!(!config.should_clone_repository());
         
         // Clean up
         unsafe {
-            env::remove_var("VMS_REPOSITORY_URL");
-            env::remove_var("VMS_REPOSITORY_PATH");
-            env::remove_var("VMS_OBJECTS_DIRECTORY");
-            env::remove_var("VMS_DEBUG");
-            env::remove_var("VMS_GIT_USER_NAME");
-            env::remove_var("VMS_GIT_USER_EMAIL");
-            env::remove_var("VMS_SSH_KEY_PATH");
+            env::remove_var("VCS_REPOSITORY_URL");
+            env::remove_var("VCS_REPOSITORY_PATH");
+            env::remove_var("VCS_OBJECTS_DIRECTORY");
+            env::remove_var("VCS_DEBUG");
+            env::remove_var("VCS_GIT_USER_NAME");
+            env::remove_var("VCS_GIT_USER_EMAIL");
+            env::remove_var("VCS_SSH_KEY_PATH");
         }
     }
 }

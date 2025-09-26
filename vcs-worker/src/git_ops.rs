@@ -4,7 +4,7 @@ use std::fs;
 use tracing::{info, warn, error};
 use crate::config::Config;
 
-/// Git repository wrapper for VMS operations
+/// Git repository wrapper for VCS operations
 pub struct GitRepository {
     repo: Repository,
     work_dir: PathBuf,
@@ -476,7 +476,7 @@ impl GitRepository {
     }
     
     /// Get information about the last commit
-    pub fn get_last_commit_info(&self) -> Result<Option<crate::vms::types::CommitInfo>, Box<dyn std::error::Error>> {
+    pub fn get_last_commit_info(&self) -> Result<Option<crate::vcs::types::CommitInfo>, Box<dyn std::error::Error>> {
         match self.get_head_commit() {
             Ok(commit) => {
                 let id = commit.id().to_string();
@@ -486,7 +486,7 @@ impl GitRepository {
                 let message = commit.message().unwrap_or("No message").to_string();
                 let author = commit.author().name().unwrap_or("Unknown").to_string();
                 
-                Ok(Some(crate::vms::types::CommitInfo {
+                Ok(Some(crate::vcs::types::CommitInfo {
                     id: short_id.to_string(),
                     full_id: id,
                     datetime: timestamp,
@@ -767,7 +767,7 @@ impl GitRepository {
     }
     
     /// Get paginated list of commits
-    pub fn get_commits(&self, limit: Option<usize>, offset: Option<usize>) -> Result<Vec<crate::vms::types::CommitInfo>, Box<dyn std::error::Error>> {
+    pub fn get_commits(&self, limit: Option<usize>, offset: Option<usize>) -> Result<Vec<crate::vcs::types::CommitInfo>, Box<dyn std::error::Error>> {
         let limit = limit.unwrap_or(5); // Default to 5 commits
         let offset = offset.unwrap_or(0); // Default to no offset
         
@@ -805,7 +805,7 @@ impl GitRepository {
             let message = commit.message().unwrap_or("No message").to_string();
             let author = commit.author().name().unwrap_or("Unknown").to_string();
             
-            commits.push(crate::vms::types::CommitInfo {
+            commits.push(crate::vcs::types::CommitInfo {
                 id: short_id.to_string(),
                 full_id: id,
                 datetime: timestamp,

@@ -1700,7 +1700,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "moor-vms-worker"
+name = "moor-vcs-worker"
 version = "0.9.0-alpha"
 dependencies = [
  "chrono",

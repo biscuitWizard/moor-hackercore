@@ -2,15 +2,15 @@ use tracing::{info, error};
 use moor_var::{Var, v_str};
 use crate::config::Config;
 use crate::git_ops::GitRepository;
-use super::types::VmsOperation;
+use super::types::VcsOperation;
 use super::repository_manager::RepositoryManager;
 use super::object_handler::ObjectHandler;
 use super::status_handler::StatusHandler;
 use super::meta_handler::MetaHandler;
 use moor_common::tasks::WorkerError;
 
-/// Process VMS operations
-pub struct VmsProcessor {
+/// Process VCS operations
+pub struct VcsProcessor {
     git_repo: Option<GitRepository>,
     config: Config,
     object_handler: ObjectHandler,
@@ -18,7 +18,7 @@ pub struct VmsProcessor {
     meta_handler: MetaHandler,
 }
 
-impl VmsProcessor {
+impl VcsProcessor {
     pub fn new() -> Self {
         let config = Config::from_env();
         let mut processor = Self { 
@@ -50,10 +50,10 @@ impl VmsProcessor {
         self.git_repo = repository_manager.initialize_repository();
     }
     
-    /// Process a VMS operation
-    pub fn process_operation(&mut self, operation: VmsOperation) -> Result<Vec<Var>, WorkerError> {
+    /// Process a VCS operation
+    pub fn process_operation(&mut self, operation: VcsOperation) -> Result<Vec<Var>, WorkerError> {
         match operation {            
-            VmsOperation::AddOrUpdateObject { object_dump, object_name } => {
+            VcsOperation::AddOrUpdateObject { object_dump, object_name } => {
                 if let Some(ref repo) = self.git_repo {
                     self.object_handler.add_object(repo, object_dump, object_name)
                 } else {
@@ -61,7 +61,7 @@ impl VmsProcessor {
                 }
             }
             
-            VmsOperation::DeleteObject { object_name } => {
+            VcsOperation::DeleteObject { object_name } => {
                 if let Some(ref repo) = self.git_repo {
                     self.object_handler.delete_object(repo, object_name, None)
                 } else {
@@ -69,7 +69,7 @@ impl VmsProcessor {
                 }
             }
             
-            VmsOperation::RenameObject { old_name, new_name } => {
+            VcsOperation::RenameObject { old_name, new_name } => {
                 if let Some(ref repo) = self.git_repo {
                     self.object_handler.rename_object(repo, old_name, new_name)
                 } else {
@@ -77,7 +77,7 @@ impl VmsProcessor {
                 }
             }
             
-            VmsOperation::Commit { message, author_name, author_email } => {
+            VcsOperation::Commit { message, author_name, author_email } => {
                 if let Some(ref repo) = self.git_repo {
                     self.create_commit(repo, message, author_name, author_email)
                 } else {
@@ -85,7 +85,7 @@ impl VmsProcessor {
                 }
             }
             
-            VmsOperation::Status => {
+            VcsOperation::Status => {
                 if let Some(ref repo) = self.git_repo {
                     self.status_handler.get_repository_status(repo, &self.config)
                 } else {
@@ -93,7 +93,7 @@ impl VmsProcessor {
                 }
             }
             
-            VmsOperation::ListObjects => {
+            VcsOperation::ListObjects => {
                 if let Some(ref repo) = self.git_repo {
                     self.object_handler.list_objects(repo)
                 } else {
@@ -101,7 +101,7 @@ impl VmsProcessor {
                 }
             }
             
-            VmsOperation::GetObjects { object_names } => {
+            VcsOperation::GetObjects { object_names } => {
                 if let Some(ref repo) = self.git_repo {
                     self.object_handler.get_objects(repo, object_names)
                 } else {
@@ -109,7 +109,7 @@ impl VmsProcessor {
                 }
             }
             
-            VmsOperation::GetCommits { limit, offset } => {
+            VcsOperation::GetCommits { limit, offset } => {
                 if let Some(ref repo) = self.git_repo {
                     self.get_commits(repo, limit, offset)
                 } else {
@@ -118,7 +118,7 @@ impl VmsProcessor {
             }
             
             // Credential management operations
-            VmsOperation::SetSshKey { key_content, key_name } => {
+            VcsOperation::SetSshKey { key_content, key_name } => {
                 info!("Setting SSH key: {} ({} bytes)", key_name, key_content.len());
                 
                 let keys_dir = self.config.keys_directory();
@@ -157,7 +157,7 @@ impl VmsProcessor {
                 Ok(vec![v_str(&format!("SSH key set successfully: {}", key_name))])
             }
             
-            VmsOperation::ClearSshKey => {
+            VcsOperation::ClearSshKey => {
                 info!("Clearing SSH key configuration");
                 self.config.clear_ssh_key();
                 
@@ -177,7 +177,7 @@ impl VmsProcessor {
                 Ok(vec![v_str("SSH key configuration cleared")])
             }
             
-            VmsOperation::SetGitUser { name, email } => {
+            VcsOperation::SetGitUser { name, email } => {
                 info!("Setting git user: {} <{}>", name, email);
                 match self.config.set_git_user(name, email) {
                     Ok(_) => {
@@ -200,7 +200,7 @@ impl VmsProcessor {
             }
             
             
-            VmsOperation::TestSshConnection => {
+            VcsOperation::TestSshConnection => {
                 info!("Testing SSH connection to remote repository");
                 if let Some(ref repo) = self.git_repo {
                     match repo.test_ssh_connection() {
@@ -219,7 +219,7 @@ impl VmsProcessor {
                 }
             }
             
-            VmsOperation::UpdateIgnoredProperties { object_name, properties } => {
+            VcsOperation::UpdateIgnoredProperties { object_name, properties } => {
                 if let Some(ref repo) = self.git_repo {
                     self.meta_handler.update_ignored_properties(repo, object_name, properties)
                 } else {
@@ -227,7 +227,7 @@ impl VmsProcessor {
                 }
             }
             
-            VmsOperation::UpdateIgnoredVerbs { object_name, verbs } => {
+            VcsOperation::UpdateIgnoredVerbs { object_name, verbs } => {
                 if let Some(ref repo) = self.git_repo {
                     self.meta_handler.update_ignored_verbs(repo, object_name, verbs)
                 } else {

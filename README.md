@@ -83,7 +83,7 @@ hackercore/
 │   ├── #1.moo                # Root object
 │   └── ...                   # Game objects
 ├── 📂 vendor/moor/           # mooR server implementation
-├── 📂 vms-worker/            # Custom worker processes
+├── 📂 vcs-worker/            # Custom worker processes
 └── 📂 db/                    # Database storage
 ```
 

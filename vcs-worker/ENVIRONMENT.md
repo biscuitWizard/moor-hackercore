@@ -1,77 +1,77 @@
-# VMS Worker Environment Variables
+# VCS Worker Environment Variables
 
-This document describes all environment variables that can be used to configure the vms-worker service.
+This document describes all environment variables that can be used to configure the vcs-worker service.
 
-## VMS-Specific Configuration
+## VCS-Specific Configuration
 
-### VMS_REPOSITORY_URL
+### VCS_REPOSITORY_URL
 **Type:** String (optional)  
 **Default:** None  
 **Description:** URL to clone the repository from instead of initializing an empty one. If not set, will initialize an empty repository.
 
 **Example:**
 ```bash
-export VMS_REPOSITORY_URL="https://github.com/example/moo-repo.git"
+export VCS_REPOSITORY_URL="https://github.com/example/moo-repo.git"
 ```
 
-### VMS_REPOSITORY_PATH
+### VCS_REPOSITORY_PATH
 **Type:** String (optional)  
 **Default:** `/game`  
 **Description:** Path where the git repository should be located.
 
 **Example:**
 ```bash
-export VMS_REPOSITORY_PATH="/custom/game/path"
+export VCS_REPOSITORY_PATH="/custom/game/path"
 ```
 
-### VMS_OBJECTS_DIRECTORY
+### VCS_OBJECTS_DIRECTORY
 **Type:** String (optional)  
 **Default:** `objects`  
 **Description:** Subdirectory within the repository where MOO and meta files should be stored.
 
 **Example:**
 ```bash
-export VMS_OBJECTS_DIRECTORY="moo_objects"
+export VCS_OBJECTS_DIRECTORY="moo_objects"
 ```
 
-### VMS_DEBUG
+### VCS_DEBUG
 **Type:** Boolean (optional)  
 **Default:** `false`  
 **Description:** Whether to enable debug logging. Accepts `true`, `1`, `false`, or `0`.
 
 **Example:**
 ```bash
-export VMS_DEBUG="true"
+export VCS_DEBUG="true"
 ```
 
-### VMS_GIT_USER_NAME
+### VCS_GIT_USER_NAME
 **Type:** String (optional)  
-**Default:** `vms-worker`  
+**Default:** `vcs-worker`  
 **Description:** Git user name for commits.
 
 **Example:**
 ```bash
-export VMS_GIT_USER_NAME="John Doe"
+export VCS_GIT_USER_NAME="John Doe"
 ```
 
-### VMS_GIT_USER_EMAIL
+### VCS_GIT_USER_EMAIL
 **Type:** String (optional)  
-**Default:** `vms-worker@system`  
+**Default:** `vcs-worker@system`  
 **Description:** Git user email for commits.
 
 **Example:**
 ```bash
-export VMS_GIT_USER_EMAIL="john@example.com"
+export VCS_GIT_USER_EMAIL="john@example.com"
 ```
 
-### VMS_SSH_KEY_PATH
+### VCS_SSH_KEY_PATH
 **Type:** String (optional)  
 **Default:** None  
 **Description:** Path to SSH private key for git authentication. If not set, will use default SSH key discovery.
 
 **Example:**
 ```bash
-export VMS_SSH_KEY_PATH="/path/to/private/key"
+export VCS_SSH_KEY_PATH="/path/to/private/key"
 ```
 
 ## RPC Configuration (Command Line Arguments)
@@ -112,41 +112,41 @@ The following are command line arguments that can also be set via environment va
 
 ### Development Environment
 ```bash
-export VMS_REPOSITORY_URL="https://github.com/your-org/moo-game.git"
-export VMS_REPOSITORY_PATH="/home/dev/moo-game"
-export VMS_OBJECTS_DIRECTORY="objects"
-export VMS_DEBUG="true"
-export VMS_GIT_USER_NAME="Developer"
-export VMS_GIT_USER_EMAIL="dev@example.com"
-export VMS_SSH_KEY_PATH="/home/dev/.ssh/id_ed25519"
+export VCS_REPOSITORY_URL="https://github.com/your-org/moo-game.git"
+export VCS_REPOSITORY_PATH="/home/dev/moo-game"
+export VCS_OBJECTS_DIRECTORY="objects"
+export VCS_DEBUG="true"
+export VCS_GIT_USER_NAME="Developer"
+export VCS_GIT_USER_EMAIL="dev@example.com"
+export VCS_SSH_KEY_PATH="/home/dev/.ssh/id_ed25519"
 ```
 
 ### Production Environment
 ```bash
-export VMS_REPOSITORY_URL="git@github.com:your-org/moo-game.git"
-export VMS_REPOSITORY_PATH="/game"
-export VMS_OBJECTS_DIRECTORY="objects"
-export VMS_DEBUG="false"
-export VMS_GIT_USER_NAME="VMS Worker"
-export VMS_GIT_USER_EMAIL="vms@yourdomain.com"
-export VMS_SSH_KEY_PATH="/etc/vms/keys/deploy_key"
+export VCS_REPOSITORY_URL="git@github.com:your-org/moo-game.git"
+export VCS_REPOSITORY_PATH="/game"
+export VCS_OBJECTS_DIRECTORY="objects"
+export VCS_DEBUG="false"
+export VCS_GIT_USER_NAME="VCS Worker"
+export VCS_GIT_USER_EMAIL="vcs@yourdomain.com"
+export VCS_SSH_KEY_PATH="/etc/vcs/keys/deploy_key"
 ```
 
 ### Docker Environment
 ```bash
-export VMS_REPOSITORY_URL="https://github.com/your-org/moo-game.git"
-export VMS_REPOSITORY_PATH="/app/game"
-export VMS_OBJECTS_DIRECTORY="objects"
-export VMS_DEBUG="false"
-export VMS_GIT_USER_NAME="Docker VMS"
-export VMS_GIT_USER_EMAIL="docker@yourdomain.com"
+export VCS_REPOSITORY_URL="https://github.com/your-org/moo-game.git"
+export VCS_REPOSITORY_PATH="/app/game"
+export VCS_OBJECTS_DIRECTORY="objects"
+export VCS_DEBUG="false"
+export VCS_GIT_USER_NAME="Docker VCS"
+export VCS_GIT_USER_EMAIL="docker@yourdomain.com"
 ```
 
 ## Security Considerations
 
 ### SSH Key Permissions
 - SSH keys should have permissions `600` or more restrictive
-- The vms-worker will validate key permissions and reject overly permissive keys
+- The vcs-worker will validate key permissions and reject overly permissive keys
 - Use dedicated deployment keys rather than personal SSH keys
 
 ### Repository Access
@@ -155,22 +155,22 @@ export VMS_GIT_USER_EMAIL="docker@yourdomain.com"
 - Consider using deploy tokens for GitHub/GitLab private repositories
 
 ### File System Permissions
-- Ensure the repository path is writable by the vms-worker process
+- Ensure the repository path is writable by the vcs-worker process
 - The objects directory will be created automatically if it doesn't exist
-- SSH key files should be readable only by the vms-worker process
+- SSH key files should be readable only by the vcs-worker process
 
 ## Validation and Defaults
 
 - Empty environment variables will trigger warnings and use default values
-- Invalid boolean values for `VMS_DEBUG` will default to `false`
+- Invalid boolean values for `VCS_DEBUG` will default to `false`
 - Non-existent SSH key paths will cause the worker to use default SSH key discovery
 - Repository paths that don't exist will be created automatically
 
 ## Logging
 
-The vms-worker logs configuration information at startup:
+The vcs-worker logs configuration information at startup:
 - Info level: Successful configuration from environment variables
 - Warning level: Empty environment variables (using defaults)
 - Error level: Configuration validation failures
 
-Enable debug logging with `VMS_DEBUG=true` to see detailed configuration information.
+Enable debug logging with `VCS_DEBUG=true` to see detailed configuration information.

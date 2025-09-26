@@ -12,7 +12,7 @@ use tokio::signal::unix::{SignalKind, signal};
 use tracing::{error, info};
 use uuid::Uuid;
 
-use moor_vms_worker::{VmsOperation, VmsProcessor, Config};
+use moor_vcs_worker::{VcsOperation, VcsProcessor, Config};
 
 // TODO: timeouts, and generally more error handling
 #[derive(Parser, Debug)]
@@ -34,7 +34,7 @@ async fn main() -> Result<(), eyre::Error> {
     
     moor_common::tracing::init_tracing(config.is_debug_enabled()).expect("Unable to configure logging");
 
-    let mut processor = VmsProcessor::with_config(config);
+    let mut processor = VcsProcessor::with_config(config);
 
     let mut hup_signal = match signal(SignalKind::hangup()) {
         Ok(signal) => signal,
@@ -69,9 +69,9 @@ async fn main() -> Result<(), eyre::Error> {
 
     let worker_response_rpc_addr = args.client_args.workers_response_address.clone();
     let worker_request_rpc_addr = args.client_args.workers_request_address.clone();
-    let worker_type = Symbol::mk("vms");
+    let worker_type = Symbol::mk("vcs");
     let ks = kill_switch.clone();
-    let perform_func = Arc::new(process_vms_request);
+    let perform_func = Arc::new(process_vcs_request);
     let worker_loop_thread = tokio::spawn(async move {
         if let Err(e) = worker_loop(
             &ks,
@@ -105,7 +105,7 @@ async fn main() -> Result<(), eyre::Error> {
     Ok(())
 }
 
-async fn process_vms_request(
+async fn process_vcs_request(
     _token: WorkerToken,
     _request_id: Uuid,
     _worker_type: Symbol,
@@ -125,7 +125,7 @@ async fn process_vms_request(
     })?;
 
     let config = Config::from_env();
-    let mut processor = VmsProcessor::with_config(config);
+    let mut processor = VcsProcessor::with_config(config);
     let operation = match operation_name.as_arc_string().to_lowercase().as_str() {
         "update_object" => {
             if arguments.len() < 3 {
@@ -158,7 +158,7 @@ async fn process_vms_request(
                 ));
             };
 
-            VmsOperation::AddOrUpdateObject { 
+            VcsOperation::AddOrUpdateObject { 
                 object_dump: object_dump.to_string(), 
                 object_name: object_name.to_string(),
             }
@@ -173,7 +173,7 @@ async fn process_vms_request(
             let object_name = arguments[1].as_string().ok_or_else(|| {
                 WorkerError::RequestError("Second argument must be a string (object_name)".to_string())
             })?;
-            VmsOperation::DeleteObject { 
+            VcsOperation::DeleteObject { 
                 object_name: object_name.to_string(),
             }
         }
@@ -190,7 +190,7 @@ async fn process_vms_request(
             let new_name = arguments[2].as_string().ok_or_else(|| {
                 WorkerError::RequestError("Third argument must be a string (new_name)".to_string())
             })?;
-            VmsOperation::RenameObject { 
+            VcsOperation::RenameObject { 
                 old_name: old_name.to_string(),
                 new_name: new_name.to_string(),
             }
@@ -206,16 +206,16 @@ async fn process_vms_request(
                 WorkerError::RequestError("Second argument must be a string (commit_message)".to_string())
             })?;
             let author_name = if arguments.len() > 2 {
-                arguments[2].as_string().unwrap_or_else(|| "vms-worker")
+                arguments[2].as_string().unwrap_or_else(|| "vcs-worker")
             } else {
-                "vms-worker"
+                "vcs-worker"
             };
             let author_email = if arguments.len() > 3 {
-                arguments[3].as_string().unwrap_or_else(|| "vms-worker@system")
+                arguments[3].as_string().unwrap_or_else(|| "vcs-worker@system")
             } else {
-                "vms-worker@system"
+                "vcs-worker@system"
             };
-            VmsOperation::Commit { 
+            VcsOperation::Commit { 
                 message: message.to_string(), 
                 author_name: author_name.to_string(), 
                 author_email: author_email.to_string() 
@@ -223,11 +223,11 @@ async fn process_vms_request(
         }
         
         "status" => {
-            VmsOperation::Status
+            VcsOperation::Status
         }
         
         "list_objects" => {
-            VmsOperation::ListObjects
+            VcsOperation::ListObjects
         }
         
         "get_objects" => {
@@ -245,7 +245,7 @@ async fn process_vms_request(
                 object_names.push(object_name.to_string());
             }
             
-            VmsOperation::GetObjects { object_names }
+            VcsOperation::GetObjects { object_names }
         }
         
         "get_commits" => {
@@ -261,7 +261,7 @@ async fn process_vms_request(
                 None
             };
             
-            VmsOperation::GetCommits { limit, offset }
+            VcsOperation::GetCommits { limit, offset }
         }
         
         // Credential management operations
@@ -277,14 +277,14 @@ async fn process_vms_request(
             let key_name = arguments[2].as_string().ok_or_else(|| {
                 WorkerError::RequestError("Third argument must be a string (key_name)".to_string())
             })?;
-            VmsOperation::SetSshKey { 
+            VcsOperation::SetSshKey { 
                 key_content: key_content.to_string(), 
                 key_name: key_name.to_string() 
             }
         }
         
         "clear_ssh_key" => {
-            VmsOperation::ClearSshKey
+            VcsOperation::ClearSshKey
         }
         
         "set_git_user" => {
@@ -299,7 +299,7 @@ async fn process_vms_request(
             let email = arguments[2].as_string().ok_or_else(|| {
                 WorkerError::RequestError("Third argument must be a string (email)".to_string())
             })?;
-            VmsOperation::SetGitUser { 
+            VcsOperation::SetGitUser { 
                 name: name.to_string(), 
                 email: email.to_string() 
             }
@@ -321,7 +321,7 @@ async fn process_vms_request(
                 })?;
                 properties.push(property.to_string());
             }
-            VmsOperation::UpdateIgnoredProperties { 
+            VcsOperation::UpdateIgnoredProperties { 
                 object_name: object_name.to_string(), 
                 properties 
             }
@@ -343,14 +343,14 @@ async fn process_vms_request(
                 })?;
                 verbs.push(verb.to_string());
             }
-            VmsOperation::UpdateIgnoredVerbs { 
+            VcsOperation::UpdateIgnoredVerbs { 
                 object_name: object_name.to_string(), 
                 verbs 
             }
         }
         
         "test_ssh" => {
-            VmsOperation::TestSshConnection
+            VcsOperation::TestSshConnection
         }
         
         _ => {
@@ -365,11 +365,11 @@ async fn process_vms_request(
     
     match result {
         Ok(vars) => {
-            info!("VMS operation succeeded");
+            info!("VCS operation succeeded");
             Ok(vars)
         }
         Err(e) => {
-            error!("VMS operation failed: {}", e);
+            error!("VCS operation failed: {}", e);
             Err(e)
         }
     }

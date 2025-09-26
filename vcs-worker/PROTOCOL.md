@@ -1,6 +1,6 @@
-# VMS Worker Protocol
+# VCS Worker Protocol
 
-This document describes the protocol for communicating with the vms-worker service. All operations are performed using the `worker_request` function with the worker type "vms".
+This document describes the protocol for communicating with the vcs-worker service. All operations are performed using the `worker_request` function with the worker type "vcs".
 
 ## Object Management Operations
 
@@ -8,7 +8,7 @@ This document describes the protocol for communicating with the vms-worker servi
 Add or update a MOO object file in the repository.
 
 ```lisp
-worker_request("vms", {"update_object", "object_name", {"line1", "line2", "line3"}})
+worker_request("vcs", {"update_object", "object_name", {"line1", "line2", "line3"}})
 ```
 
 **Parameters:**
@@ -19,7 +19,7 @@ worker_request("vms", {"update_object", "object_name", {"line1", "line2", "line3
 Remove a tracked MOO object file from the repository.
 
 ```lisp
-worker_request("vms", {"delete_object", "object_name"})
+worker_request("vcs", {"delete_object", "object_name"})
 ```
 
 **Parameters:**
@@ -27,14 +27,14 @@ worker_request("vms", {"delete_object", "object_name"})
 
 **Example:**
 ```lisp
-worker_request("vms", {"delete_object", "old_object"})
+worker_request("vcs", {"delete_object", "old_object"})
 ```
 
 ### rename_object
 Rename a tracked MOO object file.
 
 ```lisp
-worker_request("vms", {"rename_object", "old_name", "new_name"})
+worker_request("vcs", {"rename_object", "old_name", "new_name"})
 ```
 
 **Parameters:**
@@ -43,7 +43,7 @@ worker_request("vms", {"rename_object", "old_name", "new_name"})
 
 **Example:**
 ```lisp
-worker_request("vms", {"rename_object", "player.moo", "character.moo"})
+worker_request("vcs", {"rename_object", "player.moo", "character.moo"})
 ```
 
 ## Repository Operations
@@ -52,24 +52,24 @@ worker_request("vms", {"rename_object", "player.moo", "character.moo"})
 Create a commit with current changes.
 
 ```lisp
-worker_request("vms", {"commit", "commit_message", "author_name", "author_email"})
+worker_request("vcs", {"commit", "commit_message", "author_name", "author_email"})
 ```
 
 **Parameters:**
 - `commit_message` (string): Commit message (required)
-- `author_name` (string): Author name (optional, defaults to "vms-worker")
-- `author_email` (string): Author email (optional, defaults to "vms-worker@system")
+- `author_name` (string): Author name (optional, defaults to "vcs-worker")
+- `author_email` (string): Author email (optional, defaults to "vcs-worker@system")
 
 **Example:**
 ```lisp
-worker_request("vms", {"commit", "Added new player object", "John Doe", "john@example.com"})
+worker_request("vcs", {"commit", "Added new player object", "John Doe", "john@example.com"})
 ```
 
 ### status
 Get repository status information.
 
 ```lisp
-worker_request("vms", {"status"})
+worker_request("vcs", {"status"})
 ```
 
 **Returns:** Repository status including upstream info, last commit, current changes, and branch name.
@@ -78,7 +78,7 @@ worker_request("vms", {"status"})
 List all .moo objects with dependency ordering.
 
 ```lisp
-worker_request("vms", {"list_objects"})
+worker_request("vcs", {"list_objects"})
 ```
 
 **Returns:** List of all tracked MOO object files in dependency order.
@@ -87,7 +87,7 @@ worker_request("vms", {"list_objects"})
 Get full dump contents for specified object names.
 
 ```lisp
-worker_request("vms", {"get_objects", "object1", "object2", "object3"})
+worker_request("vcs", {"get_objects", "object1", "object2", "object3"})
 ```
 
 **Parameters:**
@@ -95,14 +95,14 @@ worker_request("vms", {"get_objects", "object1", "object2", "object3"})
 
 **Example:**
 ```lisp
-worker_request("vms", {"get_objects", "player.moo", "room.moo"})
+worker_request("vcs", {"get_objects", "player.moo", "room.moo"})
 ```
 
 ### get_commits
 Get paginated list of commits.
 
 ```lisp
-worker_request("vms", {"get_commits", limit, offset})
+worker_request("vcs", {"get_commits", limit, offset})
 ```
 
 **Parameters:**
@@ -111,7 +111,7 @@ worker_request("vms", {"get_commits", limit, offset})
 
 **Example:**
 ```lisp
-worker_request("vms", {"get_commits", 10, 0})
+worker_request("vcs", {"get_commits", 10, 0})
 ```
 
 ## Credential Management Operations
@@ -120,7 +120,7 @@ worker_request("vms", {"get_commits", 10, 0})
 Set SSH key for repository access.
 
 ```lisp
-worker_request("vms", {"set_ssh_key", "key_content", "key_name"})
+worker_request("vcs", {"set_ssh_key", "key_content", "key_name"})
 ```
 
 **Parameters:**
@@ -129,21 +129,21 @@ worker_request("vms", {"set_ssh_key", "key_content", "key_name"})
 
 **Example:**
 ```lisp
-worker_request("vms", {"set_ssh_key", "-----BEGIN OPENSSH PRIVATE KEY-----\n...", "deploy_key"})
+worker_request("vcs", {"set_ssh_key", "-----BEGIN OPENSSH PRIVATE KEY-----\n...", "deploy_key"})
 ```
 
 ### clear_ssh_key
 Remove the current SSH key.
 
 ```lisp
-worker_request("vms", {"clear_ssh_key"})
+worker_request("vcs", {"clear_ssh_key"})
 ```
 
 ### set_git_user
 Set Git user information for commits.
 
 ```lisp
-worker_request("vms", {"set_git_user", "name", "email"})
+worker_request("vcs", {"set_git_user", "name", "email"})
 ```
 
 **Parameters:**
@@ -152,14 +152,14 @@ worker_request("vms", {"set_git_user", "name", "email"})
 
 **Example:**
 ```lisp
-worker_request("vms", {"set_git_user", "John Doe", "john@example.com"})
+worker_request("vcs", {"set_git_user", "John Doe", "john@example.com"})
 ```
 
 ### test_ssh
 Test SSH connection to the repository.
 
 ```lisp
-worker_request("vms", {"test_ssh"})
+worker_request("vcs", {"test_ssh"})
 ```
 
 ## Meta File Operations
@@ -168,7 +168,7 @@ worker_request("vms", {"test_ssh"})
 Update the list of ignored properties for an object.
 
 ```lisp
-worker_request("vms", {"update_ignored_properties", "object_name", "prop1", "prop2", "prop3"})
+worker_request("vcs", {"update_ignored_properties", "object_name", "prop1", "prop2", "prop3"})
 ```
 
 **Parameters:**
@@ -177,14 +177,14 @@ worker_request("vms", {"update_ignored_properties", "object_name", "prop1", "pro
 
 **Example:**
 ```lisp
-worker_request("vms", {"update_ignored_properties", "player.moo", "last_login", "session_id"})
+worker_request("vcs", {"update_ignored_properties", "player.moo", "last_login", "session_id"})
 ```
 
 ### update_ignored_verbs
 Update the list of ignored verbs for an object.
 
 ```lisp
-worker_request("vms", {"update_ignored_verbs", "object_name", "verb1", "verb2", "verb3"})
+worker_request("vcs", {"update_ignored_verbs", "object_name", "verb1", "verb2", "verb3"})
 ```
 
 **Parameters:**
@@ -193,7 +193,7 @@ worker_request("vms", {"update_ignored_verbs", "object_name", "verb1", "verb2", 
 
 **Example:**
 ```lisp
-worker_request("vms", {"update_ignored_verbs", "player.moo", "login", "logout", "save"})
+worker_request("vcs", {"update_ignored_verbs", "player.moo", "login", "logout", "save"})
 ```
 
 ## Error Handling

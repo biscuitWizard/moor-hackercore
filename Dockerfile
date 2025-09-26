@@ -22,11 +22,11 @@ COPY ./vendor/moor/crates ./crates
 COPY ./vendor/moor/tools ./tools
 COPY ./vendor/moor/Cargo.toml ./Cargo.toml
 COPY ./vendor/moor/Cargo.lock ./Cargo.lock
-COPY ./vms-worker ./crates/vms-worker
+COPY ./vcs-worker ./crates/vcs-worker
 
-# Need to add vms-worker to the members to be compiled
-RUN sed -i 's/members = \[/members = [\"crates\/vms-worker\", /' ./Cargo.toml
-RUN sed -i 's/default-members = \[/default-members = [\"crates\/vms-worker\", /' ./Cargo.toml
+# Need to add vcs-worker to the members to be compiled
+RUN sed -i 's/members = \[/members = [\"crates\/vcs-worker\", /' ./Cargo.toml
+RUN sed -i 's/default-members = \[/default-members = [\"crates\/vcs-worker\", /' ./Cargo.toml
 
 # We bring this over so we can get the git hash via shadow-rs. A bit bloated, but oh well.
 COPY ./vendor/moor/.git ./.git
@@ -67,7 +67,7 @@ COPY --from=backend-build /moor-build/target/${BUILD_PROFILE}/moor-daemon /moor/
 COPY --from=backend-build /moor-build/target/${BUILD_PROFILE}/moor-web-host /moor/moor-web-host
 COPY --from=backend-build /moor-build/target/${BUILD_PROFILE}/moor-telnet-host /moor/moor-telnet-host
 COPY --from=backend-build /moor-build/target/${BUILD_PROFILE}/moor-curl-worker /moor/moor-curl-worker
-COPY --from=backend-build /moor-build/target/${BUILD_PROFILE}/moor-vms-worker /moor/moor-vms-worker
+COPY --from=backend-build /moor-build/target/${BUILD_PROFILE}/moor-vcs-worker /moor/moor-vcs-worker
 
 # The built web client static files from the frontend build
 COPY --from=frontend-build /moor-frontend/dist /moor/web-client

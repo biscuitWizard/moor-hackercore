@@ -101,22 +101,22 @@ services:
     networks:
       - moor_net
 
-  moor-vms-worker:
+  moor-vcs-worker:
     build:
       context: .
       target: backend
       network: host
       args:
         BUILD_PROFILE: ${BUILD_PROFILE:-debug}
-    container_name: "moor-vms-worker"
+    container_name: "moor-vcs-worker"
     environment:
       - RUST_BACKTRACE=1
-      - VMS_REPOSITORY_URL=git@github.com:biscuitWizard/moor-hackercore-core.git
+      - VCS_REPOSITORY_URL=git@github.com:biscuitWizard/moor-hackercore-core.git
     working_dir: /moor
     volumes:
       - ./game:/game
     command: >
-      ./moor-vms-worker 
+      ./moor-vcs-worker 
         --rpc-address=tcp://moor-daemon:7899 
         --events-address=tcp://moor-daemon:7898 
         --workers-request-address=tcp://moor-daemon:7896 

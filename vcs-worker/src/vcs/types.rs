@@ -1,7 +1,7 @@
 
-/// VMS operation types
+/// VCS operation types
 #[derive(Debug, Clone)]
-pub enum VmsOperation {    
+pub enum VcsOperation {    
     /// Add or update a MOO object file
     AddOrUpdateObject { 
         object_dump: String, 
