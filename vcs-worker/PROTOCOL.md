@@ -154,6 +154,22 @@ The pull operation uses a rebase strategy with automatic conflict resolution:
 
 This strategy ensures that conflicts are automatically resolved by always taking the remote version of object dumps, which is appropriate for MOO object files where the complete dump represents the authoritative state.
 
+### reset
+Reset the working tree to HEAD, discarding all uncommitted changes.
+
+```lisp
+worker_request("vcs", {"reset"})
+```
+
+**Returns:** Success message confirming that all changes have been discarded.
+
+**Example:**
+```lisp
+worker_request("vcs", {"reset"})
+```
+
+**Warning:** This operation permanently discards all uncommitted changes in the working tree. Use with caution.
+
 ## Credential Management Operations
 
 ### set_ssh_key

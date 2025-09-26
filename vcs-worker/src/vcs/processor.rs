@@ -243,6 +243,14 @@ impl VcsProcessor {
                 }
             }
             
+            VcsOperation::Reset => {
+                if let Some(ref repo) = self.git_repo {
+                    self.reset_working_tree(repo)
+                } else {
+                    Err(WorkerError::RequestError("Git repository not available at /game".to_string()))
+                }
+            }
+            
         }
     }
     
@@ -679,6 +687,22 @@ impl VcsProcessor {
         }
         
         Ok(modified_objects)
+    }
+    
+    /// Reset working tree, discarding all changes
+    fn reset_working_tree(&self, repo: &GitRepository) -> Result<Vec<Var>, WorkerError> {
+        info!("Resetting working tree, discarding all changes");
+        
+        match repo.reset_working_tree() {
+            Ok(_) => {
+                info!("Successfully reset working tree");
+                Ok(vec![v_str("Working tree reset - all changes discarded")])
+            }
+            Err(e) => {
+                error!("Failed to reset working tree: {}", e);
+                Err(WorkerError::RequestError(format!("Failed to reset working tree: {}", e)))
+            }
+        }
     }
     
 }

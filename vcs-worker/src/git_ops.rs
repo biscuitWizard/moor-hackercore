@@ -1084,5 +1084,21 @@ impl GitRepository {
         Ok(())
     }
     
+    /// Reset working tree to HEAD, discarding all changes
+    pub fn reset_working_tree(&self) -> Result<(), Box<dyn std::error::Error>> {
+        info!("Resetting working tree to HEAD");
+        
+        // Get the current HEAD commit
+        let head_commit = self.get_head_commit()?;
+        let head_oid = head_commit.id();
+        
+        // Reset the working tree to match HEAD (hard reset)
+        let head_obj = self.repo.find_object(head_oid, None)?;
+        self.repo.reset(&head_obj, git2::ResetType::Hard, None)?;
+        
+        info!("Successfully reset working tree to HEAD");
+        Ok(())
+    }
+    
 }
 

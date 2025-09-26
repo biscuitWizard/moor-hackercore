@@ -55,6 +55,9 @@ pub enum VcsOperation {
     
     /// Pull operation with rebase strategy
     Pull { dry_run: bool },
+    
+    /// Reset working tree, discarding all changes
+    Reset,
 }
 
 /// Comprehensive repository status information
