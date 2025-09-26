@@ -232,6 +232,11 @@ impl Config {
     pub fn keys_directory(&self) -> PathBuf {
         self.repository_path.join("keys")
     }
+    
+    /// Get meta directory path
+    pub fn meta_directory(&self) -> PathBuf {
+        self.repository_path.join("meta")
+    }
 }
 
 #[cfg(test)]

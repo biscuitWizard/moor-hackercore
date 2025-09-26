@@ -47,8 +47,11 @@ pub enum VmsOperation {
     SetSshKey { key_content: String, key_name: String },
     ClearSshKey,
     SetGitUser { name: String, email: String },
-    GetCredentialStatus,
     TestSshConnection,
+    
+    /// Meta file operations
+    UpdateIgnoredProperties { object_name: String, properties: Vec<String> },
+    UpdateIgnoredVerbs { object_name: String, verbs: Vec<String> },
 }
 
 /// Comprehensive repository status information

@@ -6,6 +6,7 @@ use super::types::VmsOperation;
 use super::repository_manager::RepositoryManager;
 use super::object_handler::ObjectHandler;
 use super::status_handler::StatusHandler;
+use super::meta_handler::MetaHandler;
 use moor_common::tasks::WorkerError;
 
 /// Process VMS operations
@@ -14,6 +15,7 @@ pub struct VmsProcessor {
     config: Config,
     object_handler: ObjectHandler,
     status_handler: StatusHandler,
+    meta_handler: MetaHandler,
 }
 
 impl VmsProcessor {
@@ -24,6 +26,7 @@ impl VmsProcessor {
             config: config.clone(),
             object_handler: ObjectHandler::new(config.clone()),
             status_handler: StatusHandler,
+            meta_handler: MetaHandler::new(config),
         };
         processor.initialize_repository();
         processor
@@ -35,6 +38,7 @@ impl VmsProcessor {
             config: config.clone(),
             object_handler: ObjectHandler::new(config.clone()),
             status_handler: StatusHandler,
+            meta_handler: MetaHandler::new(config),
         };
         processor.initialize_repository();
         processor
@@ -83,7 +87,7 @@ impl VmsProcessor {
             
             VmsOperation::Status => {
                 if let Some(ref repo) = self.git_repo {
-                    self.status_handler.get_repository_status(repo)
+                    self.status_handler.get_repository_status(repo, &self.config)
                 } else {
                     Err(WorkerError::RequestError("Git repository not available at /game".to_string()))
                 }
@@ -195,47 +199,6 @@ impl VmsProcessor {
                 }
             }
             
-            VmsOperation::GetCredentialStatus => {
-                info!("Getting credential status");
-                let mut status_lines = Vec::new();
-                status_lines.push(format!("Git user: {} <{}>", self.config.git_user_name(), self.config.git_user_email()));
-                
-                if let Some(key_path) = self.config.ssh_key_path() {
-                    status_lines.push(format!("SSH key: {}", key_path));
-                    info!("SSH key configured: {}", key_path);
-                } else {
-                    status_lines.push("SSH key: Not configured".to_string());
-                    info!("No SSH key configured");
-                }
-                
-                // Check keys directory
-                let keys_dir = self.config.keys_directory();
-                if keys_dir.exists() {
-                    let mut key_files = Vec::new();
-                    if let Ok(entries) = std::fs::read_dir(&keys_dir) {
-                        for entry in entries.flatten() {
-                            if let Some(file_name) = entry.file_name().to_str() {
-                                if file_name.starts_with("id_") {
-                                    key_files.push(file_name.to_string());
-                                }
-                            }
-                        }
-                    }
-                    if !key_files.is_empty() {
-                        status_lines.push(format!("Keys directory: {:?} (contains: {})", keys_dir, key_files.join(", ")));
-                        info!("Keys directory contains {} key files: {}", key_files.len(), key_files.join(", "));
-                    } else {
-                        status_lines.push(format!("Keys directory: {:?} (empty)", keys_dir));
-                        info!("Keys directory exists but is empty");
-                    }
-                } else {
-                    status_lines.push(format!("Keys directory: {:?} (does not exist)", keys_dir));
-                    info!("Keys directory does not exist");
-                }
-                
-                info!("Credential status retrieved successfully");
-                Ok(vec![v_str(&status_lines.join("\n"))])
-            }
             
             VmsOperation::TestSshConnection => {
                 info!("Testing SSH connection to remote repository");
@@ -253,6 +216,22 @@ impl VmsProcessor {
                 } else {
                     error!("Git repository not available for SSH test");
                     Err(WorkerError::RequestError("Git repository not available".to_string()))
+                }
+            }
+            
+            VmsOperation::UpdateIgnoredProperties { object_name, properties } => {
+                if let Some(ref repo) = self.git_repo {
+                    self.meta_handler.update_ignored_properties(repo, object_name, properties)
+                } else {
+                    Err(WorkerError::RequestError("Git repository not available at /game".to_string()))
+                }
+            }
+            
+            VmsOperation::UpdateIgnoredVerbs { object_name, verbs } => {
+                if let Some(ref repo) = self.git_repo {
+                    self.meta_handler.update_ignored_verbs(repo, object_name, verbs)
+                } else {
+                    Err(WorkerError::RequestError("Git repository not available at /game".to_string()))
                 }
             }
             

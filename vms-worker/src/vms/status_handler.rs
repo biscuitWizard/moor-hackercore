@@ -1,15 +1,16 @@
 use tracing::error;
 use moor_var::{Var, v_str, v_map, v_list, v_int};
 use crate::git_ops::GitRepository;
+use crate::config::Config;
 use moor_common::tasks::WorkerError;
 
 /// Handles repository status and commit information operations
 pub struct StatusHandler;
 
 impl StatusHandler {    
-    /// Get comprehensive repository status
-    pub fn get_repository_status(&self, repo: &GitRepository) -> Result<Vec<Var>, WorkerError> {
-        match self.collect_repository_status_vars(repo) {
+    /// Get comprehensive repository status including credentials
+    pub fn get_repository_status(&self, repo: &GitRepository, config: &Config) -> Result<Vec<Var>, WorkerError> {
+        match self.collect_repository_status_vars(repo, config) {
             Ok(status_pairs) => {
                 Ok(vec![v_map(&status_pairs)])
             }
@@ -21,7 +22,7 @@ impl StatusHandler {
     }
     
     /// Collect comprehensive repository status information as Var pairs
-    fn collect_repository_status_vars(&self, repo: &GitRepository) -> Result<Vec<(Var, Var)>, Box<dyn std::error::Error>> {
+    fn collect_repository_status_vars(&self, repo: &GitRepository, config: &Config) -> Result<Vec<(Var, Var)>, Box<dyn std::error::Error>> {
         let mut status_pairs = Vec::new();
         
         // Get current branch
@@ -109,6 +110,45 @@ impl StatusHandler {
             }
         }
         
+        // Add credential information
+        self.add_credential_status(&mut status_pairs, config);
+        
         Ok(status_pairs)
+    }
+    
+    /// Add credential status information to status pairs
+    fn add_credential_status(&self, status_pairs: &mut Vec<(Var, Var)>, config: &Config) {
+        // Git user information
+        status_pairs.push((v_str("git_user_name"), v_str(config.git_user_name())));
+        status_pairs.push((v_str("git_user_email"), v_str(config.git_user_email())));
+        
+        // SSH key information
+        if let Some(key_path) = config.ssh_key_path() {
+            status_pairs.push((v_str("ssh_key_path"), v_str(&key_path)));
+        } else {
+            status_pairs.push((v_str("ssh_key_path"), v_str("(not configured)")));
+        }
+        
+        // Keys directory information
+        let keys_dir = config.keys_directory();
+        if keys_dir.exists() {
+            let mut key_files = Vec::new();
+            if let Ok(entries) = std::fs::read_dir(&keys_dir) {
+                for entry in entries.flatten() {
+                    if let Some(file_name) = entry.file_name().to_str() {
+                        if file_name.starts_with("id_") {
+                            key_files.push(file_name.to_string());
+                        }
+                    }
+                }
+            }
+            if !key_files.is_empty() {
+                status_pairs.push((v_str("keys_directory"), v_str(&format!("{:?} (contains: {})", keys_dir, key_files.join(", ")))));
+            } else {
+                status_pairs.push((v_str("keys_directory"), v_str(&format!("{:?} (empty)", keys_dir))));
+            }
+        } else {
+            status_pairs.push((v_str("keys_directory"), v_str(&format!("{:?} (does not exist)", keys_dir))));
+        }
     }
 }

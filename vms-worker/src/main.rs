@@ -305,8 +305,48 @@ async fn process_vms_request(
             }
         }
         
-        "credential_status" => {
-            VmsOperation::GetCredentialStatus
+        "update_ignored_properties" => {
+            if arguments.len() < 3 {
+                return Err(WorkerError::RequestError(
+                    "update_ignored_properties requires object_name and at least one property".to_string(),
+                ));
+            }
+            let object_name = arguments[1].as_string().ok_or_else(|| {
+                WorkerError::RequestError("Second argument must be a string (object_name)".to_string())
+            })?;
+            let mut properties = Vec::new();
+            for i in 2..arguments.len() {
+                let property = arguments[i].as_string().ok_or_else(|| {
+                    WorkerError::RequestError(format!("Argument {} must be a string (property_name)", i + 1))
+                })?;
+                properties.push(property.to_string());
+            }
+            VmsOperation::UpdateIgnoredProperties { 
+                object_name: object_name.to_string(), 
+                properties 
+            }
+        }
+        
+        "update_ignored_verbs" => {
+            if arguments.len() < 3 {
+                return Err(WorkerError::RequestError(
+                    "update_ignored_verbs requires object_name and at least one verb".to_string(),
+                ));
+            }
+            let object_name = arguments[1].as_string().ok_or_else(|| {
+                WorkerError::RequestError("Second argument must be a string (object_name)".to_string())
+            })?;
+            let mut verbs = Vec::new();
+            for i in 2..arguments.len() {
+                let verb = arguments[i].as_string().ok_or_else(|| {
+                    WorkerError::RequestError(format!("Argument {} must be a string (verb_name)", i + 1))
+                })?;
+                verbs.push(verb.to_string());
+            }
+            VmsOperation::UpdateIgnoredVerbs { 
+                object_name: object_name.to_string(), 
+                verbs 
+            }
         }
         
         "test_ssh" => {
