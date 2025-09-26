@@ -120,11 +120,9 @@ impl ObjectHandler {
         // Create the objects directory path
         let objects_dir = self.config.objects_directory();
         let mut object_full_path = repo.work_dir().join(objects_dir).join(&object_name);
-        if let Some(ext) = object_full_path.extension() {
-            if ext == "moo" {
-                object_full_path.set_extension("moo");
-            }
-        } else {
+        
+        // Ensure the file has .moo extension
+        if !object_full_path.extension().map_or(false, |ext| ext == "moo") {
             object_full_path.set_extension("moo");
         }
 
