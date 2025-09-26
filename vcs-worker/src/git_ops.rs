@@ -1038,6 +1038,11 @@ impl GitRepository {
         let mut head_ref = self.repo.head()?;
         head_ref.set_target(current_commit.id(), "Rebase completed")?;
         
+        // Reset the working tree to match the new HEAD
+        // This ensures the working tree is clean after rebase
+        let head_obj = self.repo.find_object(current_commit.id(), None)?;
+        self.repo.reset(&head_obj, git2::ResetType::Hard, None)?;
+        
         info!("Successfully completed rebase onto {}", upstream_branch);
         Ok(())
     }
