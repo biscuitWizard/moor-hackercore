@@ -27,22 +27,6 @@ impl ObjectHandler {
         Self { config }
     }
 
-    /// Get the path for a .meta file corresponding to a .moo file in the objects directory
-    pub fn meta_path(&self, moo_path: &str) -> PathBuf {
-        let objects_dir = self.config.objects_directory();
-        let mut meta_path = PathBuf::from(objects_dir).join(moo_path);
-        
-        // Replace .moo extension with .meta
-        if let Some(ext) = meta_path.extension() {
-            if ext == "moo" {
-                meta_path.set_extension("meta");
-            }
-        } else {
-            meta_path.set_extension("meta");
-        }
-        
-        meta_path
-    }
 
     /// Load meta configuration from file, creating it with default values if it doesn't exist
     pub fn load_or_create_meta_config(&self, meta_path: &std::path::Path) -> Result<MetaConfig, Box<dyn std::error::Error>> {
@@ -93,8 +77,7 @@ impl ObjectHandler {
         };
         
         // Load or create meta configuration
-        let meta_relative_path = self.meta_path(&object_name);
-        let meta_full_path = repo.work_dir().join(&meta_relative_path);
+        let meta_full_path = PathUtils::object_meta_path(repo.work_dir(), &self.config, &object_name);
         let meta_config = match self.load_or_create_meta_config(&meta_full_path) {
             Ok(config) => {
                 info!("Successfully loaded/created meta config at: {:?}", meta_full_path);
@@ -119,13 +102,7 @@ impl ObjectHandler {
         };
         
         // Create the objects directory path
-        let objects_dir = self.config.objects_directory();
-        let mut object_full_path = repo.work_dir().join(objects_dir).join(&object_name);
-        
-        // Ensure the file has .moo extension
-        if !object_full_path.extension().map_or(false, |ext| ext == "moo") {
-            object_full_path.set_extension("moo");
-        }
+        let object_full_path = PathUtils::object_path(repo.work_dir(), &self.config, &object_name);
 
         if let Err(e) = repo.write_file(&object_full_path, &filtered_dump) {
             error!("Failed to write MOO object file: {}", e);
@@ -154,17 +131,14 @@ impl ObjectHandler {
         object_name: String,
         _commit_message: Option<String>,
     ) -> Result<Vec<Var>, WorkerError> {
-        let meta_path = self.meta_path(&object_name);
-        
         // Remove files from git
-        let objects_dir = self.config.objects_directory();
-        let object_full_path = repo.work_dir().join(objects_dir).join(&object_name);
+        let object_full_path = PathUtils::object_path(repo.work_dir(), &self.config, &object_name);
         if let Err(e) = repo.remove_file(&object_full_path) {
             error!("Failed to remove MOO file from git: {}", e);
             return Err(WorkerError::RequestError(format!("Failed to remove MOO file from git: {}", e)));
         }
         
-        let meta_full_path = repo.work_dir().join(&meta_path);
+        let meta_full_path = PathUtils::object_meta_path(repo.work_dir(), &self.config, &object_name);
         if repo.file_exists(&meta_full_path) {
             if let Err(e) = repo.remove_file(&meta_full_path) {
                 error!("Failed to remove meta file from git: {}", e);
@@ -184,22 +158,8 @@ impl ObjectHandler {
     ) -> Result<Vec<Var>, WorkerError> {
         info!("Renaming object from '{}' to '{}'", old_name, new_name);
         
-        // Ensure both names have .moo extension for file operations
-        let old_filename = if old_name.ends_with(".moo") {
-            old_name.clone()
-        } else {
-            format!("{}.moo", old_name)
-        };
-        
-        let new_filename = if new_name.ends_with(".moo") {
-            new_name.clone()
-        } else {
-            format!("{}.moo", new_name)
-        };
-        
-        let objects_dir = self.config.objects_directory();
-        let old_object_path = repo.work_dir().join(objects_dir).join(&old_filename);
-        let new_object_path = repo.work_dir().join(objects_dir).join(&new_filename);
+        let old_object_path = PathUtils::object_path(repo.work_dir(), &self.config, &old_name);
+        let new_object_path = PathUtils::object_path(repo.work_dir(), &self.config, &new_name);
         
         // Check if the old file exists
         if !repo.file_exists(&old_object_path) {
@@ -214,10 +174,8 @@ impl ObjectHandler {
         }
         
         // Handle meta files
-        let old_meta_path = self.meta_path(&old_name);
-        let new_meta_path = self.meta_path(&new_name);
-        let old_meta_full_path = repo.work_dir().join(&old_meta_path);
-        let new_meta_full_path = repo.work_dir().join(&new_meta_path);
+        let old_meta_full_path = PathUtils::object_meta_path(repo.work_dir(), &self.config, &old_name);
+        let new_meta_full_path = PathUtils::object_meta_path(repo.work_dir(), &self.config, &new_name);
         
         // Use git mv to rename the main object file
         if let Err(e) = repo.rename_file(&old_object_path, &new_object_path) {
@@ -376,7 +334,7 @@ impl ObjectHandler {
             info!("Processing object #{}: '{}'", index + 1, object_name);
             
             // Map object name to filename by adding .moo extension
-            let filename = format!("{}.moo", object_name);
+            let filename = PathUtils::ensure_moo_extension(object_name);
             let file_path = objects_path.join(&filename);
             
             info!("Looking for file: {:?}", file_path);

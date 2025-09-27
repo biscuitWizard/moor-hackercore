@@ -740,8 +740,7 @@ impl VcsProcessor {
                                 match self.object_handler.parse_object_dump(&content) {
                                     Ok(mut object_def) => {
                                         // Load current meta config
-                                        let meta_path = self.object_handler.meta_path(&object_name);
-                                        let meta_full_path = repo.work_dir().join(&meta_path);
+                                        let meta_full_path = PathUtils::object_meta_path(repo.work_dir(), &self.object_handler.config, &object_name);
                                         let meta_config = match self.object_handler.load_or_create_meta_config(&meta_full_path) {
                                             Ok(config) => config,
                                             Err(e) => {
@@ -757,8 +756,7 @@ impl VcsProcessor {
                                         match self.object_handler.to_dump(&object_def) {
                                             Ok(filtered_dump) => {
                                                 // Write the filtered object
-                                                let objects_dir = self.object_handler.config.objects_directory();
-                                                let object_path = repo.work_dir().join(objects_dir).join(&format!("{}.moo", object_name));
+                                                let object_path = PathUtils::object_path(repo.work_dir(), &self.object_handler.config, &object_name);
                                                 
                                                 if let Err(e) = repo.write_file(&object_path, &filtered_dump) {
                                                     error!("Failed to write object {}: {}", object_name, e);

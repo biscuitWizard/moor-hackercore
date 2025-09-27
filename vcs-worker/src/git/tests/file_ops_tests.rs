@@ -232,7 +232,7 @@ fn test_rename_nonexistent_file() {
 #[test]
 fn test_meta_path() {
     let moo_file = std::path::Path::new("objects/player.moo");
-    let meta_path = FileOps::meta_path(moo_file);
+    let meta_path = crate::utils::PathUtils::meta_path(moo_file);
     
     assert_eq!(meta_path, std::path::Path::new("objects/player.meta"));
 }
@@ -240,7 +240,7 @@ fn test_meta_path() {
 #[test]
 fn test_meta_path_no_extension() {
     let moo_file = std::path::Path::new("objects/player");
-    let meta_path = FileOps::meta_path(moo_file);
+    let meta_path = crate::utils::PathUtils::meta_path(moo_file);
     
     assert_eq!(meta_path, std::path::Path::new("objects/player.meta"));
 }
@@ -248,7 +248,7 @@ fn test_meta_path_no_extension() {
 #[test]
 fn test_meta_path_different_extension() {
     let other_file = std::path::Path::new("objects/player.txt");
-    let meta_path = FileOps::meta_path(other_file);
+    let meta_path = crate::utils::PathUtils::meta_path(other_file);
     
     assert_eq!(meta_path, std::path::Path::new("objects/player.txt.meta"));
 }

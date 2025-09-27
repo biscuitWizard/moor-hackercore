@@ -3,8 +3,8 @@ use moor_var::{Var, v_str};
 use crate::git::GitRepository;
 use crate::meta_config::MetaConfig;
 use crate::config::Config;
+use crate::utils::PathUtils;
 use moor_common::tasks::WorkerError;
-use std::path::PathBuf;
 
 /// Handles meta file operations for MOO objects
 pub struct MetaHandler {
@@ -26,8 +26,7 @@ impl MetaHandler {
     ) -> Result<Vec<Var>, WorkerError> {
         info!("Updating ignored properties for object: {}", object_name);
         
-        let meta_path = self.get_meta_path(&object_name);
-        let meta_full_path = repo.work_dir().join(&meta_path);
+        let meta_full_path = PathUtils::object_meta_path(repo.work_dir(), &self.config, &object_name);
         
         // Load existing meta config or create new one
         let mut meta_config = match MetaConfig::from_file(&meta_full_path) {
@@ -68,8 +67,7 @@ impl MetaHandler {
     ) -> Result<Vec<Var>, WorkerError> {
         info!("Updating ignored verbs for object: {}", object_name);
         
-        let meta_path = self.get_meta_path(&object_name);
-        let meta_full_path = repo.work_dir().join(&meta_path);
+        let meta_full_path = PathUtils::object_meta_path(repo.work_dir(), &self.config, &object_name);
         
         // Load existing meta config or create new one
         let mut meta_config = match MetaConfig::from_file(&meta_full_path) {
@@ -99,13 +97,5 @@ impl MetaHandler {
                 Err(WorkerError::RequestError(format!("Failed to save meta config: {}", e)))
             }
         }
-    }
-    
-    /// Get the meta file path for an object
-    fn get_meta_path(&self, object_name: &str) -> PathBuf {
-        let mut path = PathBuf::from(self.config.meta_directory());
-        path.push(object_name);
-        path.set_extension("meta");
-        path
     }
 }

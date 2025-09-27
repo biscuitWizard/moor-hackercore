@@ -3,9 +3,9 @@ use std::fs;
 use tracing::info;
 use git2::Repository;
 use crate::config::Config;
+use crate::utils::PathUtils;
 use crate::vcs::types::CommitInfo;
 
-use super::config::GitConfig;
 use super::utils::GitUtils;
 use super::operations::*;
 
@@ -13,7 +13,7 @@ use super::operations::*;
 pub struct GitRepository {
     repo: Repository,
     work_dir: PathBuf,
-    git_config: GitConfig,
+    config: Config,
 }
 
 impl GitRepository {
@@ -43,7 +43,7 @@ impl GitRepository {
         let git_repo = GitRepository { 
             repo, 
             work_dir, 
-            git_config: GitConfig::new(config),
+            config,
         };
         
         // Configure git user name and email
@@ -90,7 +90,7 @@ impl GitRepository {
         let git_repo = GitRepository { 
             repo, 
             work_dir, 
-            git_config: GitConfig::new(config),
+            config,
         };
         
         // Configure git user name and email
@@ -113,8 +113,8 @@ impl GitRepository {
     }
     
     /// Get the git configuration
-    pub fn git_config(&self) -> &GitConfig {
-        &self.git_config
+    pub fn config(&self) -> &Config {
+        &self.config
     }
     
     // File operations
@@ -147,7 +147,7 @@ impl GitRepository {
     }
     
     pub fn meta_path<P: AsRef<Path>>(&self, moo_path: P) -> PathBuf {
-        FileOps::meta_path(moo_path.as_ref())
+        PathUtils::meta_path(moo_path.as_ref())
     }
     
     // Commit operations
@@ -191,24 +191,24 @@ impl GitRepository {
     pub fn push(&self) -> Result<(), Box<dyn std::error::Error>> {
         RemoteOps::push(
             &self.repo,
-            self.git_config.ssh_key_path().map(|s| s.as_str()),
-            &self.git_config.keys_directory(),
+            self.config.ssh_key_path().map(|s| s.as_str()),
+            &self.config.keys_directory(),
         )
     }
     
     pub fn test_ssh_connection(&self) -> Result<(), Box<dyn std::error::Error>> {
         RemoteOps::test_ssh_connection(
             &self.repo,
-            self.git_config.ssh_key_path().map(|s| s.as_str()),
-            &self.git_config.keys_directory(),
+            self.config.ssh_key_path().map(|s| s.as_str()),
+            &self.config.keys_directory(),
         )
     }
     
     pub fn fetch_remote(&self) -> Result<(), Box<dyn std::error::Error>> {
         RemoteOps::fetch_remote(
             &self.repo,
-            self.git_config.ssh_key_path().map(|s| s.as_str()),
-            &self.git_config.keys_directory(),
+            self.config.ssh_key_path().map(|s| s.as_str()),
+            &self.config.keys_directory(),
         )
     }
     
@@ -237,8 +237,8 @@ impl GitRepository {
     pub fn configure_git_user(&self) -> Result<(), Box<dyn std::error::Error>> {
         GitUtils::configure_git_user(
             &self.repo,
-            self.git_config.git_user_name(),
-            self.git_config.git_user_email(),
+            self.config.git_user_name(),
+            self.config.git_user_email(),
         )
     }
 }

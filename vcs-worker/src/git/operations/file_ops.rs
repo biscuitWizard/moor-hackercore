@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::fs;
 use tracing::info;
 use git2::Repository;
@@ -175,19 +175,4 @@ impl FileOps {
         Ok(())
     }
     
-    /// Get the path for a .meta file corresponding to a .moo file
-    pub fn meta_path(moo_path: &Path) -> PathBuf {
-        let mut meta_path = moo_path.to_path_buf();
-        
-        // Replace .moo extension with .meta
-        if let Some(ext) = meta_path.extension() {
-            if ext == "moo" {
-                meta_path.set_extension("meta");
-            }
-        } else {
-            meta_path.set_extension("meta");
-        }
-        
-        meta_path
-    }
 }
