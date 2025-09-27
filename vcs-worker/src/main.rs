@@ -125,6 +125,8 @@ async fn process_vcs_request(
     })?;
 
     let config = Config::from_env();
+    info!("Main: Using repository path: {:?}", config.repository_path());
+    info!("Main: Using objects directory: {}", config.objects_directory());
     let mut processor = VcsProcessor::with_config(config);
     let operation_name_str = operation_name.as_arc_string().to_lowercase();
     info!("VCS Worker: Processing operation: '{}' with {} arguments", operation_name_str, arguments.len());

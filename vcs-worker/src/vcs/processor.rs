@@ -1,7 +1,7 @@
 use tracing::{info, error, warn};
 use moor_var::{Var, v_str};
 use crate::config::Config;
-use crate::git_ops::GitRepository;
+use crate::git::GitRepository;
 use super::types::{VcsOperation, PullImpact, ChangeStatus};
 use super::repository_manager::RepositoryManager;
 use super::object_handler::ObjectHandler;
@@ -46,12 +46,19 @@ impl VcsProcessor {
     
     /// Initialize the git repository using configuration
     pub fn initialize_repository(&mut self) {
+        info!("VcsProcessor: Initializing repository");
         let repository_manager = RepositoryManager::new(self.config.clone());
         self.git_repo = repository_manager.initialize_repository();
+        if self.git_repo.is_some() {
+            info!("VcsProcessor: Repository initialized successfully");
+        } else {
+            error!("VcsProcessor: Failed to initialize repository");
+        }
     }
     
     /// Process a VCS operation
     pub fn process_operation(&mut self, operation: VcsOperation) -> Result<Vec<Var>, WorkerError> {
+        info!("VcsProcessor: Processing operation: {:?}", operation);
         match operation {            
             VcsOperation::AddOrUpdateObject { object_dump, object_name } => {
                 if let Some(ref repo) = self.git_repo {
@@ -86,9 +93,12 @@ impl VcsProcessor {
             }
             
             VcsOperation::Status => {
+                info!("VcsProcessor: Processing Status operation");
                 if let Some(ref repo) = self.git_repo {
+                    info!("VcsProcessor: Git repository is available, calling status handler");
                     self.status_handler.get_repository_status(repo, &self.config)
                 } else {
+                    error!("VcsProcessor: Git repository not available at /game");
                     Err(WorkerError::RequestError("Git repository not available at /game".to_string()))
                 }
             }

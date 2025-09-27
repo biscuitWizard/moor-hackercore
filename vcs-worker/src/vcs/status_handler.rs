@@ -1,6 +1,6 @@
-use tracing::error;
+use tracing::{error, info};
 use moor_var::{Var, v_str, v_map, v_list, v_int};
-use crate::git_ops::GitRepository;
+use crate::git::GitRepository;
 use crate::config::Config;
 use moor_common::tasks::WorkerError;
 
@@ -10,12 +10,14 @@ pub struct StatusHandler;
 impl StatusHandler {    
     /// Get comprehensive repository status including credentials
     pub fn get_repository_status(&self, repo: &GitRepository, config: &Config) -> Result<Vec<Var>, WorkerError> {
+        info!("StatusHandler: Getting repository status");
         match self.collect_repository_status_vars(repo, config) {
             Ok(status_pairs) => {
+                info!("StatusHandler: Successfully collected {} status pairs", status_pairs.len());
                 Ok(vec![v_map(&status_pairs)])
             }
             Err(e) => {
-                error!("Failed to get repository status: {}", e);
+                error!("StatusHandler: Failed to get repository status: {}", e);
                 Err(WorkerError::RequestError(format!("Failed to get repository status: {}", e)))
             }
         }
@@ -23,12 +25,14 @@ impl StatusHandler {
     
     /// Collect comprehensive repository status information as Var pairs
     fn collect_repository_status_vars(&self, repo: &GitRepository, config: &Config) -> Result<Vec<(Var, Var)>, Box<dyn std::error::Error>> {
+        info!("StatusHandler: Collecting repository status variables");
         let mut status_pairs = Vec::new();
         
         // Get current branch
+        info!("StatusHandler: Getting current branch");
         match repo.get_current_branch() {
             Ok(Some(branch)) => {
-                status_pairs.push((v_str("current_branch"), v_str(&branch)));
+                status_pairs.push((v_str("current_branch"), v_str(branch.as_str())));
             }
             Ok(None) => {
                 status_pairs.push((v_str("current_branch"), v_str("(detached HEAD)")));
@@ -40,9 +44,10 @@ impl StatusHandler {
         }
         
         // Get upstream information
+        info!("StatusHandler: Getting upstream info");
         match repo.get_upstream_info() {
             Ok(Some(upstream)) => {
-                status_pairs.push((v_str("upstream"), v_str(&upstream)));
+                status_pairs.push((v_str("upstream"), v_str(upstream.as_str())));
             }
             Ok(None) => {
                 status_pairs.push((v_str("upstream"), v_str("(none)")));
@@ -54,6 +59,7 @@ impl StatusHandler {
         }
         
         // Get last commit information
+        info!("StatusHandler: Getting last commit info");
         match repo.get_last_commit_info() {
             Ok(Some(commit)) => {
                 status_pairs.push((v_str("last_commit_id"), v_str(&commit.id)));
@@ -80,6 +86,7 @@ impl StatusHandler {
         }
         
         // Get current changes
+        info!("StatusHandler: Getting repository status");
         match repo.status() {
             Ok(changes) => {
                 let change_list = if changes.is_empty() {

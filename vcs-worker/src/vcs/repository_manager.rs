@@ -1,6 +1,6 @@
 use tracing::{info, error, warn};
 use crate::config::Config;
-use crate::git_ops::GitRepository;
+use crate::git::GitRepository;
 
 /// Manages git repository initialization and ownership
 pub struct RepositoryManager {
@@ -15,13 +15,16 @@ impl RepositoryManager {
     /// Initialize the git repository using configuration
     pub fn initialize_repository(&self) -> Option<GitRepository> {
         let repo_path = self.config.repository_path();
+        info!("RepositoryManager: Initializing repository at path: {:?}", repo_path);
         
         // Check if the path exists and contains a git repository
         if repo_path.exists() && repo_path.join(".git").exists() {
+            info!("RepositoryManager: Found existing .git directory at {:?}", repo_path);
             // Chown the repository to current user first, before trying to open it
             self.chown_repository_to_current_user(&repo_path);
             
             // Try to open existing repository
+            info!("RepositoryManager: Attempting to open repository at absolute path: {:?}", repo_path.canonicalize().unwrap_or(repo_path.clone()));
             match GitRepository::open(&repo_path, self.config.clone()) {
                 Ok(repo) => {
                     info!("Opened existing git repository at {:?}", repo_path);

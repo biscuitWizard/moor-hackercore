@@ -1,6 +1,6 @@
 use tracing::{info, error};
 use moor_var::{Var, v_str};
-use crate::git_ops::GitRepository;
+use crate::git::GitRepository;
 use crate::meta_config::MetaConfig;
 use crate::config::Config;
 use moor_common::tasks::WorkerError;

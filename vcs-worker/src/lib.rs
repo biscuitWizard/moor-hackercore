@@ -1,11 +1,11 @@
 #![recursion_limit = "256"]
 
 pub mod config;
-pub mod git_ops;
+pub mod git;
 pub mod meta_config;
 pub mod vcs;
 pub use config::Config;
-pub use git_ops::GitRepository;
+pub use git::{GitRepository, GitChannel};
 pub use meta_config::MetaConfig;
 pub use vcs::{VcsOperation, VcsProcessor};
 pub use moor_objdef::{ObjectDefinitionLoader, dump_object, collect_object_definitions};

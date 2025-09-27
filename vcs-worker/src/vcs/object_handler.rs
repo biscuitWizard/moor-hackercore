@@ -5,7 +5,7 @@ use moor_compiler::{ObjectDefinition, CompileOptions};
 use moor_objdef::dump_object;
 use moor_var::{Var, v_str, v_map};
 use crate::config::Config;
-use crate::git_ops::GitRepository;
+use crate::git::GitRepository;
 use crate::meta_config::MetaConfig;
 use moor_common::tasks::WorkerError;
 
