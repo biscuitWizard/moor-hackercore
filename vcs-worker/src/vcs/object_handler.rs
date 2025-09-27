@@ -7,6 +7,7 @@ use moor_var::{Var, v_str, v_map};
 use crate::config::Config;
 use crate::git::GitRepository;
 use crate::meta_config::MetaConfig;
+use crate::utils::PathUtils;
 use moor_common::tasks::WorkerError;
 
 /// Information about a .moo file
@@ -460,16 +461,18 @@ impl ObjectHandler {
         for file_path in moo_files {
             if let Ok(obj_defs) = self.parse_moo_file_internal(file_path) {
                 if let Ok(content) = std::fs::read_to_string(file_path) {
-                    let filename = file_path.file_name()
-                        .unwrap_or_default()
-                        .to_string_lossy()
-                        .to_string();
-                    
-                    // Remove .moo extension from filename
-                    let filename_without_ext = if filename.ends_with(".moo") {
-                        filename.trim_end_matches(".moo").to_string()
+                    let filename_without_ext = if let Some(path_str) = file_path.to_str() {
+                        PathUtils::extract_object_name_from_path(path_str).unwrap_or_else(|| {
+                            file_path.file_name()
+                                .unwrap_or_default()
+                                .to_string_lossy()
+                                .to_string()
+                        })
                     } else {
-                        filename
+                        file_path.file_name()
+                            .unwrap_or_default()
+                            .to_string_lossy()
+                            .to_string()
                     };
                     
                     let byte_size = content.len();

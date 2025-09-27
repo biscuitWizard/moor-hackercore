@@ -3,6 +3,7 @@
 pub mod config;
 pub mod git;
 pub mod meta_config;
+pub mod utils;
 pub mod vcs;
 pub use config::Config;
 pub use git::{GitRepository, GitChannel};

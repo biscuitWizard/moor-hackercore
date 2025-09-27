@@ -2,6 +2,7 @@ use tracing::{info, error, warn};
 use moor_var::{Var, v_str};
 use crate::config::Config;
 use crate::git::GitRepository;
+use crate::utils::PathUtils;
 use super::types::{VcsOperation, PullImpact, ChangeStatus};
 use super::object_handler::ObjectHandler;
 use super::status_handler::StatusHandler;
@@ -637,7 +638,7 @@ impl VcsProcessor {
             match repo.get_commit_changes(&commit.full_id) {
                 Ok(changes) => {
                     for change in changes {
-                        if let Some(object_name) = self.extract_object_name_from_path(&change.path) {
+                        if let Some(object_name) = PathUtils::extract_object_name_from_path(&change.path) {
                             match change.status {
                                 ChangeStatus::Added | ChangeStatus::Modified => {
                                     modified_objects.insert(object_name);
@@ -647,7 +648,7 @@ impl VcsProcessor {
                                 }
                                 ChangeStatus::Renamed => {
                                     if let Some(old_name) = change.old_path.as_ref() {
-                                        if let Some(old_object_name) = self.extract_object_name_from_path(old_name) {
+                                        if let Some(old_object_name) = PathUtils::extract_object_name_from_path(old_name) {
                                             renamed_objects.insert(format!("{} -> {}", old_object_name, object_name));
                                         }
                                     }
@@ -670,17 +671,6 @@ impl VcsProcessor {
         })
     }
     
-    /// Extract object name from file path (e.g., "objects/player.moo" -> "player")
-    fn extract_object_name_from_path(&self, path: &str) -> Option<String> {
-        if let Some(filename) = std::path::Path::new(path).file_name() {
-            if let Some(filename_str) = filename.to_str() {
-                if filename_str.ends_with(".moo") {
-                    return Some(filename_str.trim_end_matches(".moo").to_string());
-                }
-            }
-        }
-        None
-    }
     
     /// Rebase with automatic conflict resolution using object dump replay
     fn rebase_with_auto_resolution(&self, repo: &GitRepository, upstream_branch: &str) -> Result<Vec<String>, WorkerError> {
@@ -740,7 +730,7 @@ impl VcsProcessor {
         
         // Process each change
         for change in changes {
-            if let Some(object_name) = self.extract_object_name_from_path(&change.path) {
+            if let Some(object_name) = PathUtils::extract_object_name_from_path(&change.path) {
                 match change.status {
                     ChangeStatus::Added | ChangeStatus::Modified => {
                         // Load the object dump from the commit
@@ -814,7 +804,7 @@ impl VcsProcessor {
                     }
                     ChangeStatus::Renamed => {
                         if let Some(old_path) = change.old_path {
-                            if let Some(old_object_name) = self.extract_object_name_from_path(&old_path) {
+                            if let Some(old_object_name) = PathUtils::extract_object_name_from_path(&old_path) {
                                 let old_name_clone = old_object_name.clone();
                                 let new_name_clone = object_name.clone();
                                 if let Err(e) = self.object_handler.rename_object(repo, old_object_name, object_name) {
