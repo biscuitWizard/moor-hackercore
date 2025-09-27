@@ -108,13 +108,34 @@ pub enum ChangeStatus {
     Renamed,
 }
 
-/// Impact analysis for a pull operation
+/// Detailed pull result information
 #[derive(Debug, Clone)]
-pub struct PullImpact {
-    /// Objects that would be modified
-    pub modified_objects: Vec<String>,
-    /// Objects that would be deleted
-    pub deleted_objects: Vec<String>,
-    /// Objects that would be renamed
-    pub renamed_objects: Vec<String>,
+pub struct PullResult {
+    /// Objects that were modified (as v_obj types)
+    pub modified_objects: Vec<moor_var::Obj>,
+    /// Objects that were deleted (as v_obj types)
+    pub deleted_objects: Vec<moor_var::Obj>,
+    /// Objects that were added (as v_obj types)
+    pub added_objects: Vec<moor_var::Obj>,
+    /// Objects that were renamed (as v_obj types)
+    pub renamed_objects: Vec<moor_var::Obj>,
+    /// Detailed changes for each object
+    pub changes: Vec<ObjectChanges>,
+    /// Commits that were pulled
+    pub commits_behind: Vec<CommitInfo>,
+}
+
+/// Changes to a specific object
+#[derive(Debug, Clone)]
+pub struct ObjectChanges {
+    /// Object ID
+    pub obj_id: moor_var::Obj,
+    /// Modified verbs (added or modified)
+    pub modified_verbs: Vec<String>,
+    /// Modified properties (added or modified)
+    pub modified_props: Vec<String>,
+    /// Deleted verbs
+    pub deleted_verbs: Vec<String>,
+    /// Deleted properties
+    pub deleted_props: Vec<String>,
 }

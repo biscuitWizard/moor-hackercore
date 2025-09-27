@@ -1,4 +1,4 @@
-use tracing::info;
+use tracing::{info, error};
 use git2::{Repository, Commit, Signature, ResetType};
 use crate::vcs::types::{CommitInfo, CommitChange, ChangeStatus};
 
@@ -380,5 +380,85 @@ impl CommitOps {
         
         info!("Successfully rolled back last commit");
         Ok(())
+    }
+    
+    /// Create a commit with push workflow (check for remote commits, abort if behind)
+    pub fn create_commit_with_push(
+        git_repo: &crate::git::GitRepository,
+        message: &str,
+        author_name: &str,
+        author_email: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        // First, fetch remote changes to check if we're behind
+        info!("Fetching remote changes to check if we're behind");
+        match git_repo.fetch_remote() {
+            Ok(_) => {
+                info!("Successfully fetched from remote");
+            }
+            Err(e) => {
+                error!("Failed to fetch from remote: {}", e);
+                return Err(format!("Failed to fetch from remote: {}", e).into());
+            }
+        }
+        
+        // Check if we're behind remote commits
+        let current_branch = match git_repo.get_current_branch()? {
+            Some(branch) => branch,
+            None => {
+                error!("No current branch found");
+                return Err("No current branch found".into());
+            }
+        };
+        
+        let upstream_branch = format!("origin/{}", current_branch);
+        info!("Current branch: {}, upstream: {}", current_branch, upstream_branch);
+        
+        // Check if there are any commits to pull
+        match git_repo.get_commits_ahead_behind(&current_branch, &upstream_branch) {
+            Ok((_ahead, behind)) => {
+                if behind > 0 {
+                    error!("Repository is {} commits behind remote. Aborting commit to prevent conflicts.", behind);
+                    return Err(format!("Repository is {} commits behind remote. Please pull remote changes before committing.", behind).into());
+                }
+                info!("Repository is up to date with remote");
+            }
+            Err(e) => {
+                error!("Failed to check commits ahead/behind: {}", e);
+                return Err(format!("Failed to check commits ahead/behind: {}", e).into());
+            }
+        }
+        
+        match git_repo.commit(message, author_name, author_email) {
+            Ok(_) => {
+                info!("Created commit: {}", message);
+                
+                // Now push the commit to the remote
+                match git_repo.push() {
+                    Ok(_) => {
+                        info!("Successfully pushed commit to remote");
+                        Ok(())
+                    }
+                    Err(e) => {
+                        error!("Failed to push commit: {}, rolling back commit", e);
+                        
+                        // Rollback the commit since push failed
+                        match git_repo.rollback_last_commit() {
+                            Ok(_) => {
+                                info!("Successfully rolled back commit after push failure");
+                                Err(format!("Commit failed: push to remote failed ({}). Changes have been restored to staged state.", e).into())
+                            }
+                            Err(rollback_error) => {
+                                error!("Failed to rollback commit after push failure: {}", rollback_error);
+                                Err(format!("Commit failed: push to remote failed ({}). Additionally, rollback failed ({}). Repository may be in an inconsistent state.", e, rollback_error).into())
+                            }
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                error!("Failed to create commit: {}", e);
+                Err(format!("Failed to create commit: {}", e).into())
+            }
+        }
     }
 }

@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use tracing::{info, error};
+use tracing::{info, error, warn};
 use git2::{Repository, ResetType};
 
 /// Status operations for git repositories
@@ -181,6 +181,53 @@ impl StatusOps {
                     error!("Failed to get HEAD commit: {}", e);
                     Err(e)
                 }
+            }
+        }
+    }
+    
+    /// Reset working tree with verification and detailed status reporting
+    pub fn reset_working_tree_with_verification(repo: &Repository, work_dir: &std::path::Path) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+        info!("Starting reset working tree operation with verification");
+        
+        // Check repository status before reset
+        match Self::get_status(repo, work_dir) {
+            Ok(changes) => {
+                if changes.is_empty() {
+                    info!("No changes to discard, working tree is already clean");
+                    return Ok(vec!["Working tree is already clean - no changes to discard".to_string()]);
+                } else {
+                    info!("Found {} changes to discard: {:?}", changes.len(), changes);
+                }
+            }
+            Err(e) => {
+                warn!("Could not check repository status before reset: {}", e);
+            }
+        }
+        
+        match Self::reset_working_tree(repo, work_dir) {
+            Ok(_) => {
+                info!("Successfully reset working tree");
+                
+                // Verify the reset worked
+                match Self::get_status(repo, work_dir) {
+                    Ok(changes) => {
+                        if changes.is_empty() {
+                            info!("Reset verification successful - working tree is now clean");
+                            Ok(vec!["Working tree reset - all changes discarded".to_string()])
+                        } else {
+                            warn!("Reset completed but {} changes remain: {:?}", changes.len(), changes);
+                            Ok(vec![format!("Working tree reset completed, but {} changes remain", changes.len())])
+                        }
+                    }
+                    Err(e) => {
+                        warn!("Could not verify reset status: {}", e);
+                        Ok(vec!["Working tree reset completed (verification failed)".to_string()])
+                    }
+                }
+            }
+            Err(e) => {
+                error!("Failed to reset working tree: {}", e);
+                Err(format!("Failed to reset working tree: {}", e).into())
             }
         }
     }
