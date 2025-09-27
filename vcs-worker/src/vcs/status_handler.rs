@@ -9,12 +9,12 @@ pub struct StatusHandler;
 
 impl StatusHandler {    
     /// Get comprehensive repository status including credentials
-    pub fn get_repository_status(&self, repo: &GitRepository, config: &Config) -> Result<Vec<Var>, WorkerError> {
+    pub fn get_repository_status(&self, repo: &GitRepository, config: &Config) -> Result<Var, WorkerError> {
         info!("StatusHandler: Getting repository status");
         match self.collect_repository_status_vars(repo, config) {
             Ok(status_pairs) => {
                 info!("StatusHandler: Successfully collected {} status pairs", status_pairs.len());
-                Ok(vec![v_map(&status_pairs)])
+                Ok(v_map(&status_pairs))
             }
             Err(e) => {
                 error!("StatusHandler: Failed to get repository status: {}", e);

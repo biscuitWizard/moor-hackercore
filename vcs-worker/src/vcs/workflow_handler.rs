@@ -544,7 +544,7 @@ impl WorkflowHandler {
         message: String,
         author_name: String,
         author_email: String,
-    ) -> Result<Vec<Var>, WorkerError> {
+    ) -> Result<Var, WorkerError> {
         use crate::git::operations::commit_ops::CommitOps;
         
         match CommitOps::create_commit_with_push(
@@ -555,7 +555,7 @@ impl WorkflowHandler {
         ) {
             Ok(_) => {
                 info!("Successfully completed commit workflow");
-                Ok(vec![v_str(&format!("Created and pushed commit: {}", message))])
+                Ok(v_str(&format!("Created and pushed commit: {}", message)))
             }
             Err(e) => {
                 error!("Failed to execute commit workflow: {}", e);
@@ -569,7 +569,7 @@ impl WorkflowHandler {
         &self,
         repo: &GitRepository,
         dry_run: bool,
-    ) -> Result<Vec<Var>, WorkerError> {
+    ) -> Result<Var, WorkerError> {
         use crate::git::operations::pull_ops::PullOps;
         
         match PullOps::pull_with_rebase(repo.repo(), &self.object_handler.config, dry_run) {
@@ -578,7 +578,7 @@ impl WorkflowHandler {
                     info!("Successfully analyzed pull impact for dry run");
                     // For dry run, we need to do the analysis without executing
                     self.analyze_pull_impact_dry_run(repo, "origin/main", &[])
-                        .map(|result| self.pull_result_to_moo_vars(result))
+                        .map(|result| v_list(&self.pull_result_to_moo_vars(result)))
                 } else {
                     info!("Successfully completed pull workflow");
                     // Return empty result for now - could be enhanced to return actual changes
@@ -590,7 +590,7 @@ impl WorkflowHandler {
                         changes: Vec::new(),
                         commits_behind: Vec::new(),
                     };
-                    Ok(self.pull_result_to_moo_vars(empty_result))
+                    Ok(v_list(&self.pull_result_to_moo_vars(empty_result)))
                 }
             }
             Err(e) => {

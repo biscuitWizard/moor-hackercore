@@ -1,5 +1,5 @@
 use tracing::{info, error, warn};
-use moor_var::{Var, v_str};
+use moor_var::{Var, v_str, v_list};
 use crate::config::Config;
 use crate::git::GitRepository;
 use crate::error_utils::ErrorUtils;
@@ -74,7 +74,7 @@ impl VcsProcessor {
     
     
     /// Process a VCS operation
-    pub fn process_operation(&mut self, operation: VcsOperation) -> Result<Vec<Var>, WorkerError> {
+    pub fn process_operation(&mut self, operation: VcsOperation) -> Result<Var, WorkerError> {
         info!("VcsProcessor: Processing operation: {:?}", operation);
         match operation {            
             VcsOperation::AddOrUpdateObject { object_dump, object_name } => {
@@ -157,7 +157,7 @@ impl VcsProcessor {
                             }
                             
                             info!("Retrieved {} commits", result.len());
-                            Ok(result)
+                            Ok(v_list(&result))
                         }
                         Err(e) => {
                             error!("Failed to get commits: {}", e);
@@ -206,7 +206,7 @@ impl VcsProcessor {
                 }
                 
                 info!("SSH key set successfully: {} at {:?}", key_name, key_path);
-                Ok(ErrorUtils::success_message(&format!("SSH key set successfully: {}", key_name)))
+                Ok(v_str(&format!("SSH key set successfully: {}", key_name)))
             }
             
             VcsOperation::ClearSshKey => {
@@ -226,7 +226,7 @@ impl VcsProcessor {
                 }
                 
                 info!("SSH key configuration cleared");
-                Ok(ErrorUtils::success_message("SSH key configuration cleared"))
+                Ok(v_str("SSH key configuration cleared"))
             }
             
             VcsOperation::SetGitUser { name, email } => {
@@ -242,7 +242,7 @@ impl VcsProcessor {
                             }
                         }
                         info!("Git user updated successfully");
-                        Ok(ErrorUtils::success_message("Git user updated successfully"))
+                        Ok(v_str("Git user updated successfully"))
                     }
                     Err(e) => {
                         error!("Failed to update git user: {}", e);
@@ -258,7 +258,7 @@ impl VcsProcessor {
                     match repo.test_ssh_connection() {
                         Ok(_) => {
                             info!("SSH connection test successful");
-                            Ok(ErrorUtils::success_message("SSH connection test successful"))
+                            Ok(v_str("SSH connection test successful"))
                         },
                         Err(e) => {
                             error!("SSH connection test failed: {}", e);
@@ -301,7 +301,8 @@ impl VcsProcessor {
                     
                     match StatusOps::reset_working_tree_with_verification(repo.repo(), repo.work_dir()) {
                         Ok(messages) => {
-                            Ok(messages.into_iter().map(|msg| v_str(&msg)).collect())
+                            let vars: Vec<Var> = messages.into_iter().map(|msg| v_str(&msg)).collect();
+                            Ok(v_list(&vars))
                         }
                         Err(e) => {
                             error!("Failed to reset working tree: {}", e);

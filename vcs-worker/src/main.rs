@@ -1,7 +1,7 @@
 use clap::Parser;
 use clap_derive::Parser;
 use moor_common::tasks::WorkerError;
-use moor_var::{Obj, Symbol, Var};
+use moor_var::{Obj, Symbol, Var, v_error, E_NONE};
 use rpc_async_client::{make_worker_token, worker_loop};
 use rpc_common::client_args::RpcClientArgs;
 use rpc_common::{WorkerToken, load_keypair};
@@ -12,7 +12,7 @@ use tokio::signal::unix::{SignalKind, signal};
 use tracing::{error, info};
 use uuid::Uuid;
 
-use moor_vcs_worker::{VcsOperation, VcsProcessor, Config, arg_validation::ArgValidation};
+use moor_vcs_worker::{VcsOperation, VcsProcessor, Config};
 
 // TODO: timeouts, and generally more error handling
 #[derive(Parser, Debug)]
@@ -112,17 +112,18 @@ async fn process_vcs_request(
     _perms: Obj,
     arguments: Vec<Var>,
     _timeout: Option<std::time::Duration>,
-) -> Result<Vec<Var>, WorkerError> {
+) -> Result<Var, WorkerError> {
     if arguments.is_empty() {
-        return Err(WorkerError::RequestError(
-            "At least one argument (operation) is required".to_string(),
-        ));
+        return Ok(v_error(E_NONE.msg("At least one argument (operation) is required")));
     }
 
     // First argument should be the operation name
-    let operation_name = arguments[0].as_symbol().map_err(|_| {
-        WorkerError::RequestError("First argument must be a symbol (operation name)".to_string())
-    })?;
+    let operation_name = match arguments[0].as_symbol() {
+        Ok(symbol) => symbol,
+        Err(_) => {
+            return Ok(v_error(E_NONE.msg("First argument must be a symbol (operation name)")));
+        }
+    };
 
     let config = Config::from_env();
     info!("Main: Using repository path: {:?}", config.repository_path());
@@ -133,9 +134,16 @@ async fn process_vcs_request(
     
     let operation = match operation_name_str.as_str() {
         "update_object" => {
-            ArgValidation::require_args(&arguments, 3, "update_object")?;
+            if arguments.len() < 3 {
+                return Ok(v_error(E_NONE.msg("update_object requires object_name and object_dump arguments")));
+            }
             
-            let object_name = ArgValidation::extract_string(&arguments, 1, "object_name")?;
+            let object_name = match arguments[1].as_string() {
+                Some(name) => name,
+                None => {
+                    return Ok(v_error(E_NONE.msg("Second argument must be a string (object_name)")));
+                }
+            };
 
             // let object_dump = arguments[2].as_string().ok_or_else(|| {
             //     WorkerError::RequestError("Third argument must be a string (object_dump)".to_string())
@@ -144,17 +152,13 @@ async fn process_vcs_request(
                 let mut lines = Vec::new();
                 for item in list.iter() {
                     let Some(s) = item.as_string() else {
-                        return Err(WorkerError::RequestError(
-                            "Each element of object_dump must be a string".to_string(),
-                        ));
+                        return Ok(v_error(E_NONE.msg("Each element of object_dump must be a string")));
                     };
                     lines.push(s.to_string()); // clone into owned String
                 }
                 lines.join("\n")
             } else {
-                return Err(WorkerError::RequestError(
-                    "Third argument must be a list of strings (object_dump)".to_string(),
-                ));
+                return Ok(v_error(E_NONE.msg("Third argument must be a list of strings (object_dump)")));
             };
 
             VcsOperation::AddOrUpdateObject { 
@@ -164,40 +168,66 @@ async fn process_vcs_request(
         }
         
         "delete_object" => {
-            ArgValidation::require_args(&arguments, 2, "delete_object")?;
-            let object_name = ArgValidation::extract_string(&arguments, 1, "object_name")?;
+            if arguments.len() < 2 {
+                return Ok(v_error(E_NONE.msg("delete_object requires object_name argument")));
+            }
+            let object_name = match arguments[1].as_string() {
+                Some(name) => name,
+                None => {
+                    return Ok(v_error(E_NONE.msg("Second argument must be a string (object_name)")));
+                }
+            };
             VcsOperation::DeleteObject { 
-                object_name,
+                object_name: object_name.to_string(),
             }
         }
         
         "rename_object" => {
-            ArgValidation::require_args(&arguments, 3, "rename_object")?;
-            let old_name = ArgValidation::extract_string(&arguments, 1, "old_name")?;
-            let new_name = ArgValidation::extract_string(&arguments, 2, "new_name")?;
+            if arguments.len() < 3 {
+                return Ok(v_error(E_NONE.msg("rename_object requires old_name and new_name arguments")));
+            }
+            let old_name = match arguments[1].as_string() {
+                Some(name) => name,
+                None => {
+                    return Ok(v_error(E_NONE.msg("Second argument must be a string (old_name)")));
+                }
+            };
+            let new_name = match arguments[2].as_string() {
+                Some(name) => name,
+                None => {
+                    return Ok(v_error(E_NONE.msg("Third argument must be a string (new_name)")));
+                }
+            };
             VcsOperation::RenameObject { 
-                old_name,
-                new_name,
+                old_name: old_name.to_string(),
+                new_name: new_name.to_string(),
             }
         }
         
         "commit" => {
-            ArgValidation::require_args(&arguments, 2, "commit")?;
-            let message = ArgValidation::extract_string(&arguments, 1, "commit_message")?;
+            if arguments.len() < 2 {
+                return Ok(v_error(E_NONE.msg("commit requires commit_message argument")));
+            }
+            let message = match arguments[1].as_string() {
+                Some(msg) => msg,
+                None => {
+                    return Ok(v_error(E_NONE.msg("Second argument must be a string (commit_message)")));
+                }
+            };
             let author_name = if arguments.len() > 2 {
-                arguments[2].as_string().unwrap_or_else(|| "vcs-worker").to_string()
+                arguments[2].as_string().unwrap_or_else(|| "vcs-worker")
             } else {
-                "vcs-worker".to_string()
+                "vcs-worker"
             };
             let author_email = if arguments.len() > 3 {
-                arguments[3].as_string().unwrap_or_else(|| "vcs-worker@system").to_string()
+                arguments[3].as_string().unwrap_or_else(|| "vcs-worker@system")
             } else {
-                "vcs-worker@system".to_string()
+                "vcs-worker@system"
             };
             VcsOperation::Commit { 
-                message, 
-                author_name, 
-                author_email
+                message: message.to_string(), 
+                author_name: author_name.to_string(), 
+                author_email: author_email.to_string() 
             }
         }
         
@@ -210,25 +240,60 @@ async fn process_vcs_request(
         }
         
         "get_objects" => {
-            ArgValidation::require_args(&arguments, 2, "get_objects")?;
-            let object_names = ArgValidation::extract_string_list(&arguments, 1, "object_name")?;
+            if arguments.len() < 2 {
+                return Ok(v_error(E_NONE.msg("get_objects requires at least one object_name argument")));
+            }
+            
+            let mut object_names = Vec::new();
+            for i in 1..arguments.len() {
+                let object_name = match arguments[i].as_string() {
+                    Some(name) => name,
+                    None => {
+                        return Ok(v_error(E_NONE.msg(format!("Argument {} must be a string (object_name)", i + 1))));
+                    }
+                };
+                object_names.push(object_name.to_string());
+            }
+            
             VcsOperation::GetObjects { object_names }
         }
         
         "get_commits" => {
-            let limit = ArgValidation::extract_int_or_default(&arguments, 1, None);
-            let offset = ArgValidation::extract_int_or_default(&arguments, 2, None);
+            let limit = if arguments.len() > 1 {
+                arguments[1].as_integer().map(|i| i as usize)
+            } else {
+                None
+            };
+            
+            let offset = if arguments.len() > 2 {
+                arguments[2].as_integer().map(|i| i as usize)
+            } else {
+                None
+            };
+            
             VcsOperation::GetCommits { limit, offset }
         }
         
         // Credential management operations
         "set_ssh_key" => {
-            ArgValidation::require_args(&arguments, 3, "set_ssh_key")?;
-            let key_content = ArgValidation::extract_string(&arguments, 1, "key_content")?;
-            let key_name = ArgValidation::extract_string(&arguments, 2, "key_name")?;
+            if arguments.len() < 3 {
+                return Ok(v_error(E_NONE.msg("set_ssh_key requires key_content and key_name arguments")));
+            }
+            let key_content = match arguments[1].as_string() {
+                Some(content) => content,
+                None => {
+                    return Ok(v_error(E_NONE.msg("Second argument must be a string (key_content)")));
+                }
+            };
+            let key_name = match arguments[2].as_string() {
+                Some(name) => name,
+                None => {
+                    return Ok(v_error(E_NONE.msg("Third argument must be a string (key_name)")));
+                }
+            };
             VcsOperation::SetSshKey { 
-                key_content, 
-                key_name
+                key_content: key_content.to_string(), 
+                key_name: key_name.to_string() 
             }
         }
         
@@ -237,31 +302,75 @@ async fn process_vcs_request(
         }
         
         "set_git_user" => {
-            ArgValidation::require_args(&arguments, 3, "set_git_user")?;
-            let name = ArgValidation::extract_string(&arguments, 1, "name")?;
-            let email = ArgValidation::extract_string(&arguments, 2, "email")?;
+            if arguments.len() < 3 {
+                return Ok(v_error(E_NONE.msg("set_git_user requires name and email arguments")));
+            }
+            let name = match arguments[1].as_string() {
+                Some(name) => name,
+                None => {
+                    return Ok(v_error(E_NONE.msg("Second argument must be a string (name)")));
+                }
+            };
+            let email = match arguments[2].as_string() {
+                Some(email) => email,
+                None => {
+                    return Ok(v_error(E_NONE.msg("Third argument must be a string (email)")));
+                }
+            };
             VcsOperation::SetGitUser { 
-                name, 
-                email
+                name: name.to_string(), 
+                email: email.to_string() 
             }
         }
         
         "update_ignored_properties" => {
-            ArgValidation::require_args(&arguments, 3, "update_ignored_properties")?;
-            let object_name = ArgValidation::extract_string(&arguments, 1, "object_name")?;
-            let properties = ArgValidation::extract_string_list(&arguments, 2, "property_name")?;
+            if arguments.len() < 3 {
+                return Ok(v_error(E_NONE.msg("update_ignored_properties requires object_name and at least one property")));
+            }
+            let object_name = match arguments[1].as_string() {
+                Some(name) => name,
+                None => {
+                    return Ok(v_error(E_NONE.msg("Second argument must be a string (object_name)")));
+                }
+            };
+            let mut properties = Vec::new();
+            for i in 2..arguments.len() {
+                let property = match arguments[i].as_string() {
+                    Some(prop) => prop,
+                    None => {
+                        return Ok(v_error(E_NONE.msg(format!("Argument {} must be a string (property_name)", i + 1))));
+                    }
+                };
+                properties.push(property.to_string());
+            }
             VcsOperation::UpdateIgnoredProperties { 
-                object_name, 
+                object_name: object_name.to_string(), 
                 properties 
             }
         }
         
         "update_ignored_verbs" => {
-            ArgValidation::require_args(&arguments, 3, "update_ignored_verbs")?;
-            let object_name = ArgValidation::extract_string(&arguments, 1, "object_name")?;
-            let verbs = ArgValidation::extract_string_list(&arguments, 2, "verb_name")?;
+            if arguments.len() < 3 {
+                return Ok(v_error(E_NONE.msg("update_ignored_verbs requires object_name and at least one verb")));
+            }
+            let object_name = match arguments[1].as_string() {
+                Some(name) => name,
+                None => {
+                    return Ok(v_error(E_NONE.msg("Second argument must be a string (object_name)")));
+                }
+            };
+            let mut verbs = Vec::new();
+            for i in 2..arguments.len() {
+                let verb = match arguments[i].as_string() {
+                    Some(verb) => verb,
+                    None => {
+                        return Ok(v_error(E_NONE.msg(format!("Argument {} must be a string (verb_name)", i + 1))));
+                    }
+                };
+                verbs.push(verb.to_string());
+            }
             VcsOperation::UpdateIgnoredVerbs { 
-                object_name, 
+                object_name: object_name.to_string(), 
                 verbs 
             }
         }
@@ -271,7 +380,11 @@ async fn process_vcs_request(
         }
         
         "pull" => {
-            let dry_run = ArgValidation::extract_bool_or_default(&arguments, 1, false);
+            let dry_run = if arguments.len() > 1 {
+                arguments[1].as_bool().unwrap_or(false)
+            } else {
+                false
+            };
             VcsOperation::Pull { dry_run }
         }
         
@@ -281,10 +394,10 @@ async fn process_vcs_request(
         }
         
         _ => {
-            return Err(WorkerError::RequestError(format!(
+            return Ok(v_error(E_NONE.msg(format!(
                 "Unknown operation: {}",
                 operation_name.as_arc_string()
-            )));
+            ))));
         }
     };
 
@@ -292,13 +405,13 @@ async fn process_vcs_request(
     let result = processor.process_operation(operation);
     
     match result {
-        Ok(vars) => {
+        Ok(var) => {
             info!("VCS operation succeeded");
-            Ok(vars)
+            Ok(var)
         }
         Err(e) => {
             error!("VCS operation failed: {}", e);
-            Err(e)
+            Ok(v_error(E_NONE.msg(format!("VCS operation failed: {}", e))))
         }
     }
 }

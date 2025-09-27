@@ -23,7 +23,7 @@ impl MetaHandler {
         repo: &GitRepository,
         object_name: String,
         properties: Vec<String>,
-    ) -> Result<Vec<Var>, WorkerError> {
+    ) -> Result<Var, WorkerError> {
         info!("Updating ignored properties for object: {}", object_name);
         
         let meta_full_path = PathUtils::object_meta_path(repo.work_dir(), &self.config, &object_name);
@@ -49,7 +49,7 @@ impl MetaHandler {
         match meta_config.to_file(&meta_full_path) {
             Ok(_) => {
                 info!("Successfully updated ignored properties for object: {}", object_name);
-                Ok(vec![v_str(&format!("Updated ignored properties for object: {}", object_name))])
+                Ok(v_str(&format!("Updated ignored properties for object: {}", object_name)))
             }
             Err(e) => {
                 error!("Failed to save meta config: {}", e);
@@ -64,7 +64,7 @@ impl MetaHandler {
         repo: &GitRepository,
         object_name: String,
         verbs: Vec<String>,
-    ) -> Result<Vec<Var>, WorkerError> {
+    ) -> Result<Var, WorkerError> {
         info!("Updating ignored verbs for object: {}", object_name);
         
         let meta_full_path = PathUtils::object_meta_path(repo.work_dir(), &self.config, &object_name);
@@ -90,7 +90,7 @@ impl MetaHandler {
         match meta_config.to_file(&meta_full_path) {
             Ok(_) => {
                 info!("Successfully updated ignored verbs for object: {}", object_name);
-                Ok(vec![v_str(&format!("Updated ignored verbs for object: {}", object_name))])
+                Ok(v_str(&format!("Updated ignored verbs for object: {}", object_name)))
             }
             Err(e) => {
                 error!("Failed to save meta config: {}", e);

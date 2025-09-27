@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use tracing::{info, error};
 use moor_compiler::{ObjectDefinition, CompileOptions};
 use moor_objdef::dump_object;
-use moor_var::{Var, v_str, v_map};
+use moor_var::{Var, v_str, v_map, v_list};
 use crate::config::Config;
 use crate::git::GitRepository;
 use crate::meta_config::MetaConfig;
@@ -66,7 +66,7 @@ impl ObjectHandler {
         repo: &GitRepository, 
         object_dump: String, 
         object_name: String,
-    ) -> Result<Vec<Var>, WorkerError> {
+    ) -> Result<Var, WorkerError> {
         // Parse the MOO object using objdef's ObjectDefinitionLoader
         let mut object_def = match self.parse_object_dump(&object_dump) {
             Ok(obj) => obj,
@@ -121,7 +121,7 @@ impl ObjectHandler {
             return Err(WorkerError::RequestError(format!("Failed to add meta file to git at {:?}: {}", meta_full_path, e)));
         }
         
-        Ok(vec![v_str(&format!("Added object {} to staging area", object_name))])
+        Ok(v_str(&format!("Added object {} to staging area", object_name)))
     }
     
     /// Delete a tracked MOO object file
@@ -130,7 +130,7 @@ impl ObjectHandler {
         repo: &GitRepository, 
         object_name: String,
         _commit_message: Option<String>,
-    ) -> Result<Vec<Var>, WorkerError> {
+    ) -> Result<Var, WorkerError> {
         // Remove files from git
         let object_full_path = PathUtils::object_path(repo.work_dir(), &self.config, &object_name);
         if let Err(e) = repo.remove_file(&object_full_path) {
@@ -146,16 +146,16 @@ impl ObjectHandler {
             }
         }
         
-        Ok(vec![v_str(&format!("Deleted object {} from staging area", object_name))])
+        Ok(v_str(&format!("Deleted object {} from staging area", object_name)))
     }
     
     /// Rename a tracked MOO object file
     pub fn rename_object(
         &self, 
         repo: &GitRepository, 
-        old_name: String,
+        old_name: String, 
         new_name: String,
-    ) -> Result<Vec<Var>, WorkerError> {
+    ) -> Result<Var, WorkerError> {
         info!("Renaming object from '{}' to '{}'", old_name, new_name);
         
         let old_object_path = PathUtils::object_path(repo.work_dir(), &self.config, &old_name);
@@ -192,7 +192,7 @@ impl ObjectHandler {
         }
         
         info!("Successfully renamed object from '{}' to '{}'", old_name, new_name);
-        Ok(vec![v_str(&format!("Renamed object from '{}' to '{}'", old_name, new_name))])
+        Ok(v_str(&format!("Renamed object from '{}' to '{}'", old_name, new_name)))
     }
     
     /// Parse a MOO object dump string into an ObjectDefinition using objdef
@@ -246,7 +246,7 @@ impl ObjectHandler {
     }
 
     /// List all .moo objects with dependency ordering
-    pub fn list_objects(&self, repo: &GitRepository) -> Result<Vec<Var>, WorkerError> {
+    pub fn list_objects(&self, repo: &GitRepository) -> Result<Var, WorkerError> {
         let objects_dir = self.config.objects_directory();
         let objects_path = repo.work_dir().join(objects_dir);
         
@@ -260,7 +260,7 @@ impl ObjectHandler {
         };
         
         if moo_files.is_empty() {
-            return Ok(vec![v_str("No .moo files found")]);
+            return Ok(v_str("No .moo files found"));
         }
         
         // Parse all .moo files and collect object definitions
@@ -276,7 +276,7 @@ impl ObjectHandler {
         }
         
         if objects.is_empty() {
-            return Ok(vec![v_str("No valid object definitions found in .moo files")]);
+            return Ok(v_str("No valid object definitions found in .moo files"));
         }
         
         // Sort objects by dependency chain (reversed)
@@ -310,16 +310,16 @@ impl ObjectHandler {
         }
         
         info!("Listed {} objects in reverse dependency order", result.len());
-        Ok(result)
+        Ok(v_list(&result))
     }
 
     /// Get the full dump contents for specified object names (returns just content strings)
-    pub fn get_objects(&self, repo: &GitRepository, object_names: Vec<String>) -> Result<Vec<Var>, WorkerError> {
+    pub fn get_objects(&self, repo: &GitRepository, object_names: Vec<String>) -> Result<Var, WorkerError> {
         info!("GetObjects called with {} object names: {:?}", object_names.len(), object_names);
         
         if object_names.is_empty() {
             info!("No object names provided, returning empty result");
-            return Ok(vec![v_str("No object names provided")]);
+            return Ok(v_str("No object names provided"));
         }
 
         let objects_dir = self.config.objects_directory();
@@ -360,7 +360,7 @@ impl ObjectHandler {
 
         info!("GetObjects completed: Retrieved {} files out of {} requested", found_count, object_names.len());
         
-        Ok(results)
+        Ok(v_list(&results))
     }
 
     /// Find all .moo files in the objects directory
