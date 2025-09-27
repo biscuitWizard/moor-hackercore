@@ -5,6 +5,8 @@ pub mod git;
 pub mod meta_config;
 pub mod utils;
 pub mod vcs;
+pub mod error_utils;
+pub mod arg_validation;
 pub use config::Config;
 pub use git::{GitRepository, GitChannel};
 pub use meta_config::MetaConfig;

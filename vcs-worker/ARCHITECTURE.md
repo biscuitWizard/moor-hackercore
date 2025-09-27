@@ -14,6 +14,8 @@ vcs-worker/
 │   ├── config.rs            # Configuration management
 │   ├── meta_config.rs       # MOO object metadata configuration
 │   ├── utils.rs             # Utility functions for path operations
+│   ├── error_utils.rs       # Common error handling utilities
+│   ├── arg_validation.rs    # Argument validation utilities
 │   ├── git/                 # Git operations and repository management
 │   │   ├── mod.rs           # Git module exports
 │   │   ├── repository.rs    # GitRepository wrapper
@@ -162,6 +164,20 @@ Per-object metadata configuration:
 - Object-specific metadata
 - Stored in `.meta` files alongside MOO objects
 
+### 5. Utility Modules
+
+#### ErrorUtils
+Common error handling patterns:
+- Standardized error messages
+- Success message formatting
+- Consistent error types
+
+#### ArgValidation
+Argument validation utilities:
+- Parameter count validation
+- Type checking and extraction
+- Default value handling
+
 ## Data Flow
 
 ### 1. Operation Processing Flow
@@ -212,11 +228,19 @@ Workflow Request → WorkflowHandler → Multiple Git Ops → Analysis → Resul
 - Comprehensive error reporting
 - Graceful degradation
 - Detailed logging and tracing
+- Standardized error utilities
 
 ### 5. RPC Integration
 - Asynchronous RPC worker
 - MOO-compatible data types
 - Request/response handling
+- Argument validation utilities
+
+### 6. Code Quality
+- Reduced code duplication
+- Consistent error handling
+- Standardized validation patterns
+- Maintainable architecture
 
 ## Dependencies
 
@@ -329,20 +353,32 @@ Each MOO object can have a `.meta` file specifying:
 - Follow existing module structure
 - Maintain separation of concerns
 - Use appropriate abstraction levels
+- Leverage utility modules for common patterns
 
 ### 2. Error Handling
-- Use descriptive error messages
+- Use `ErrorUtils` for standardized error messages
 - Implement proper error propagation
 - Log errors appropriately
+- Maintain consistent error types
 
-### 3. Testing
+### 3. Argument Validation
+- Use `ArgValidation` for parameter checking
+- Validate argument counts and types
+- Provide clear error messages for invalid arguments
+
+### 4. Testing
 - Write comprehensive tests
 - Test error scenarios
 - Maintain test coverage
 
-### 4. Documentation
+### 5. Documentation
 - Document public APIs
 - Update architecture documentation
 - Maintain code comments
 
-This architecture provides a robust, scalable foundation for version control of MOO game objects while maintaining clear separation of concerns and modular design principles.
+### 6. Code Deduplication
+- Identify and extract common patterns
+- Use utility modules for repeated code
+- Maintain consistency across modules
+
+This architecture provides a robust, scalable foundation for version control of MOO game objects while maintaining clear separation of concerns, modular design principles, and reduced code duplication.

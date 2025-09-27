@@ -2,6 +2,7 @@ use tracing::{info, error, warn};
 use moor_var::{Var, v_str};
 use crate::config::Config;
 use crate::git::GitRepository;
+use crate::error_utils::ErrorUtils;
 use super::types::VcsOperation;
 use super::object_handler::ObjectHandler;
 use super::status_handler::StatusHandler;
@@ -80,7 +81,7 @@ impl VcsProcessor {
                 if let Some(ref repo) = self.git_repo {
                     self.object_handler.add_object(repo, object_dump, object_name)
                 } else {
-                    Err(WorkerError::RequestError("Git repository not available at /game".to_string()))
+                    Err(ErrorUtils::git_repo_not_available(Some(self.config.repository_path().to_str().unwrap_or("/game"))))
                 }
             }
             
@@ -88,7 +89,7 @@ impl VcsProcessor {
                 if let Some(ref repo) = self.git_repo {
                     self.object_handler.delete_object(repo, object_name, None)
                 } else {
-                    Err(WorkerError::RequestError("Git repository not available at /game".to_string()))
+                    Err(ErrorUtils::git_repo_not_available(Some(self.config.repository_path().to_str().unwrap_or("/game"))))
                 }
             }
             
@@ -96,7 +97,7 @@ impl VcsProcessor {
                 if let Some(ref repo) = self.git_repo {
                     self.object_handler.rename_object(repo, old_name, new_name)
                 } else {
-                    Err(WorkerError::RequestError("Git repository not available at /game".to_string()))
+                    Err(ErrorUtils::git_repo_not_available(Some(self.config.repository_path().to_str().unwrap_or("/game"))))
                 }
             }
             
@@ -104,7 +105,7 @@ impl VcsProcessor {
                 if let Some(ref repo) = self.git_repo {
                     self.workflow_handler.execute_commit_workflow(repo, message, author_name, author_email)
                 } else {
-                    Err(WorkerError::RequestError("Git repository not available at /game".to_string()))
+                    Err(ErrorUtils::git_repo_not_available(Some(self.config.repository_path().to_str().unwrap_or("/game"))))
                 }
             }
             
@@ -114,8 +115,9 @@ impl VcsProcessor {
                     info!("VcsProcessor: Git repository is available, calling status handler");
                     self.status_handler.get_repository_status(repo, &self.config)
                 } else {
-                    error!("VcsProcessor: Git repository not available at /game");
-                    Err(WorkerError::RequestError("Git repository not available at /game".to_string()))
+                    let repo_path = self.config.repository_path().to_str().unwrap_or("/game");
+                    error!("VcsProcessor: Git repository not available at {}", repo_path);
+                    Err(ErrorUtils::git_repo_not_available(Some(repo_path)))
                 }
             }
             
@@ -123,7 +125,7 @@ impl VcsProcessor {
                 if let Some(ref repo) = self.git_repo {
                     self.object_handler.list_objects(repo)
                 } else {
-                    Err(WorkerError::RequestError("Git repository not available at /game".to_string()))
+                    Err(ErrorUtils::git_repo_not_available(Some(self.config.repository_path().to_str().unwrap_or("/game"))))
                 }
             }
             
@@ -131,7 +133,7 @@ impl VcsProcessor {
                 if let Some(ref repo) = self.git_repo {
                     self.object_handler.get_objects(repo, object_names)
                 } else {
-                    Err(WorkerError::RequestError("Git repository not available at /game".to_string()))
+                    Err(ErrorUtils::git_repo_not_available(Some(self.config.repository_path().to_str().unwrap_or("/game"))))
                 }
             }
             
@@ -159,11 +161,11 @@ impl VcsProcessor {
                         }
                         Err(e) => {
                             error!("Failed to get commits: {}", e);
-                            Err(WorkerError::RequestError(format!("Failed to get commits: {}", e)))
+                            Err(ErrorUtils::operation_failed("get commits", &e.to_string()))
                         }
                     }
                 } else {
-                    Err(WorkerError::RequestError("Git repository not available at /game".to_string()))
+                    Err(ErrorUtils::git_repo_not_available(Some(self.config.repository_path().to_str().unwrap_or("/game"))))
                 }
             }
             
@@ -204,7 +206,7 @@ impl VcsProcessor {
                 }
                 
                 info!("SSH key set successfully: {} at {:?}", key_name, key_path);
-                Ok(vec![v_str(&format!("SSH key set successfully: {}", key_name))])
+                Ok(ErrorUtils::success_message(&format!("SSH key set successfully: {}", key_name)))
             }
             
             VcsOperation::ClearSshKey => {
@@ -224,7 +226,7 @@ impl VcsProcessor {
                 }
                 
                 info!("SSH key configuration cleared");
-                Ok(vec![v_str("SSH key configuration cleared")])
+                Ok(ErrorUtils::success_message("SSH key configuration cleared"))
             }
             
             VcsOperation::SetGitUser { name, email } => {
@@ -240,7 +242,7 @@ impl VcsProcessor {
                             }
                         }
                         info!("Git user updated successfully");
-                        Ok(vec![v_str("Git user updated successfully")])
+                        Ok(ErrorUtils::success_message("Git user updated successfully"))
                     }
                     Err(e) => {
                         error!("Failed to update git user: {}", e);
@@ -256,16 +258,16 @@ impl VcsProcessor {
                     match repo.test_ssh_connection() {
                         Ok(_) => {
                             info!("SSH connection test successful");
-                            Ok(vec![v_str("SSH connection test successful")])
+                            Ok(ErrorUtils::success_message("SSH connection test successful"))
                         },
                         Err(e) => {
                             error!("SSH connection test failed: {}", e);
-                            Err(WorkerError::RequestError(format!("SSH connection test failed: {}", e)))
+                            Err(ErrorUtils::operation_failed("SSH connection test", &e.to_string()))
                         }
                     }
                 } else {
                     error!("Git repository not available for SSH test");
-                    Err(WorkerError::RequestError("Git repository not available".to_string()))
+                    Err(ErrorUtils::git_repo_not_available_ssh())
                 }
             }
             
@@ -273,7 +275,7 @@ impl VcsProcessor {
                 if let Some(ref repo) = self.git_repo {
                     self.meta_handler.update_ignored_properties(repo, object_name, properties)
                 } else {
-                    Err(WorkerError::RequestError("Git repository not available at /game".to_string()))
+                    Err(ErrorUtils::git_repo_not_available(Some(self.config.repository_path().to_str().unwrap_or("/game"))))
                 }
             }
             
@@ -281,7 +283,7 @@ impl VcsProcessor {
                 if let Some(ref repo) = self.git_repo {
                     self.meta_handler.update_ignored_verbs(repo, object_name, verbs)
                 } else {
-                    Err(WorkerError::RequestError("Git repository not available at /game".to_string()))
+                    Err(ErrorUtils::git_repo_not_available(Some(self.config.repository_path().to_str().unwrap_or("/game"))))
                 }
             }
             
@@ -289,7 +291,7 @@ impl VcsProcessor {
                 if let Some(ref repo) = self.git_repo {
                     self.workflow_handler.execute_pull_workflow(repo, dry_run)
                 } else {
-                    Err(WorkerError::RequestError("Git repository not available at /game".to_string()))
+                    Err(ErrorUtils::git_repo_not_available(Some(self.config.repository_path().to_str().unwrap_or("/game"))))
                 }
             }
             
@@ -303,11 +305,11 @@ impl VcsProcessor {
                         }
                         Err(e) => {
                             error!("Failed to reset working tree: {}", e);
-                            Err(WorkerError::RequestError(format!("Failed to reset working tree: {}", e)))
+                            Err(ErrorUtils::operation_failed("reset working tree", &e.to_string()))
                         }
                     }
                 } else {
-                    Err(WorkerError::RequestError("Git repository not available at /game".to_string()))
+                    Err(ErrorUtils::git_repo_not_available(Some(self.config.repository_path().to_str().unwrap_or("/game"))))
                 }
             }
         }
