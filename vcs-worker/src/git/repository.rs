@@ -50,7 +50,7 @@ impl GitRepository {
         git_repo.configure_git_user()?;
         
         // Ensure keys directory is in .gitignore
-        git_repo.ensure_keys_gitignore()?;
+        GitUtils::ensure_keys_gitignore(&git_repo.work_dir)?;
         
         Ok(git_repo)
     }
@@ -97,7 +97,7 @@ impl GitRepository {
         git_repo.configure_git_user()?;
         
         // Ensure keys directory is in .gitignore
-        // git_repo.ensure_keys_gitignore()?;
+        GitUtils::ensure_keys_gitignore(&git_repo.work_dir)?;
         
         Ok(git_repo)
     }
@@ -240,15 +240,5 @@ impl GitRepository {
             self.git_config.git_user_name(),
             self.git_config.git_user_email(),
         )
-    }
-    
-    /// Ensure the keys directory is in .gitignore for security
-    fn ensure_keys_gitignore(&self) -> Result<(), Box<dyn std::error::Error>> {
-        GitUtils::ensure_keys_gitignore(&self.work_dir)?;
-        
-        // Add .gitignore to git index
-        self.add_file(".gitignore")?;
-        
-        Ok(())
     }
 }
