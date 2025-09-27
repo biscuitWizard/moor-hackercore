@@ -3,11 +3,11 @@ use moor_var::{Var, v_str};
 use crate::config::Config;
 use crate::git::GitRepository;
 use super::types::{VcsOperation, PullImpact, ChangeStatus};
-use super::repository_manager::RepositoryManager;
 use super::object_handler::ObjectHandler;
 use super::status_handler::StatusHandler;
 use super::meta_handler::MetaHandler;
 use moor_common::tasks::WorkerError;
+use libc;
 
 /// Process VCS operations
 pub struct VcsProcessor {
@@ -47,13 +47,147 @@ impl VcsProcessor {
     /// Initialize the git repository using configuration
     pub fn initialize_repository(&mut self) {
         info!("VcsProcessor: Initializing repository");
-        let repository_manager = RepositoryManager::new(self.config.clone());
-        self.git_repo = repository_manager.initialize_repository();
-        if self.git_repo.is_some() {
-            info!("VcsProcessor: Repository initialized successfully");
-        } else {
-            error!("VcsProcessor: Failed to initialize repository");
+        let repo_path = self.config.repository_path();
+        info!("VcsProcessor: Using repository path: {:?}", repo_path);
+        
+        // Check if the path exists and contains a git repository
+        if repo_path.exists() && repo_path.join(".git").exists() {
+            info!("VcsProcessor: Found existing .git directory at {:?}", repo_path);
+            
+            // Chown the repository to current user first to fix permission issues
+            VcsProcessor::chown_repository_to_current_user_static(&repo_path);
+            
+            // Try to open existing repository
+            match GitRepository::open(&repo_path, self.config.clone()) {
+                Ok(repo) => {
+                    info!("VcsProcessor: Successfully opened existing git repository at {:?}", repo_path);
+                    self.git_repo = Some(repo);
+                    return;
+                }
+                Err(e) => {
+                    warn!("VcsProcessor: Found .git directory at {:?} but failed to open as repository: {}", repo_path, e);
+                    // Don't try to clone/init if there's already a .git directory
+                    // This prevents clearing existing repositories
+                    self.git_repo = None;
+                    return;
+                }
+            }
         }
+        
+        // Only attempt to clone or initialize if no existing repository was found
+        // If we have a repository URL configured, try to clone it
+        if let Some(repo_url) = self.config.repository_url() {
+            info!("VcsProcessor: Attempting to clone repository from: {}", repo_url);
+            match VcsProcessor::clone_repository_static(repo_url, &repo_path, &self.config) {
+                Ok(repo) => {
+                    info!("VcsProcessor: Successfully cloned repository from {} to {:?}", repo_url, repo_path);
+                    self.git_repo = Some(repo);
+                    return;
+                }
+                Err(e) => {
+                    error!("VcsProcessor: Failed to clone repository from {}: {}", repo_url, e);
+                    warn!("VcsProcessor: Falling back to initializing empty repository");
+                }
+            }
+        }
+        
+        // If no URL or clone failed, initialize an empty repository
+        match GitRepository::init(&repo_path, self.config.clone()) {
+            Ok(repo) => {
+                info!("VcsProcessor: Initialized new empty git repository at {:?}", repo_path);
+                self.git_repo = Some(repo);
+            }
+            Err(e) => {
+                error!("VcsProcessor: Failed to initialize git repository at {:?}: {}", repo_path, e);
+                // Continue without git repo - operations will fail gracefully
+                self.git_repo = None;
+            }
+        }
+    }
+    
+    /// Change ownership of repository directory to current user
+    fn chown_repository_to_current_user_static(repo_path: &std::path::Path) {
+        use std::os::unix::fs::PermissionsExt;
+        use std::process::Command;
+        
+        info!("Changing ownership of repository at {:?} to current user", repo_path);
+        
+        // Get current user ID
+        let uid = unsafe { libc::getuid() };
+        let gid = unsafe { libc::getgid() };
+        
+        info!("Current user ID: {}, group ID: {}", uid, gid);
+        
+        // Use chown command to recursively change ownership
+        match Command::new("chown")
+            .args(&["-R", &format!("{}:{}", uid, gid), repo_path.to_str().unwrap_or("")])
+            .output()
+        {
+            Ok(output) => {
+                if output.status.success() {
+                    info!("Successfully changed ownership of repository directory");
+                } else {
+                    let error_msg = String::from_utf8_lossy(&output.stderr);
+                    warn!("Failed to change ownership of repository directory: {}", error_msg);
+                }
+            }
+            Err(e) => {
+                warn!("Failed to execute chown command: {}", e);
+            }
+        }
+        
+        // Also try to fix permissions on the directory
+        if let Err(e) = std::fs::metadata(repo_path).and_then(|metadata| {
+            let mut perms = metadata.permissions();
+            perms.set_mode(0o755);
+            std::fs::set_permissions(repo_path, perms)
+        }) {
+            warn!("Failed to set permissions on repository directory: {}", e);
+        }
+    }
+    
+    /// Clone a repository from a URL
+    fn clone_repository_static(url: &str, path: &std::path::Path, config: &Config) -> Result<GitRepository, Box<dyn std::error::Error>> {
+        use git2::build::RepoBuilder;
+        use std::fs;
+        
+        // Check if the directory exists and contains a valid git repository
+        if path.exists() {
+            // Check if there's a .git directory first
+            if path.join(".git").exists() {
+                // Try to open as a git repository
+                match GitRepository::open(path, config.clone()) {
+                    Ok(_) => {
+                        info!("Directory {:?} already contains a valid git repository, skipping clone", path);
+                        return GitRepository::open(path, config.clone());
+                    }
+                    Err(e) => {
+                        warn!("Directory {:?} contains .git but is not a valid repository: {}", path, e);
+                        // Don't remove directories that contain .git - this could be a corrupted repo
+                        return Err(format!("Directory {:?} contains .git but is not a valid repository: {}", path, e).into());
+                    }
+                }
+            } else {
+                // Directory exists but has no .git directory, safe to remove
+                info!("Removing existing non-git directory at {:?} before cloning", path);
+                fs::remove_dir_all(path)?;
+            }
+        }
+        
+        // Create parent directories if they don't exist
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        
+        // Clone the repository
+        info!("Cloning repository from {} to {:?}", url, path);
+        let _repo = RepoBuilder::new()
+            .clone(url, path)?;
+        
+        // Create our GitRepository wrapper
+        let git_repo = GitRepository::open(path, config.clone())?;
+        
+        Ok(git_repo)
     }
     
     /// Process a VCS operation

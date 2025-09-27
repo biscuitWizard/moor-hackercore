@@ -97,9 +97,7 @@ impl GitRepository {
         git_repo.configure_git_user()?;
         
         // Ensure keys directory is in .gitignore
-        info!("GitRepository::open: About to call ensure_keys_gitignore");
-        git_repo.ensure_keys_gitignore()?;
-        info!("GitRepository::open: ensure_keys_gitignore completed successfully");
+        // git_repo.ensure_keys_gitignore()?;
         
         Ok(git_repo)
     }
@@ -249,9 +247,7 @@ impl GitRepository {
         GitUtils::ensure_keys_gitignore(&self.work_dir)?;
         
         // Add .gitignore to git index
-        info!("GitRepository::ensure_keys_gitignore: About to call add_file with .gitignore");
         self.add_file(".gitignore")?;
-        info!("GitRepository::ensure_keys_gitignore: add_file completed successfully");
         
         Ok(())
     }

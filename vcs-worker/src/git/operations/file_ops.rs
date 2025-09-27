@@ -9,20 +9,11 @@ pub struct FileOps;
 impl FileOps {
     /// Add a file to the git index
     pub fn add_file(repo: &Repository, work_dir: &Path, path: &Path) -> Result<(), Box<dyn std::error::Error>> {
-        info!("FileOps::add_file: Called with path={:?}, work_dir={:?}", path, work_dir);
         let mut index = repo.index()?;
         
         // Convert to relative path from work directory
-        let rel_path = if path.is_absolute() {
-            info!("FileOps::add_file: Path is absolute, stripping work_dir prefix");
-            // If it's an absolute path, strip the work directory prefix
-            path.strip_prefix(work_dir)
-                .map_err(|_| "File path is not within repository")?
-        } else {
-            info!("FileOps::add_file: Path is relative, using as-is");
-            // If it's already a relative path, use it as-is
-            path
-        };
+        let rel_path = path.strip_prefix(work_dir)
+            .map_err(|_| "File path is not within repository")?;
         
         index.add_path(rel_path)?;
         index.write()?;
@@ -36,28 +27,16 @@ impl FileOps {
         let mut index = repo.index()?;
         
         // Convert to relative path from work directory
-        let rel_path = if path.is_absolute() {
-            // If it's an absolute path, strip the work directory prefix
-            path.strip_prefix(work_dir)
-                .map_err(|_| "File path is not within repository")?
-        } else {
-            // If it's already a relative path, use it as-is
-            path
-        };
+        let rel_path = path.strip_prefix(work_dir)
+            .map_err(|_| "File path is not within repository")?;
         
         // Remove from index
         index.remove_path(rel_path)?;
         index.write()?;
         
         // Remove from working directory if it exists
-        let full_path = if path.is_absolute() {
-            path.to_path_buf()
-        } else {
-            work_dir.join(path)
-        };
-        
-        if full_path.exists() {
-            fs::remove_file(&full_path)?;
+        if path.exists() {
+            fs::remove_file(path)?;
         }
         
         info!("Removed file from git: {:?}", rel_path);
