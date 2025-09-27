@@ -28,6 +28,9 @@ COPY ./vcs-worker ./crates/vcs-worker
 RUN sed -i 's/members = \[/members = [\"crates\/vcs-worker\", /' ./Cargo.toml
 RUN sed -i 's/default-members = \[/default-members = [\"crates\/vcs-worker\", /' ./Cargo.toml
 
+# Replace vendor/moor paths with ../ paths in vcs-worker Cargo.toml
+RUN sed -i 's|../vendor/moor/crates/|../|g' ./crates/vcs-worker/Cargo.toml
+
 # We bring this over so we can get the git hash via shadow-rs. A bit bloated, but oh well.
 COPY ./vendor/moor/.git ./.git
 

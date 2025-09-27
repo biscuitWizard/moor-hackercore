@@ -14,17 +14,13 @@ categories = [
 ]
 
 [dependencies]
-moor-common = { path = "../common" }
-moor-var = { path = "../var" }
-rpc-async-client = { path = "../rpc/rpc-async-client" }
-rpc-common = { path = "../rpc/rpc-common" }
-moor-objdef = { path = "../objdef" }
-moor-compiler = { path = "../compiler" }
-moor-db = { path = "../db" }
-## moor-common = { path = "../vendor/moor/crates/common" }
-## moor-var = { path = "../vendor/moor/crates/var" }
-## rpc-async-client = { path = "../vendor/moor/crates/rpc/rpc-async-client" }
-## rpc-common = { path = "../vendor/moor/crates/rpc/rpc-common" }
+moor-common = { path = "../vendor/moor/crates/common" }
+moor-var = { path = "../vendor/moor/crates/var" }
+rpc-async-client = { path = "../vendor/moor/crates/rpc/rpc-async-client" }
+rpc-common = { path = "../vendor/moor/crates/rpc/rpc-common" }
+moor-objdef = { path = "../vendor/moor/crates/objdef" }
+moor-compiler = { path = "../vendor/moor/crates/compiler" }
+moor-db = { path = "../vendor/moor/crates/db" }
 
 ## Command line arguments parsing.
 clap = "4.5"
