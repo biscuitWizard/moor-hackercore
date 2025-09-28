@@ -19,6 +19,29 @@ impl WorkflowHandler {
         }
     }
 
+    /// Convert object information to appropriate Var type
+    /// If the object name is different from the OID, use v_str with the name, otherwise use v_obj with the OID
+    fn object_to_var(&self, obj: &moor_compiler::ObjectDefinition, filename: Option<&str>) -> Var {
+        // Check if we have a filename and if it differs from the object's name
+        if let Some(fname) = filename {
+            // Extract object name from filename (without .moo extension)
+            if let Some(object_name) = PathUtils::extract_object_name_from_path(fname) {
+                // If the filename differs from the object's name, use the filename as v_str
+                if object_name != obj.name {
+                    return v_str(&object_name);
+                }
+            }
+        }
+        
+        // Use the object's name as v_str if it's not empty and not just a number
+        if !obj.name.is_empty() && !obj.name.parse::<u32>().is_ok() {
+            v_str(&obj.name)
+        } else {
+            // Use v_obj with the OID as fallback
+            v_obj(obj.oid)
+        }
+    }
+
     /// Execute pull with detailed analysis of changes
     pub fn execute_pull_with_analysis(&self, repo: &GitRepository, upstream_branch: &str, commits_to_pull: &[CommitInfo]) -> Result<PullResult, WorkerError> {
         info!("Executing pull with detailed analysis");
@@ -47,10 +70,10 @@ impl WorkflowHandler {
                                     // Load the new object to get its OID
                                     if let Ok(content) = repo.get_file_content_at_commit(&commit.full_id, &change.path) {
                                         if let Ok(new_obj) = self.object_handler.parse_object_dump(&content) {
-                                            commit_result.added_objects.push(new_obj.oid);
+                                            commit_result.added_objects.push(self.object_to_var(&new_obj, Some(&change.path)));
                                             
                                             // Analyze changes for new object (no old version)
-                                            let obj_changes = self.analyze_object_changes(None, &new_obj);
+                                            let obj_changes = self.analyze_object_changes(None, &new_obj, Some(&change.path));
                                             commit_result.changes.push(obj_changes);
                                         }
                                     }
@@ -62,7 +85,7 @@ impl WorkflowHandler {
                                     
                                     if let Ok(new_content) = new_content {
                                         if let Ok(new_obj) = self.object_handler.parse_object_dump(&new_content) {
-                                            commit_result.modified_objects.push(new_obj.oid);
+                                            commit_result.modified_objects.push(self.object_to_var(&new_obj, Some(&change.path)));
                                             
                                             // Analyze changes
                                             let old_obj = if let Some(old_content) = old_content {
@@ -71,7 +94,7 @@ impl WorkflowHandler {
                                                 None
                                             };
                                             
-                                            let obj_changes = self.analyze_object_changes(old_obj.as_ref(), &new_obj);
+                                            let obj_changes = self.analyze_object_changes(old_obj.as_ref(), &new_obj, Some(&change.path));
                                             commit_result.changes.push(obj_changes);
                                         }
                                     }
@@ -80,11 +103,11 @@ impl WorkflowHandler {
                                     // For deleted objects, we need to get the OID from the previous version
                                     if let Ok(old_content) = repo.get_file_content_at_commit("HEAD", &change.path) {
                                         if let Ok(old_obj) = self.object_handler.parse_object_dump(&old_content) {
-                                            commit_result.deleted_objects.push(old_obj.oid);
+                                            commit_result.deleted_objects.push(self.object_to_var(&old_obj, Some(&change.path)));
                                             
                                             // For deleted objects, all verbs and properties are "deleted"
                                             let obj_changes = ObjectChanges {
-                                                obj_id: old_obj.oid,
+                                                obj_id: self.object_to_var(&old_obj, Some(&change.path)),
                                                 modified_verbs: Vec::new(),
                                                 modified_props: Vec::new(),
                                                 deleted_verbs: old_obj.verbs.iter()
@@ -110,16 +133,25 @@ impl WorkflowHandler {
                                         
                                         if let Ok(new_content) = new_content {
                                             if let Ok(new_obj) = self.object_handler.parse_object_dump(&new_content) {
-                                                commit_result.renamed_objects.push(new_obj.oid);
-                                                
-                                                // Analyze changes (renamed objects are treated as modified)
+                                                // Parse old object for both from_var and changes analysis
                                                 let old_obj = if let Some(old_content) = old_content {
                                                     self.object_handler.parse_object_dump(&old_content).ok()
                                                 } else {
                                                     None
                                                 };
                                                 
-                                                let obj_changes = self.analyze_object_changes(old_obj.as_ref(), &new_obj);
+                                                // Create [from, to] pair for renamed objects
+                                                let from_var = if let Some(ref old_obj) = old_obj {
+                                                    self.object_to_var(old_obj, Some(&old_path))
+                                                } else {
+                                                    v_str(&old_path)
+                                                };
+                                                let to_var = self.object_to_var(&new_obj, Some(&change.path));
+                                                commit_result.renamed_objects.push(vec![from_var, to_var]);
+                                                
+                                                // Analyze changes (renamed objects are treated as modified)
+                                                
+                                                let obj_changes = self.analyze_object_changes(old_obj.as_ref(), &new_obj, Some(&change.path));
                                                 commit_result.changes.push(obj_changes);
                                             }
                                         }
@@ -179,10 +211,10 @@ impl WorkflowHandler {
                                     // Load the new object to get its OID
                                     if let Ok(content) = repo.get_file_content_at_commit(&commit.full_id, &change.path) {
                                         if let Ok(new_obj) = self.object_handler.parse_object_dump(&content) {
-                                            commit_result.added_objects.push(new_obj.oid);
+                                            commit_result.added_objects.push(self.object_to_var(&new_obj, Some(&change.path)));
                                             
                                             // Analyze changes for new object (no old version)
-                                            let obj_changes = self.analyze_object_changes(None, &new_obj);
+                                            let obj_changes = self.analyze_object_changes(None, &new_obj, Some(&change.path));
                                             commit_result.changes.push(obj_changes);
                                         }
                                     }
@@ -194,7 +226,7 @@ impl WorkflowHandler {
                                     
                                     if let Ok(new_content) = new_content {
                                         if let Ok(new_obj) = self.object_handler.parse_object_dump(&new_content) {
-                                            commit_result.modified_objects.push(new_obj.oid);
+                                            commit_result.modified_objects.push(self.object_to_var(&new_obj, Some(&change.path)));
                                             
                                             // Analyze changes
                                             let old_obj = if let Some(old_content) = old_content {
@@ -203,7 +235,7 @@ impl WorkflowHandler {
                                                 None
                                             };
                                             
-                                            let obj_changes = self.analyze_object_changes(old_obj.as_ref(), &new_obj);
+                                            let obj_changes = self.analyze_object_changes(old_obj.as_ref(), &new_obj, Some(&change.path));
                                             commit_result.changes.push(obj_changes);
                                         }
                                     }
@@ -212,11 +244,11 @@ impl WorkflowHandler {
                                     // For deleted objects, we need to get the OID from the previous version
                                     if let Ok(old_content) = repo.get_file_content_at_commit("HEAD", &change.path) {
                                         if let Ok(old_obj) = self.object_handler.parse_object_dump(&old_content) {
-                                            commit_result.deleted_objects.push(old_obj.oid);
+                                            commit_result.deleted_objects.push(self.object_to_var(&old_obj, Some(&change.path)));
                                             
                                             // For deleted objects, all verbs and properties are "deleted"
                                             let obj_changes = ObjectChanges {
-                                                obj_id: old_obj.oid,
+                                                obj_id: self.object_to_var(&old_obj, Some(&change.path)),
                                                 modified_verbs: Vec::new(),
                                                 modified_props: Vec::new(),
                                                 deleted_verbs: old_obj.verbs.iter()
@@ -242,16 +274,25 @@ impl WorkflowHandler {
                                         
                                         if let Ok(new_content) = new_content {
                                             if let Ok(new_obj) = self.object_handler.parse_object_dump(&new_content) {
-                                                commit_result.renamed_objects.push(new_obj.oid);
-                                                
-                                                // Analyze changes (renamed objects are treated as modified)
+                                                // Parse old object for both from_var and changes analysis
                                                 let old_obj = if let Some(old_content) = old_content {
                                                     self.object_handler.parse_object_dump(&old_content).ok()
                                                 } else {
                                                     None
                                                 };
                                                 
-                                                let obj_changes = self.analyze_object_changes(old_obj.as_ref(), &new_obj);
+                                                // Create [from, to] pair for renamed objects
+                                                let from_var = if let Some(ref old_obj) = old_obj {
+                                                    self.object_to_var(old_obj, Some(&old_path))
+                                                } else {
+                                                    v_str(&old_path)
+                                                };
+                                                let to_var = self.object_to_var(&new_obj, Some(&change.path));
+                                                commit_result.renamed_objects.push(vec![from_var, to_var]);
+                                                
+                                                // Analyze changes (renamed objects are treated as modified)
+                                                
+                                                let obj_changes = self.analyze_object_changes(old_obj.as_ref(), &new_obj, Some(&change.path));
                                                 commit_result.changes.push(obj_changes);
                                             }
                                         }
@@ -274,9 +315,9 @@ impl WorkflowHandler {
     }
 
     /// Analyze detailed changes between two object definitions
-    fn analyze_object_changes(&self, old_obj: Option<&moor_compiler::ObjectDefinition>, new_obj: &moor_compiler::ObjectDefinition) -> ObjectChanges {
+    fn analyze_object_changes(&self, old_obj: Option<&moor_compiler::ObjectDefinition>, new_obj: &moor_compiler::ObjectDefinition, filename: Option<&str>) -> ObjectChanges {
         let mut changes = ObjectChanges {
-            obj_id: new_obj.oid,
+            obj_id: self.object_to_var(new_obj, filename),
             modified_verbs: Vec::new(),
             modified_props: Vec::new(),
             deleted_verbs: Vec::new(),
@@ -354,11 +395,12 @@ impl WorkflowHandler {
     pub fn pull_result_to_moo_vars(&self, result: PullResult) -> Vec<Var> {
         // Convert each commit result to MOO format
         let commit_results_vars: Vec<Var> = result.commit_results.iter().map(|commit_result| {
-            // Convert object lists to v_obj variables
-            let modified_objects_vars: Vec<Var> = commit_result.modified_objects.iter().map(|&oid| v_obj(oid)).collect();
-            let deleted_objects_vars: Vec<Var> = commit_result.deleted_objects.iter().map(|&oid| v_obj(oid)).collect();
-            let added_objects_vars: Vec<Var> = commit_result.added_objects.iter().map(|&oid| v_obj(oid)).collect();
-            let renamed_objects_vars: Vec<Var> = commit_result.renamed_objects.iter().map(|&oid| v_obj(oid)).collect();
+            // Object lists are already Var types, so we can use them directly
+            let modified_objects_vars: Vec<Var> = commit_result.modified_objects.clone();
+            let deleted_objects_vars: Vec<Var> = commit_result.deleted_objects.clone();
+            let added_objects_vars: Vec<Var> = commit_result.added_objects.clone();
+            // Renamed objects are now Vec<Vec<Var>>, so we need to convert each pair to a list
+            let renamed_objects_vars: Vec<Var> = commit_result.renamed_objects.iter().map(|pair| v_list(pair)).collect();
             
             // Convert changes to MOO format
             let changes_vars: Vec<Var> = commit_result.changes.iter().map(|change| {
@@ -368,7 +410,7 @@ impl WorkflowHandler {
                 let deleted_props_vars: Vec<Var> = change.deleted_props.iter().map(|p| v_str(p)).collect();
                 
                 v_map(&[
-                    (v_str("obj_id"), v_obj(change.obj_id)),
+                    (v_str("obj_id"), change.obj_id.clone()),
                     (v_str("modified_verbs"), v_list(&modified_verbs_vars)),
                     (v_str("modified_props"), v_list(&modified_props_vars)),
                     (v_str("deleted_verbs"), v_list(&deleted_verbs_vars)),

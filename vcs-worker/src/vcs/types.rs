@@ -126,14 +126,14 @@ pub struct PullResult {
 pub struct CommitResult {
     /// Commit information
     pub commit_info: CommitInfo,
-    /// Objects that were modified in this commit (as v_obj types)
-    pub modified_objects: Vec<moor_var::Obj>,
-    /// Objects that were deleted in this commit (as v_obj types)
-    pub deleted_objects: Vec<moor_var::Obj>,
-    /// Objects that were added in this commit (as v_obj types)
-    pub added_objects: Vec<moor_var::Obj>,
-    /// Objects that were renamed in this commit (as v_obj types)
-    pub renamed_objects: Vec<moor_var::Obj>,
+    /// Objects that were modified in this commit (as Var types - v_str for named objects, v_obj for others)
+    pub modified_objects: Vec<moor_var::Var>,
+    /// Objects that were deleted in this commit (as Var types - v_str for named objects, v_obj for others)
+    pub deleted_objects: Vec<moor_var::Var>,
+    /// Objects that were added in this commit (as Var types - v_str for named objects, v_obj for others)
+    pub added_objects: Vec<moor_var::Var>,
+    /// Objects that were renamed in this commit (as list of [from, to] pairs where each is v_str for named objects, v_obj for others)
+    pub renamed_objects: Vec<Vec<moor_var::Var>>,
     /// Detailed changes for each object in this commit
     pub changes: Vec<ObjectChanges>,
 }
@@ -141,8 +141,8 @@ pub struct CommitResult {
 /// Changes to a specific object
 #[derive(Debug, Clone)]
 pub struct ObjectChanges {
-    /// Object ID
-    pub obj_id: moor_var::Obj,
+    /// Object ID (as Var type - v_str for named objects, v_obj for others)
+    pub obj_id: moor_var::Var,
     /// Modified verbs (added or modified)
     pub modified_verbs: Vec<String>,
     /// Modified properties (added or modified)

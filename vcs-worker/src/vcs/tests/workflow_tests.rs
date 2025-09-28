@@ -3,7 +3,7 @@ use crate::vcs::types::{PullResult, CommitResult, CommitInfo, ObjectChanges};
 use crate::config::Config;
 use crate::git::GitRepository;
 use tempfile::TempDir;
-use moor_var::Obj;
+use moor_var::{Obj, Var, v_obj, v_str};
 
 /// Helper function to create a test configuration
 fn create_test_config(temp_dir: &TempDir) -> Config {
@@ -64,13 +64,13 @@ fn test_pull_result_to_moo_vars_single_commit() {
     
     let commit_result = CommitResult {
         commit_info: commit_info.clone(),
-        modified_objects: vec![Obj::mk_id(42)],
-        deleted_objects: vec![Obj::mk_id(43)],
-        added_objects: vec![Obj::mk_id(44)],
+        modified_objects: vec![v_obj(Obj::mk_id(42))],
+        deleted_objects: vec![v_obj(Obj::mk_id(43))],
+        added_objects: vec![v_obj(Obj::mk_id(44))],
         renamed_objects: vec![],
         changes: vec![
             ObjectChanges {
-                obj_id: Obj::mk_id(42),
+                obj_id: v_obj(Obj::mk_id(42)),
                 modified_verbs: vec!["test_verb".to_string()],
                 modified_props: vec!["test_prop".to_string()],
                 deleted_verbs: vec![],
@@ -105,7 +105,7 @@ fn test_pull_result_to_moo_vars_multiple_commits() {
             message: "First commit".to_string(),
             author: "author1".to_string(),
         },
-        modified_objects: vec![Obj::mk_id(1)],
+        modified_objects: vec![v_obj(Obj::mk_id(1))],
         deleted_objects: vec![],
         added_objects: vec![],
         renamed_objects: vec![],
@@ -122,7 +122,7 @@ fn test_pull_result_to_moo_vars_multiple_commits() {
         },
         modified_objects: vec![],
         deleted_objects: vec![],
-        added_objects: vec![Obj::mk_id(2)],
+        added_objects: vec![v_obj(Obj::mk_id(2))],
         renamed_objects: vec![],
         changes: vec![],
     };
@@ -155,14 +155,14 @@ fn test_pull_result_multiple_objects_per_commit() {
     // Create a commit result with multiple objects changed
     let commit_result = CommitResult {
         commit_info: commit_info.clone(),
-        modified_objects: vec![Obj::mk_id(42), Obj::mk_id(43)],  // Two objects modified
+        modified_objects: vec![v_obj(Obj::mk_id(42)), v_obj(Obj::mk_id(43))],  // Two objects modified
         deleted_objects: vec![],
-        added_objects: vec![Obj::mk_id(44)],  // One object added
+        added_objects: vec![v_obj(Obj::mk_id(44))],  // One object added
         renamed_objects: vec![],
         changes: vec![
             // First object changes
             ObjectChanges {
-                obj_id: Obj::mk_id(42),
+                obj_id: v_obj(Obj::mk_id(42)),
                 modified_verbs: vec!["look".to_string(), "examine".to_string()],
                 modified_props: vec!["description".to_string()],
                 deleted_verbs: vec![],
@@ -170,7 +170,7 @@ fn test_pull_result_multiple_objects_per_commit() {
             },
             // Second object changes
             ObjectChanges {
-                obj_id: Obj::mk_id(43),
+                obj_id: v_obj(Obj::mk_id(43)),
                 modified_verbs: vec!["take".to_string()],
                 modified_props: vec!["weight".to_string()],
                 deleted_verbs: vec!["old_verb".to_string()],
@@ -178,7 +178,7 @@ fn test_pull_result_multiple_objects_per_commit() {
             },
             // Third object changes (added object)
             ObjectChanges {
-                obj_id: Obj::mk_id(44),
+                obj_id: v_obj(Obj::mk_id(44)),
                 modified_verbs: vec!["create".to_string()],
                 modified_props: vec!["name".to_string(), "value".to_string()],
                 deleted_verbs: vec![],
