@@ -121,6 +121,13 @@ Low-level git operations organized by functionality:
 - `pull_with_rebase()`: Pull with rebase strategy
 - `pull_dry_run()`: Analyze pull impact without executing
 
+#### StashOps
+- `stash_changes()`: Stash current working directory changes using ObjDef models with rename detection
+- `replay_stashed_changes()`: Replay stashed changes after operations like pull
+- Handles modified, deleted, and renamed files with proper filename preservation
+- **Rename Detection**: Uses first-line content matching to detect renames between added and deleted files
+- **Rename Restoration**: Restores old filenames and removes new filenames to undo renames
+
 ### 3. VCS Handlers
 
 #### ObjectHandler
@@ -236,19 +243,28 @@ Workflow Request → WorkflowHandler → Multiple Git Ops → Analysis → Resul
 The stash and replay operations provide a conflict-free way to handle uncommitted changes:
 
 1. **Stash**: 
-   - Identifies changed `.moo` files in working directory
-   - Parses each file into `ObjectDefinition` models
-   - Stores models in memory
-   - Resets working directory (equivalent to `reset`)
+   - Uses git status to identify all changed `.moo` files (including deleted ones)
+   - Parses existing files into `ObjectDefinition` models
+   - Stores models with operation type (`Modified`, `Deleted`) and original filename
+   - Preserves exact filenames to avoid object name vs filename mismatches
 
 2. **Replay**:
-   - Retrieves stashed `ObjectDefinition` models from memory
-   - Applies meta configuration filtering
-   - Converts to MOO object dumps
-   - Writes filtered objects back to disk
-   - Adds changes to git index
+   - Retrieves stashed objects with their operation types
+   - For `Modified` operations: applies meta filtering and writes files back
+   - For `Deleted` operations: re-deletes files from both filesystem and git index
+   - Uses original filenames to ensure proper file restoration
+   - Adds/stages changes appropriately in git
 
-This approach avoids conflicts because it uses the same object parsing and filtering logic as the pull operation.
+3. **Supported Operations**:
+   - **Modified Files**: Content changes are preserved with original filenames
+   - **New Files**: Untracked files are preserved and added to git
+   - **Deleted Files**: Files are re-deleted after pull to restore working state
+   - **Renamed Files**: Full support with proper detection and restoration
+     - **Detection**: Uses first-line content matching between added and deleted files (same as StatusOps)
+     - **Restoration**: Restores the old filename and removes the new filename
+     - **Implementation**: Compares first lines of added files with deleted files from git history
+
+This approach avoids conflicts because it uses the same object parsing and filtering logic as the pull operation, and properly handles all types of file operations.
 
 ## Key Features
 

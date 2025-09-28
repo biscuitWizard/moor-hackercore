@@ -237,9 +237,11 @@ worker_request("vcs", {"stash"})
 ```
 
 **Note:** This operation:
-- Loads current changes into ObjDef models in memory
-- Resets the active changes (equivalent to `reset`)
-- Keeps changes available for replay using `replay_stash`
+- Uses git status to identify all changed `.moo` files (including deleted ones)
+- Loads current changes into ObjDef models in memory with operation types
+- Preserves original filenames to avoid object name vs filename mismatches
+- Stores operation types: `Modified`, `Deleted`, `Renamed` for proper replay
+- **Rename Detection**: Compares first lines of added files with deleted files from git history
 - Does not use Git's built-in stash system
 
 ### replay_stash
@@ -257,6 +259,12 @@ worker_request("vcs", {"replay_stash"})
 ```
 
 **Note:** This operation:
+- Replays stashed changes based on operation type
+- For `Modified` files: writes content back with original filenames
+- For `Deleted` files: re-deletes files from filesystem and git index
+- For `Renamed` files: restores old filename and removes new filename to undo rename
+- Applies meta configuration filtering to restored files
+- Handles filename preservation correctly
 - Retrieves stashed ObjDef models from memory
 - Applies meta configuration filtering
 - Writes the filtered objects back to disk

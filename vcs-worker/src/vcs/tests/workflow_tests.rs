@@ -261,19 +261,27 @@ fn test_stash_changes_with_changes() {
     // If we got stashed objects, verify they have the correct content
     if !stashed_objects.is_empty() {
         let stashed_obj = &stashed_objects[0];
-        assert_eq!(stashed_obj.oid, Obj::mk_id(42));
-        assert_eq!(stashed_obj.name, "test_object");
+        assert_eq!(stashed_obj.original_filename, "test_object");
         
-        // Verify the object has the modified verb
-        let has_modified_verb = stashed_obj.verbs.iter().any(|verb| {
-            verb.names.iter().any(|name| name.to_string() == "modified_verb")
-        });
-        assert!(has_modified_verb);
+        // Verify the object definition has the correct content
+        if let Some(ref object_def) = stashed_obj.object_def {
+            assert_eq!(object_def.oid, Obj::mk_id(42));
+            assert_eq!(object_def.name, "test_object");
+            
+            // Verify the object has the modified verb
+            let has_modified_verb = object_def.verbs.iter().any(|verb| {
+                verb.names.iter().any(|name| name.to_string() == "modified_verb")
+            });
+            assert!(has_modified_verb);
+        }
     }
 }
 
 #[test]
 fn test_replay_stashed_changes() {
+    use crate::git::operations::stash_ops::StashedObject;
+    use crate::git::operations::stash_ops::StashOperation;
+    
     let temp_dir = tempfile::tempdir().unwrap();
     let config = create_test_config(&temp_dir);
     let workflow_handler = WorkflowHandler::new(config.clone());
@@ -287,20 +295,111 @@ fn test_replay_stashed_changes() {
     
     // Create a test MOO object
     let test_object_content = create_test_moo_object("test_object", 42);
-    let mut stashed_object = workflow_handler.object_handler.parse_object_dump(&test_object_content).unwrap();
+    let mut stashed_object_def = workflow_handler.object_handler.parse_object_dump(&test_object_content).unwrap();
     
     // Modify the stashed object
-    stashed_object.name = "modified_name".to_string();
+    stashed_object_def.name = "modified_name".to_string();
+    
+    // Create StashedObject with Modified operation
+    let stashed_object = StashedObject {
+        object_def: Some(stashed_object_def),
+        original_filename: "test_object".to_string(),
+        operation: StashOperation::Modified,
+    };
     
     // Replay the stashed changes
     let result = workflow_handler.replay_stashed_changes(&repo, vec![stashed_object]);
     assert!(result.is_ok());
     
-    // Verify the object was written to disk
-    let test_object_path = objects_dir.join("modified_name.moo");
+    // Verify the object was written to disk (using original filename)
+    let test_object_path = objects_dir.join("test_object.moo");
     assert!(test_object_path.exists());
     
     // Verify the content was written correctly
     let written_content = std::fs::read_to_string(&test_object_path).unwrap();
     assert!(written_content.contains("object #42"));
+}
+
+#[test]
+fn test_replay_deleted_file() {
+    use crate::git::operations::stash_ops::StashedObject;
+    use crate::git::operations::stash_ops::StashOperation;
+    
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config = create_test_config(&temp_dir);
+    let workflow_handler = WorkflowHandler::new(config.clone());
+    
+    // Create a git repository
+    let repo = GitRepository::init(temp_dir.path(), config).unwrap();
+    
+    // Create objects directory
+    let objects_dir = temp_dir.path().join(&workflow_handler.object_handler.config.objects_directory);
+    std::fs::create_dir_all(&objects_dir).unwrap();
+    
+    // Create a test file that exists
+    let test_object_content = create_test_moo_object("test_object", 42);
+    let test_object_path = objects_dir.join("test_object.moo");
+    std::fs::write(&test_object_path, &test_object_content).unwrap();
+    
+    // Add the file to git
+    repo.add_file(&test_object_path).unwrap();
+    
+    // Create StashedObject with Deleted operation
+    let stashed_object = StashedObject {
+        object_def: None,
+        original_filename: "test_object".to_string(),
+        operation: StashOperation::Deleted,
+    };
+    
+    // Replay the stashed changes (should delete the file)
+    let result = workflow_handler.replay_stashed_changes(&repo, vec![stashed_object]);
+    assert!(result.is_ok());
+    
+    // Verify the file was deleted
+    assert!(!test_object_path.exists());
+}
+
+#[test]
+fn test_stash_and_replay_workflow() {
+    use crate::git::operations::stash_ops::StashOperation;
+    
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config = create_test_config(&temp_dir);
+    let workflow_handler = WorkflowHandler::new(config.clone());
+    
+    // Create a git repository
+    let repo = GitRepository::init(temp_dir.path(), config).unwrap();
+    
+    // Create objects directory
+    let objects_dir = temp_dir.path().join(&workflow_handler.object_handler.config.objects_directory);
+    std::fs::create_dir_all(&objects_dir).unwrap();
+    
+    // Create a test MOO object
+    let test_object_content = create_test_moo_object("test_object", 42);
+    let test_object_path = objects_dir.join("test_object.moo");
+    std::fs::write(&test_object_path, &test_object_content).unwrap();
+    
+    // Add the file to git
+    repo.add_file(&test_object_path).unwrap();
+    
+    // Modify the file
+    let modified_content = create_test_moo_object("test_object", 43);
+    std::fs::write(&test_object_path, &modified_content).unwrap();
+    
+    // Stash the changes
+    let stashed_objects = workflow_handler.stash_changes(&repo).unwrap();
+    assert_eq!(stashed_objects.len(), 1);
+    
+    // Verify the stashed object has the correct operation type
+    assert!(matches!(stashed_objects[0].operation, StashOperation::Modified));
+    assert_eq!(stashed_objects[0].original_filename, "test_object");
+    assert!(stashed_objects[0].object_def.is_some());
+    
+    // Replay the stashed changes
+    let result = workflow_handler.replay_stashed_changes(&repo, stashed_objects);
+    assert!(result.is_ok());
+    
+    // Verify the file was restored with the modified content
+    let restored_content = std::fs::read_to_string(&test_object_path).unwrap();
+    assert!(restored_content.contains("#43")); // The modified OID
 }

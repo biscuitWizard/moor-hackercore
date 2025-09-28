@@ -6,6 +6,9 @@ pub mod init_ops;
 pub mod pull_ops;
 pub mod stash_ops;
 
+#[cfg(test)]
+mod tests;
+
 pub use file_ops::*;
 pub use commit_ops::*;
 pub use remote_ops::*;
