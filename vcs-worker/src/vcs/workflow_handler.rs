@@ -2,6 +2,7 @@ use tracing::{info, error};
 use moor_var::{Var, v_str, v_map, v_list, v_obj};
 use crate::config::Config;
 use crate::git::GitRepository;
+use crate::git::operations::stash_ops::{StashOps, StashedObject};
 use crate::utils::PathUtils;
 use super::types::{PullResult, CommitResult, ObjectChanges, ChangeStatus, CommitInfo};
 use super::object_handler::ObjectHandler;
@@ -619,7 +620,25 @@ impl WorkflowHandler {
         use crate::git::operations::commit_ops::CommitOps;
         use crate::git::operations::remote_ops::RemoteOps;
         
-        // First, fetch the latest changes from remote
+        // Step 1: Check for uncommitted changes and stash them before pull (only for non-dry-run)
+        let stashed_objects = if !dry_run {
+            match self.stash_changes(repo) {
+                Ok(objects) => {
+                    if !objects.is_empty() {
+                        info!("Stashed {} uncommitted changes before pull", objects.len());
+                    }
+                    objects
+                }
+                Err(e) => {
+                    error!("Failed to stash changes before pull: {}", e);
+                    return Err(e);
+                }
+            }
+        } else {
+            Vec::new()
+        };
+
+        // Step 2: Fetch the latest changes from remote
         let ssh_key_path = self.object_handler.config.ssh_key_path();
         let keys_dir = self.object_handler.config.keys_directory();
         
@@ -629,19 +648,37 @@ impl WorkflowHandler {
             }
             Err(e) => {
                 error!("Failed to fetch from remote: {}", e);
+                // If we stashed changes, we need to replay them before returning error
+                if !dry_run && !stashed_objects.is_empty() {
+                    if let Err(replay_err) = self.replay_stashed_changes(repo, stashed_objects) {
+                        error!("Failed to replay stashed changes after fetch error: {}", replay_err);
+                    }
+                }
                 return Err(WorkerError::RequestError(format!("Failed to fetch from remote: {}", e)));
             }
         }
         
-        // Get the current branch and upstream
+        // Step 3: Get the current branch and upstream
         let current_branch = match RemoteOps::get_current_branch(repo.repo()) {
             Ok(Some(branch)) => branch,
             Ok(None) => {
                 error!("No current branch found");
+                // If we stashed changes, we need to replay them before returning error
+                if !dry_run && !stashed_objects.is_empty() {
+                    if let Err(replay_err) = self.replay_stashed_changes(repo, stashed_objects) {
+                        error!("Failed to replay stashed changes after branch error: {}", replay_err);
+                    }
+                }
                 return Err(WorkerError::RequestError("No current branch found".to_string()));
             }
             Err(e) => {
                 error!("Failed to get current branch: {}", e);
+                // If we stashed changes, we need to replay them before returning error
+                if !dry_run && !stashed_objects.is_empty() {
+                    if let Err(replay_err) = self.replay_stashed_changes(repo, stashed_objects) {
+                        error!("Failed to replay stashed changes after branch error: {}", replay_err);
+                    }
+                }
                 return Err(WorkerError::RequestError(format!("Failed to get current branch: {}", e)));
             }
         };
@@ -649,13 +686,25 @@ impl WorkflowHandler {
         let upstream_branch = format!("origin/{}", current_branch);
         info!("Current branch: {}, upstream: {}", current_branch, upstream_branch);
         
-        // Check if there are any commits to pull
+        // Step 4: Check if there are any commits to pull
         match CommitOps::get_commits_ahead_behind(repo.repo(), &current_branch, &upstream_branch) {
             Ok((_ahead, behind)) => {
                 info!("Branch is {} commits behind upstream", behind);
                 
                 if behind == 0 {
                     info!("No commits to pull");
+                    // If we stashed changes, replay them since there's nothing to pull
+                    if !dry_run && !stashed_objects.is_empty() {
+                        match self.replay_stashed_changes(repo, stashed_objects) {
+                            Ok(_) => {
+                                info!("Successfully replayed stashed changes (no commits to pull)");
+                            }
+                            Err(e) => {
+                                error!("Failed to replay stashed changes (no commits to pull): {}", e);
+                                return Err(e);
+                            }
+                        }
+                    }
                     let empty_result = super::types::PullResult {
                         commit_results: Vec::new(),
                     };
@@ -667,6 +716,12 @@ impl WorkflowHandler {
                     Ok(commits) => commits,
                     Err(e) => {
                         error!("Failed to get commits to pull from {} to {}: {}", current_branch, upstream_branch, e);
+                        // If we stashed changes, we need to replay them before returning error
+                        if !dry_run && !stashed_objects.is_empty() {
+                            if let Err(replay_err) = self.replay_stashed_changes(repo, stashed_objects) {
+                                error!("Failed to replay stashed changes after commit error: {}", replay_err);
+                            }
+                        }
                         return Err(WorkerError::RequestError(format!("Failed to get commits to pull: {}", e)));
                     }
                 };
@@ -679,110 +734,58 @@ impl WorkflowHandler {
                 } else {
                     info!("Executing pull with detailed analysis");
                     // For live pull, execute with detailed analysis
-                    self.execute_pull_with_analysis(repo, &upstream_branch, &commits_to_pull)
-                        .map(|result| v_list(&self.pull_result_to_moo_vars(result)))
+                    let pull_result = self.execute_pull_with_analysis(repo, &upstream_branch, &commits_to_pull);
+                    
+                    // Step 5: After successful pull, replay stashed changes
+                    match pull_result {
+                        Ok(result) => {
+                            // Replay stashed changes after successful pull
+                            let stashed_count = stashed_objects.len();
+                            if !stashed_objects.is_empty() {
+                                match self.replay_stashed_changes(repo, stashed_objects) {
+                                    Ok(_) => {
+                                        info!("Successfully replayed {} stashed changes after pull", stashed_count);
+                                    }
+                                    Err(e) => {
+                                        error!("Failed to replay stashed changes after pull: {}", e);
+                                        return Err(e);
+                                    }
+                                }
+                            }
+                            Ok(v_list(&self.pull_result_to_moo_vars(result)))
+                        }
+                        Err(e) => {
+                            // If pull failed, replay stashed changes to restore working state
+                            if !stashed_objects.is_empty() {
+                                if let Err(replay_err) = self.replay_stashed_changes(repo, stashed_objects) {
+                                    error!("Failed to replay stashed changes after pull failure: {}", replay_err);
+                                }
+                            }
+                            Err(e)
+                        }
+                    }
                 }
             }
             Err(e) => {
                 error!("Failed to check commits ahead/behind: {}", e);
+                // If we stashed changes, we need to replay them before returning error
+                if !dry_run && !stashed_objects.is_empty() {
+                    if let Err(replay_err) = self.replay_stashed_changes(repo, stashed_objects) {
+                        error!("Failed to replay stashed changes after ahead/behind error: {}", replay_err);
+                    }
+                }
                 Err(WorkerError::RequestError(format!("Failed to check commits ahead/behind: {}", e)))
             }
         }
     }
     
     /// Stash current changes using ObjDef models
-    pub fn stash_changes(&self, repo: &GitRepository) -> Result<Vec<moor_compiler::ObjectDefinition>, WorkerError> {
-        info!("Stashing current changes using ObjDef models");
-        
-        let mut stashed_objects = Vec::new();
-        let objects_dir = self.object_handler.config.objects_directory();
-        let objects_path = repo.work_dir().join(objects_dir);
-        
-        // Find all .moo files that have changes
-        let moo_files = match self.object_handler.find_moo_files(&objects_path) {
-            Ok(files) => files,
-            Err(e) => {
-                error!("Failed to find .moo files: {}", e);
-                return Err(WorkerError::RequestError(format!("Failed to find .moo files: {}", e)));
-            }
-        };
-        
-        // Load each object that has changes
-        for file_path in moo_files {
-            if let Some(object_name) = PathUtils::extract_object_name_from_path(file_path.to_str().unwrap_or("")) {
-                // Check if this file has changes
-                if repo.file_has_changes(&file_path) {
-                    match repo.read_file(&file_path) {
-                        Ok(content) => {
-                            match self.object_handler.parse_object_dump(&content) {
-                                Ok(object_def) => {
-                                    info!("Stashing object: {}", object_name);
-                                    stashed_objects.push(object_def);
-                                }
-                                Err(e) => {
-                                    error!("Failed to parse object dump for {}: {}", object_name, e);
-                                    // Continue with other objects
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            error!("Failed to read file {}: {}", file_path.display(), e);
-                            // Continue with other files
-                        }
-                    }
-                }
-            }
-        }
-        
-        info!("Stashed {} objects", stashed_objects.len());
-        Ok(stashed_objects)
+    pub fn stash_changes(&self, repo: &GitRepository) -> Result<Vec<StashedObject>, WorkerError> {
+        StashOps::stash_changes(repo, &self.object_handler)
     }
     
     /// Replay stashed changes after pull
-    pub fn replay_stashed_changes(&self, repo: &GitRepository, stashed_objects: Vec<moor_compiler::ObjectDefinition>) -> Result<(), WorkerError> {
-        info!("Replaying {} stashed objects", stashed_objects.len());
-        
-        for mut object_def in stashed_objects {
-            // Load meta configuration
-            let meta_full_path = PathUtils::object_meta_path(repo.work_dir(), &self.object_handler.config, &object_def.name);
-            let meta_config = match self.object_handler.load_or_create_meta_config(&meta_full_path) {
-                Ok(config) => config,
-                Err(e) => {
-                    error!("Failed to load meta config for {}: {}", object_def.name, e);
-                    continue;
-                }
-            };
-            
-            // Apply meta configuration filtering
-            self.object_handler.apply_meta_config(&mut object_def, &meta_config);
-            
-            // Convert back to dump format
-            match self.object_handler.to_dump(&object_def) {
-                Ok(filtered_dump) => {
-                    // Write the filtered object
-                    let object_path = PathUtils::object_path(repo.work_dir(), &self.object_handler.config, &object_def.name);
-                    
-                    if let Err(e) = repo.write_file(&object_path, &filtered_dump) {
-                        error!("Failed to write object {}: {}", object_def.name, e);
-                        continue;
-                    }
-                    
-                    // Add to git
-                    if let Err(e) = repo.add_file(&object_path) {
-                        error!("Failed to add object {} to git: {}", object_def.name, e);
-                        continue;
-                    }
-                    
-                    info!("Replayed object: {}", object_def.name);
-                }
-                Err(e) => {
-                    error!("Failed to convert object {} to dump: {}", object_def.name, e);
-                    continue;
-                }
-            }
-        }
-        
-        info!("Successfully replayed all stashed changes");
-        Ok(())
+    pub fn replay_stashed_changes(&self, repo: &GitRepository, stashed_objects: Vec<StashedObject>) -> Result<(), WorkerError> {
+        StashOps::replay_stashed_changes(repo, &self.object_handler, stashed_objects)
     }
 }

@@ -4,6 +4,7 @@ pub mod remote_ops;
 pub mod status_ops;
 pub mod init_ops;
 pub mod pull_ops;
+pub mod stash_ops;
 
 pub use file_ops::*;
 pub use commit_ops::*;
@@ -11,3 +12,4 @@ pub use remote_ops::*;
 pub use status_ops::*;
 pub use init_ops::*;
 pub use pull_ops::*;
+pub use stash_ops::*;
