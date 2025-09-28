@@ -374,3 +374,50 @@ fn test_rollback_first_commit() {
     let index = repo.index().unwrap();
     assert!(index.get_path(std::path::Path::new("test.txt"), 0).is_some());
 }
+
+#[test]
+fn test_create_commit_with_no_changes() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let repo = Repository::init(temp_dir.path()).unwrap();
+    
+    // Try to create a commit without any changes
+    let result = CommitOps::create_commit(
+        &repo,
+        "Empty commit",
+        "test-user",
+        "test@example.com",
+    );
+    
+    // Should fail with appropriate error message
+    assert!(result.is_err());
+    let error = result.unwrap_err();
+    assert!(error.to_string().contains("No changes to commit"));
+    assert!(error.to_string().contains("Repository is clean"));
+}
+
+#[test]
+fn test_create_commit_with_no_changes_after_initial_commit() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let repo = Repository::init(temp_dir.path()).unwrap();
+    let work_dir = temp_dir.path();
+    
+    // Create initial commit
+    let test_file = work_dir.join("test.txt");
+    create_test_file(&test_file, "Hello, world!").unwrap();
+    crate::git::operations::file_ops::FileOps::add_file(&repo, work_dir, &test_file).unwrap();
+    CommitOps::create_commit(&repo, "Initial commit", "test-user", "test@example.com").unwrap();
+    
+    // Try to create another commit without any changes
+    let result = CommitOps::create_commit(
+        &repo,
+        "Empty commit",
+        "test-user",
+        "test@example.com",
+    );
+    
+    // Should fail with appropriate error message
+    assert!(result.is_err());
+    let error = result.unwrap_err();
+    assert!(error.to_string().contains("No changes to commit"));
+    assert!(error.to_string().contains("Repository is clean"));
+}

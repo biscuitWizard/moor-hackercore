@@ -13,6 +13,11 @@ impl CommitOps {
         author_name: &str,
         author_email: &str,
     ) -> Result<Commit<'a>, Box<dyn std::error::Error>> {
+        // Check if there are any changes to commit
+        if !super::status_ops::StatusOps::has_changes(repo)? {
+            return Err("No changes to commit. Repository is clean.".into());
+        }
+        
         let signature = Signature::now(author_name, author_email)?;
         
         // Add all changes to the index before committing
@@ -486,6 +491,11 @@ impl CommitOps {
                 error!("Failed to check commits ahead/behind: {}", e);
                 return Err(format!("Failed to check commits ahead/behind: {}", e).into());
             }
+        }
+        
+        // Check if there are any changes to commit before proceeding
+        if !git_repo.has_changes()? {
+            return Err("No changes to commit. Repository is clean.".into());
         }
         
         match git_repo.commit(message, author_name, author_email) {
