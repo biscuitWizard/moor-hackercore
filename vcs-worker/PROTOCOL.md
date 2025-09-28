@@ -271,6 +271,60 @@ worker_request("vcs", {"replay_stash"})
 - Adds the changes to the git index
 - Works seamlessly with pull operations to avoid conflicts
 
+### changes
+Get current changed files in detailed format with object-level analysis.
+
+```lisp
+worker_request("vcs", {"changes"})
+```
+
+**Returns:** List of changed objects with detailed change information.
+
+**Example:**
+```lisp
+worker_request("vcs", {"changes"})
+```
+
+**Example Return Format:**
+```lisp
+{
+  {
+    "obj_id" -> #42,
+    "operation" -> "modified",
+    "modified_verbs" -> {"verb_name"},
+    "deleted_verbs" -> {},
+    "added_verbs" -> {"new_verb"},
+    "modified_props" -> {"prop_name"},
+    "deleted_props" -> {},
+    "added_props" -> {"new_prop"}
+  },
+  {
+    "obj_id" -> "player.moo",
+    "operation" -> "renamed",
+    "old_obj_id" -> "character.moo",
+    "modified_verbs" -> {},
+    "deleted_verbs" -> {},
+    "added_verbs" -> {},
+    "modified_props" -> {},
+    "deleted_props" -> {},
+    "added_props" -> {}
+  },
+  {
+    "obj_id" -> #43,
+    "operation" -> "deleted"
+  }
+}
+```
+
+**Note:** This operation:
+- Analyzes current working directory changes using git status
+- Detects renames by comparing first lines of added and deleted files
+- Provides detailed verb and property change analysis
+- Uses `v_str` for object IDs when filename doesn't match object number, otherwise `v_obj`
+- For deleted objects, only includes `obj_id` and `operation` fields
+- For renamed objects, includes `old_obj_id` field with the previous object identifier
+- Returns empty lists for unchanged categories (verbs/properties)
+
 ## Credential Management Operations
 
 ### set_ssh_key

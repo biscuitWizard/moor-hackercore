@@ -74,7 +74,7 @@ impl WorkflowHandler {
                                             commit_result.added_objects.push(self.object_to_var(&new_obj, Some(&change.path)));
                                             
                                             // Analyze changes for new object (no old version)
-                                            let obj_changes = self.analyze_object_changes(None, &new_obj, Some(&change.path));
+                                            let (obj_changes, _, _) = self.analyze_object_changes(None, &new_obj, Some(&change.path));
                                             commit_result.changes.push(obj_changes);
                                         }
                                     }
@@ -95,7 +95,7 @@ impl WorkflowHandler {
                                                 None
                                             };
                                             
-                                            let obj_changes = self.analyze_object_changes(old_obj.as_ref(), &new_obj, Some(&change.path));
+                                            let (obj_changes, _, _) = self.analyze_object_changes(old_obj.as_ref(), &new_obj, Some(&change.path));
                                             commit_result.changes.push(obj_changes);
                                         }
                                     }
@@ -152,7 +152,7 @@ impl WorkflowHandler {
                                                 
                                                 // Analyze changes (renamed objects are treated as modified)
                                                 
-                                                let obj_changes = self.analyze_object_changes(old_obj.as_ref(), &new_obj, Some(&change.path));
+                                                let (obj_changes, _, _) = self.analyze_object_changes(old_obj.as_ref(), &new_obj, Some(&change.path));
                                                 commit_result.changes.push(obj_changes);
                                             }
                                         }
@@ -215,7 +215,7 @@ impl WorkflowHandler {
                                             commit_result.added_objects.push(self.object_to_var(&new_obj, Some(&change.path)));
                                             
                                             // Analyze changes for new object (no old version)
-                                            let obj_changes = self.analyze_object_changes(None, &new_obj, Some(&change.path));
+                                            let (obj_changes, _, _) = self.analyze_object_changes(None, &new_obj, Some(&change.path));
                                             commit_result.changes.push(obj_changes);
                                         }
                                     }
@@ -236,7 +236,7 @@ impl WorkflowHandler {
                                                 None
                                             };
                                             
-                                            let obj_changes = self.analyze_object_changes(old_obj.as_ref(), &new_obj, Some(&change.path));
+                                            let (obj_changes, _, _) = self.analyze_object_changes(old_obj.as_ref(), &new_obj, Some(&change.path));
                                             commit_result.changes.push(obj_changes);
                                         }
                                     }
@@ -293,7 +293,7 @@ impl WorkflowHandler {
                                                 
                                                 // Analyze changes (renamed objects are treated as modified)
                                                 
-                                                let obj_changes = self.analyze_object_changes(old_obj.as_ref(), &new_obj, Some(&change.path));
+                                                let (obj_changes, _, _) = self.analyze_object_changes(old_obj.as_ref(), &new_obj, Some(&change.path));
                                                 commit_result.changes.push(obj_changes);
                                             }
                                         }
@@ -316,7 +316,7 @@ impl WorkflowHandler {
     }
 
     /// Analyze detailed changes between two object definitions
-    fn analyze_object_changes(&self, old_obj: Option<&moor_compiler::ObjectDefinition>, new_obj: &moor_compiler::ObjectDefinition, filename: Option<&str>) -> ObjectChanges {
+    fn analyze_object_changes(&self, old_obj: Option<&moor_compiler::ObjectDefinition>, new_obj: &moor_compiler::ObjectDefinition, filename: Option<&str>) -> (ObjectChanges, Vec<String>, Vec<String>) {
         let mut changes = ObjectChanges {
             obj_id: self.object_to_var(new_obj, filename),
             modified_verbs: Vec::new(),
@@ -325,51 +325,96 @@ impl WorkflowHandler {
             deleted_props: Vec::new(),
         };
         
+        let mut added_verbs = Vec::new();
+        let mut added_props = Vec::new();
+        
         if let Some(old) = old_obj {
-            // Compare verbs
-            let old_verb_names: std::collections::HashSet<String> = old.verbs.iter()
-                .map(|v| v.names.iter().map(|s| s.to_string()).collect::<Vec<_>>().join(" "))
+            // Compare verbs by content, not just names
+            let old_verbs_map: std::collections::HashMap<String, &moor_compiler::ObjVerbDef> = old.verbs.iter()
+                .map(|v| {
+                    let name = v.names.iter().map(|s| s.to_string()).collect::<Vec<_>>().join(" ");
+                    (name, v)
+                })
                 .collect();
             
-            let new_verb_names: std::collections::HashSet<String> = new_obj.verbs.iter()
-                .map(|v| v.names.iter().map(|s| s.to_string()).collect::<Vec<_>>().join(" "))
+            let new_verbs_map: std::collections::HashMap<String, &moor_compiler::ObjVerbDef> = new_obj.verbs.iter()
+                .map(|v| {
+                    let name = v.names.iter().map(|s| s.to_string()).collect::<Vec<_>>().join(" ");
+                    (name, v)
+                })
                 .collect();
             
-            // Find modified/added verbs
-            for verb_name in &new_verb_names {
-                if !old_verb_names.contains(verb_name) {
-                    changes.modified_verbs.push(verb_name.clone());
+            // Find modified verbs (exist in both but content changed)
+            for (verb_name, new_verb) in &new_verbs_map {
+                if let Some(old_verb) = old_verbs_map.get(verb_name) {
+                    // Verb exists in both - check if content changed
+                    let content_changed = self.verb_content_changed(old_verb, new_verb);
+                    info!("Verb '{}' content changed: {}", verb_name, content_changed);
+                    if content_changed {
+                        changes.modified_verbs.push(verb_name.clone());
+                    }
+                } else {
+                    info!("Verb '{}' is new (not in old object)", verb_name);
+                    added_verbs.push(verb_name.clone());
                 }
             }
             
             // Find deleted verbs
-            for verb_name in &old_verb_names {
-                if !new_verb_names.contains(verb_name) {
+            for verb_name in old_verbs_map.keys() {
+                if !new_verbs_map.contains_key(verb_name) {
                     changes.deleted_verbs.push(verb_name.clone());
                 }
             }
             
-            // Compare properties
-            let mut old_prop_names: std::collections::HashSet<String> = old.property_definitions.iter()
-                .map(|p| p.name.to_string())
+            // Compare properties by content
+            let old_props_map: std::collections::HashMap<String, &moor_compiler::ObjPropDef> = old.property_definitions.iter()
+                .map(|p| (p.name.to_string(), p))
                 .collect();
-            old_prop_names.extend(old.property_overrides.iter().map(|p| p.name.to_string()));
-            
-            let mut new_prop_names: std::collections::HashSet<String> = new_obj.property_definitions.iter()
-                .map(|p| p.name.to_string())
+            let old_overrides_map: std::collections::HashMap<String, &moor_compiler::ObjPropOverride> = old.property_overrides.iter()
+                .map(|p| (p.name.to_string(), p))
                 .collect();
-            new_prop_names.extend(new_obj.property_overrides.iter().map(|p| p.name.to_string()));
             
-            // Find modified/added properties
-            for prop_name in &new_prop_names {
-                if !old_prop_names.contains(prop_name) {
-                    changes.modified_props.push(prop_name.clone());
+            let new_props_map: std::collections::HashMap<String, &moor_compiler::ObjPropDef> = new_obj.property_definitions.iter()
+                .map(|p| (p.name.to_string(), p))
+                .collect();
+            let new_overrides_map: std::collections::HashMap<String, &moor_compiler::ObjPropOverride> = new_obj.property_overrides.iter()
+                .map(|p| (p.name.to_string(), p))
+                .collect();
+            
+            // Find modified properties (exist in both but content changed)
+            for (prop_name, new_prop) in &new_props_map {
+                if let Some(old_prop) = old_props_map.get(prop_name) {
+                    // Property exists in both - check if content changed
+                    if self.property_content_changed(old_prop, new_prop) {
+                        changes.modified_props.push(prop_name.clone());
+                    }
+                } else {
+                    // New property
+                    added_props.push(prop_name.clone());
+                }
+            }
+            
+            for (prop_name, new_override) in &new_overrides_map {
+                if let Some(old_override) = old_overrides_map.get(prop_name) {
+                    // Override exists in both - check if content changed
+                    if self.property_override_content_changed(old_override, new_override) {
+                        changes.modified_props.push(prop_name.clone());
+                    }
+                } else if !old_props_map.contains_key(prop_name) {
+                    // New override (not overriding an existing property)
+                    added_props.push(prop_name.clone());
                 }
             }
             
             // Find deleted properties
-            for prop_name in &old_prop_names {
-                if !new_prop_names.contains(prop_name) {
+            for prop_name in old_props_map.keys() {
+                if !new_props_map.contains_key(prop_name) && !new_overrides_map.contains_key(prop_name) {
+                    changes.deleted_props.push(prop_name.clone());
+                }
+            }
+            
+            for prop_name in old_overrides_map.keys() {
+                if !new_overrides_map.contains_key(prop_name) && !new_props_map.contains_key(prop_name) {
                     changes.deleted_props.push(prop_name.clone());
                 }
             }
@@ -377,19 +422,78 @@ impl WorkflowHandler {
             // New object - all verbs and properties are "added"
             for verb in &new_obj.verbs {
                 let verb_name = verb.names.iter().map(|s| s.to_string()).collect::<Vec<_>>().join(" ");
-                changes.modified_verbs.push(verb_name);
+                added_verbs.push(verb_name);
             }
             
             for prop in &new_obj.property_definitions {
-                changes.modified_props.push(prop.name.to_string());
+                added_props.push(prop.name.to_string());
             }
             
             for prop in &new_obj.property_overrides {
-                changes.modified_props.push(prop.name.to_string());
+                added_props.push(prop.name.to_string());
             }
         }
         
-        changes
+        (changes, added_verbs, added_props)
+    }
+    
+    /// Check if verb content has changed
+    fn verb_content_changed(&self, old_verb: &moor_compiler::ObjVerbDef, new_verb: &moor_compiler::ObjVerbDef) -> bool {
+        // Compare verb program
+        if old_verb.program != new_verb.program {
+            info!("  Program changed: {:?} != {:?}", old_verb.program, new_verb.program);
+            return true;
+        }
+        
+        // Compare verb flags
+        if old_verb.flags != new_verb.flags {
+            info!("  Flags changed: {:?} != {:?}", old_verb.flags, new_verb.flags);
+            return true;
+        }
+        
+        // Compare verb owner
+        if old_verb.owner != new_verb.owner {
+            info!("  Owner changed: {:?} != {:?}", old_verb.owner, new_verb.owner);
+            return true;
+        }
+        
+        // Compare verb argspec
+        if old_verb.argspec != new_verb.argspec {
+            info!("  Argspec changed: {:?} != {:?}", old_verb.argspec, new_verb.argspec);
+            return true;
+        }
+        
+        false
+    }
+    
+    /// Check if property content has changed
+    fn property_content_changed(&self, old_prop: &moor_compiler::ObjPropDef, new_prop: &moor_compiler::ObjPropDef) -> bool {
+        // Compare property value
+        if old_prop.value != new_prop.value {
+            return true;
+        }
+        
+        // Compare property permissions
+        if old_prop.perms != new_prop.perms {
+            return true;
+        }
+        
+        false
+    }
+    
+    /// Check if property override content has changed
+    fn property_override_content_changed(&self, old_override: &moor_compiler::ObjPropOverride, new_override: &moor_compiler::ObjPropOverride) -> bool {
+        // Compare override value
+        if old_override.value != new_override.value {
+            return true;
+        }
+        
+        // Compare override permissions
+        if old_override.perms_update != new_override.perms_update {
+            return true;
+        }
+        
+        false
     }
 
     /// Convert PullResult to MOO variables in the required format
@@ -788,4 +892,216 @@ impl WorkflowHandler {
     pub fn replay_stashed_changes(&self, repo: &GitRepository, stashed_objects: Vec<StashedObject>) -> Result<(), WorkerError> {
         StashOps::replay_stashed_changes(repo, &self.object_handler, stashed_objects)
     }
+    
+    /// Get current changed files in detailed format
+    pub fn get_current_changed_files(&self, repo: &GitRepository) -> Result<Var, WorkerError> {
+        info!("Getting current changed files in detailed format");
+        
+        let mut changed_objects = Vec::new();
+        let objects_dir = self.object_handler.config.objects_directory();
+        
+        // Use existing StatusOps to get status information
+        let status_lines = match crate::git::operations::status_ops::StatusOps::get_status(repo.repo(), repo.work_dir()) {
+            Ok(lines) => lines,
+            Err(e) => {
+                error!("Failed to get git status: {}", e);
+                return Err(WorkerError::RequestError(format!("Failed to get git status: {}", e)));
+            }
+        };
+        
+        // Parse status lines to categorize files
+        let mut added_files = Vec::new();
+        let mut deleted_files = Vec::new();
+        let mut modified_files = Vec::new();
+        let mut renamed_files = Vec::new();
+        
+        for line in status_lines {
+            if let Some(colon_pos) = line.find(':') {
+                let change_type = &line[..colon_pos];
+                let file_path = &line[colon_pos + 1..].trim();
+                
+                // Only process .moo files in the objects directory
+                if file_path.ends_with(".moo") && file_path.starts_with(objects_dir.as_str()) {
+                    if let Some(object_name) = PathUtils::extract_object_name_from_path(file_path) {
+                        match change_type {
+                            "Added" => added_files.push((object_name, file_path.to_string())),
+                            "Deleted" => deleted_files.push((object_name, file_path.to_string())),
+                            "Modified" => modified_files.push((object_name, file_path.to_string())),
+                            "Renamed" => {
+                                // Parse rename format: "Renamed: old_path -> new_path"
+                                if let Some(arrow_pos) = file_path.find(" -> ") {
+                                    let old_path = &file_path[..arrow_pos];
+                                    let new_path = &file_path[arrow_pos + 4..];
+                                    if let Some(old_name) = PathUtils::extract_object_name_from_path(old_path) {
+                                        if let Some(new_name) = PathUtils::extract_object_name_from_path(new_path) {
+                                            renamed_files.push((old_name, old_path.to_string(), new_name, new_path.to_string()));
+                                        }
+                                    }
+                                }
+                            }
+                            _ => {} // Ignore other types
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Process the collected files
+        self.process_changed_files(repo, added_files, deleted_files, modified_files, renamed_files, &mut changed_objects)?;
+        
+        info!("Found {} changed objects", changed_objects.len());
+        Ok(v_list(&changed_objects))
+    }
+    
+    /// Process changed files and handle renames
+    fn process_changed_files(
+        &self,
+        repo: &GitRepository,
+        added_files: Vec<(String, String)>,
+        deleted_files: Vec<(String, String)>,
+        modified_files: Vec<(String, String)>,
+        renamed_files: Vec<(String, String, String, String)>,
+        changed_objects: &mut Vec<Var>,
+    ) -> Result<(), WorkerError> {
+        // Handle renamed files first (already detected by StatusOps)
+        for (old_name, old_path, _new_name, new_path) in &renamed_files {
+            // Parse the new file content
+            let new_full_path = repo.work_dir().join(new_path);
+            if let Ok(content) = repo.read_file(&new_full_path) {
+                if let Ok(new_obj) = self.object_handler.parse_object_dump(&content) {
+                    // Get the old object from git history for comparison
+                    let head_oid = match crate::git::operations::commit_ops::CommitOps::get_head_commit(repo.repo()) {
+                        Ok(head_commit) => head_commit.id().to_string(),
+                        Err(_) => continue,
+                    };
+                    let old_obj = match repo.get_file_content_at_commit(&head_oid, old_path) {
+                        Ok(old_content) => self.object_handler.parse_object_dump(&old_content).ok(),
+                        Err(_) => None,
+                    };
+                    
+                    let obj_id = self.object_to_var(&new_obj, Some(new_path));
+                    let old_obj_id = if let Some(ref old_obj) = old_obj {
+                        self.object_to_var(old_obj, Some(old_path))
+                    } else {
+                        v_str(old_name)
+                    };
+                    
+                    // Analyze changes for renamed object
+                    let (changes, added_verbs, added_props) = self.analyze_object_changes(old_obj.as_ref(), &new_obj, Some(new_path));
+                    
+                    let change_map = vec![
+                        (v_str("obj_id"), obj_id),
+                        (v_str("operation"), v_str("renamed")),
+                        (v_str("old_obj_id"), old_obj_id),
+                        (v_str("modified_verbs"), v_list(&changes.modified_verbs.iter().map(|v| v_str(v)).collect::<Vec<_>>())),
+                        (v_str("deleted_verbs"), v_list(&changes.deleted_verbs.iter().map(|v| v_str(v)).collect::<Vec<_>>())),
+                        (v_str("added_verbs"), v_list(&added_verbs.iter().map(|v| v_str(v)).collect::<Vec<_>>())),
+                        (v_str("modified_props"), v_list(&changes.modified_props.iter().map(|p| v_str(p)).collect::<Vec<_>>())),
+                        (v_str("deleted_props"), v_list(&changes.deleted_props.iter().map(|p| v_str(p)).collect::<Vec<_>>())),
+                        (v_str("added_props"), v_list(&added_props.iter().map(|p| v_str(p)).collect::<Vec<_>>())),
+                    ];
+                    
+                    changed_objects.push(v_map(&change_map));
+                }
+            }
+        }
+        
+        // Handle added files (new files, not renames)
+        for (_object_name, path) in &added_files {
+            let full_path = repo.work_dir().join(path);
+            if let Ok(content) = repo.read_file(&full_path) {
+                if let Ok(new_obj) = self.object_handler.parse_object_dump(&content) {
+                    let obj_id = self.object_to_var(&new_obj, Some(path));
+                    
+                    // For new objects, all verbs and properties are "added"
+                    let (changes, added_verbs, added_props) = self.analyze_object_changes(None, &new_obj, Some(path));
+                    
+                    let change_map = vec![
+                        (v_str("obj_id"), obj_id),
+                        (v_str("operation"), v_str("added")),
+                        (v_str("modified_verbs"), v_list(&changes.modified_verbs.iter().map(|v| v_str(v)).collect::<Vec<_>>())),
+                        (v_str("deleted_verbs"), v_list(&[])),
+                        (v_str("added_verbs"), v_list(&added_verbs.iter().map(|v| v_str(v)).collect::<Vec<_>>())),
+                        (v_str("modified_props"), v_list(&changes.modified_props.iter().map(|p| v_str(p)).collect::<Vec<_>>())),
+                        (v_str("deleted_props"), v_list(&[])),
+                        (v_str("added_props"), v_list(&added_props.iter().map(|p| v_str(p)).collect::<Vec<_>>())),
+                    ];
+                    
+                    changed_objects.push(v_map(&change_map));
+                }
+            }
+        }
+        
+        // Handle deleted files
+        for (_object_name, path) in &deleted_files {
+                    // Get the old object from git history
+                    let head_oid = match crate::git::operations::commit_ops::CommitOps::get_head_commit(repo.repo()) {
+                        Ok(head_commit) => head_commit.id().to_string(),
+                        Err(_) => continue,
+                    };
+                    if let Ok(old_content) = repo.get_file_content_at_commit(&head_oid, path) {
+                if let Ok(old_obj) = self.object_handler.parse_object_dump(&old_content) {
+                    let obj_id = self.object_to_var(&old_obj, Some(path));
+                    
+                    let change_map = vec![
+                        (v_str("obj_id"), obj_id),
+                        (v_str("operation"), v_str("deleted")),
+                    ];
+                    
+                    changed_objects.push(v_map(&change_map));
+                }
+            }
+        }
+        
+        // Handle modified files
+        for (_, path) in &modified_files {
+            let full_path = repo.work_dir().join(path);
+            if let Ok(content) = repo.read_file(&full_path) {
+                if let Ok(new_obj) = self.object_handler.parse_object_dump(&content) {
+                    // Get the old object from git history for comparison
+                    let old_obj = match crate::git::operations::commit_ops::CommitOps::get_head_commit(repo.repo()) {
+                        Ok(head_commit) => {
+                            let head_oid = head_commit.id().to_string();
+                            match repo.get_file_content_at_commit(&head_oid, path) {
+                                Ok(old_content) => {
+                                    info!("Successfully loaded old content for {} from HEAD commit {}", path, head_oid);
+                                    self.object_handler.parse_object_dump(&old_content).ok()
+                                },
+                                Err(e) => {
+                                    error!("Failed to load old content for {} from HEAD commit {}: {}", path, head_oid, e);
+                                    None
+                                },
+                            }
+                        },
+                        Err(e) => {
+                            error!("Failed to get HEAD commit: {}", e);
+                            None
+                        },
+                    };
+                    
+                    let obj_id = self.object_to_var(&new_obj, Some(path));
+                    
+                    // Analyze changes
+                    info!("Comparing old_obj: {:?}, new_obj: {:?}", old_obj.is_some(), new_obj.verbs.len());
+                    let (changes, added_verbs, added_props) = self.analyze_object_changes(old_obj.as_ref(), &new_obj, Some(path));
+                    
+                    let change_map = vec![
+                        (v_str("obj_id"), obj_id),
+                        (v_str("operation"), v_str("modified")),
+                        (v_str("modified_verbs"), v_list(&changes.modified_verbs.iter().map(|v| v_str(v)).collect::<Vec<_>>())),
+                        (v_str("deleted_verbs"), v_list(&changes.deleted_verbs.iter().map(|v| v_str(v)).collect::<Vec<_>>())),
+                        (v_str("added_verbs"), v_list(&added_verbs.iter().map(|v| v_str(v)).collect::<Vec<_>>())),
+                        (v_str("modified_props"), v_list(&changes.modified_props.iter().map(|p| v_str(p)).collect::<Vec<_>>())),
+                        (v_str("deleted_props"), v_list(&changes.deleted_props.iter().map(|p| v_str(p)).collect::<Vec<_>>())),
+                        (v_str("added_props"), v_list(&added_props.iter().map(|p| v_str(p)).collect::<Vec<_>>())),
+                    ];
+                    
+                    changed_objects.push(v_map(&change_map));
+                }
+            }
+        }
+        
+        Ok(())
+    }
+    
 }

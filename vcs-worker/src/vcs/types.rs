@@ -64,6 +64,9 @@ pub enum VcsOperation {
     
     /// Replay stashed changes after pull
     ReplayStash,
+    
+    /// Get current changed files in detailed format
+    Changes,
 }
 
 /// Comprehensive repository status information

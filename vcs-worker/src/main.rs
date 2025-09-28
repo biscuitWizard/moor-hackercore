@@ -403,6 +403,11 @@ async fn process_vcs_request(
             VcsOperation::ReplayStash
         }
         
+        "changes" => {
+            info!("VCS Worker: Creating Changes operation");
+            VcsOperation::Changes
+        }
+        
         _ => {
             return Ok(v_error(E_NONE.msg(format!(
                 "Unknown operation: {}",
