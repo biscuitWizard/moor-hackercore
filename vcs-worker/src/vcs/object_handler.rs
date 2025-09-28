@@ -363,6 +363,76 @@ impl ObjectHandler {
         Ok(v_list(&results))
     }
 
+    /// Get structured object data for a single object (returns v_map with properties, verbs, obj_id, obj_def)
+    pub fn get_object(&self, repo: &GitRepository, object_name: String) -> Result<Var, WorkerError> {
+        info!("GetObject called with object name: '{}'", object_name);
+        
+        let objects_dir = self.config.objects_directory();
+        let objects_path = repo.work_dir().join(objects_dir);
+        info!("Looking for object file in directory: {:?}", objects_path);
+
+        // Map object name to filename by adding .moo extension
+        let filename = PathUtils::ensure_moo_extension(&object_name);
+        let file_path = objects_path.join(&filename);
+        
+        info!("Looking for file: {:?}", file_path);
+        
+        // Check if file exists and read its content
+        if !repo.file_exists(&file_path) {
+            info!("File '{}' not found", filename);
+            return Err(WorkerError::RequestError(format!("Object file '{}' not found", object_name)));
+        }
+
+        let content = match repo.read_file(&file_path) {
+            Ok(content) => {
+                info!("Successfully read file '{}', {} bytes", filename, content.len());
+                content
+            }
+            Err(e) => {
+                error!("Failed to read file '{}': {}", filename, e);
+                return Err(WorkerError::RequestError(format!("Failed to read object file '{}': {}", object_name, e)));
+            }
+        };
+
+        // Parse the object definition
+        let object_def = match self.parse_object_dump(&content) {
+            Ok(obj) => obj,
+            Err(e) => {
+                error!("Failed to parse object definition for '{}': {}", object_name, e);
+                return Err(WorkerError::RequestError(format!("Failed to parse object definition for '{}': {}", object_name, e)));
+            }
+        };
+
+        // Extract property names
+        let property_names: Vec<Var> = object_def.property_definitions
+            .iter()
+            .map(|prop| v_str(&prop.name.to_string()))
+            .collect();
+
+        // Extract verb names
+        let verb_names: Vec<Var> = object_def.verbs
+            .iter()
+            .map(|verb| v_str(&verb.names.iter().map(|s| s.to_string()).collect::<Vec<_>>().join(" ")))
+            .collect();
+
+        // Convert obj_def to list of strings (split by newlines)
+        let obj_def_lines: Vec<Var> = content
+            .lines()
+            .map(|line| v_str(line))
+            .collect();
+
+        // Create the v_map result
+        let result = v_map(&[
+            (v_str("properties"), v_list(&property_names)),
+            (v_str("verbs"), v_list(&verb_names)),
+            (v_str("obj_id"), v_str(&object_def.oid.to_string())),
+            (v_str("obj_def"), v_list(&obj_def_lines)),
+        ]);
+
+        info!("GetObject completed successfully for '{}'", object_name);
+        Ok(result)
+    }
+
     /// Find all .moo files in the objects directory
     pub fn find_moo_files(&self, objects_path: &std::path::Path) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
         use std::fs;

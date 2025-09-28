@@ -258,6 +258,23 @@ async fn process_vcs_request(
             VcsOperation::GetObjects { object_names }
         }
         
+        "get_object" => {
+            if arguments.len() < 2 {
+                return Ok(v_error(E_NONE.msg("get_object requires object_name argument")));
+            }
+            
+            let object_name = match arguments[1].as_string() {
+                Some(name) => name,
+                None => {
+                    return Ok(v_error(E_NONE.msg("Second argument must be a string (object_name)")));
+                }
+            };
+            
+            VcsOperation::GetObject { 
+                object_name: object_name.to_string(),
+            }
+        }
+        
         "get_commits" => {
             let limit = if arguments.len() > 1 {
                 arguments[1].as_integer().map(|i| i as usize)

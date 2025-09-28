@@ -137,6 +137,14 @@ impl VcsProcessor {
                 }
             }
             
+            VcsOperation::GetObject { object_name } => {
+                if let Some(ref repo) = self.git_repo {
+                    self.object_handler.get_object(repo, object_name)
+                } else {
+                    Err(ErrorUtils::git_repo_not_available(Some(self.config.repository_path().to_str().unwrap_or("/game"))))
+                }
+            }
+            
             VcsOperation::GetCommits { limit, offset } => {
                 if let Some(ref repo) = self.git_repo {
                     use crate::git::operations::CommitOps;

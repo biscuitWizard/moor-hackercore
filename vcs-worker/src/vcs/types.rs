@@ -37,6 +37,11 @@ pub enum VcsOperation {
         object_names: Vec<String>,
     },
     
+    /// Get structured object data for a single object
+    GetObject {
+        object_name: String,
+    },
+    
     /// Get paginated list of commits
     GetCommits {
         limit: Option<usize>,
