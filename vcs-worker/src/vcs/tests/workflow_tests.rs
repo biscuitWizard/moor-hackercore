@@ -3,7 +3,7 @@ use crate::vcs::types::{PullResult, CommitResult, CommitInfo, ObjectChanges};
 use crate::config::Config;
 use crate::git::GitRepository;
 use tempfile::TempDir;
-use moor_var::{Obj, Var, v_obj, v_str};
+use moor_var::{Obj, v_obj};
 
 /// Helper function to create a test configuration
 fn create_test_config(temp_dir: &TempDir) -> Config {
