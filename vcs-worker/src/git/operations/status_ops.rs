@@ -185,6 +185,40 @@ impl StatusOps {
         }
     }
     
+    /// Check if a specific file has changes
+    pub fn file_has_changes(repo: &Repository, file_path: &std::path::Path) -> bool {
+        // Convert path to string for git status
+        let path_str = match file_path.to_str() {
+            Some(s) => s,
+            None => return false,
+        };
+        
+        // Get status for all files
+        let mut status_options = git2::StatusOptions::new();
+        status_options.include_ignored(false);
+        status_options.include_untracked(true);
+        
+        let statuses = match repo.statuses(Some(&mut status_options)) {
+            Ok(s) => s,
+            Err(_) => return false,
+        };
+        
+        // Check if the specific file has any status changes
+        for entry in statuses.iter() {
+            if let Some(path) = entry.path() {
+                if path == path_str {
+                    let status = entry.status();
+                    return status.is_wt_new() || status.is_index_new() || 
+                           status.is_wt_deleted() || status.is_index_deleted() ||
+                           status.is_wt_modified() || status.is_index_modified() ||
+                           status.is_wt_renamed() || status.is_index_renamed();
+                }
+            }
+        }
+        
+        false
+    }
+    
     /// Reset working tree with verification and detailed status reporting
     pub fn reset_working_tree_with_verification(repo: &Repository, work_dir: &std::path::Path) -> Result<Vec<String>, Box<dyn std::error::Error>> {
         info!("Starting reset working tree operation with verification");

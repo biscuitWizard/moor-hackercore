@@ -393,6 +393,16 @@ async fn process_vcs_request(
             VcsOperation::Reset
         }
         
+        "stash" => {
+            info!("VCS Worker: Creating Stash operation");
+            VcsOperation::Stash
+        }
+        
+        "replay_stash" => {
+            info!("VCS Worker: Creating ReplayStash operation");
+            VcsOperation::ReplayStash
+        }
+        
         _ => {
             return Ok(v_error(E_NONE.msg(format!(
                 "Unknown operation: {}",

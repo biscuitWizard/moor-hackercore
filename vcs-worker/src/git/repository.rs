@@ -233,6 +233,10 @@ impl GitRepository {
         StatusOps::reset_working_tree(&self.repo, &self.work_dir)
     }
     
+    pub fn file_has_changes<P: AsRef<Path>>(&self, path: P) -> bool {
+        StatusOps::file_has_changes(&self.repo, path.as_ref())
+    }
+    
     /// Configure git user name and email in the repository
     pub fn configure_git_user(&self) -> Result<(), Box<dyn std::error::Error>> {
         GitUtils::configure_git_user(

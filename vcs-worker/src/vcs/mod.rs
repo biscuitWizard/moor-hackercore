@@ -5,6 +5,9 @@ pub mod status_handler;
 pub mod meta_handler;
 pub mod workflow_handler;
 
+#[cfg(test)]
+pub mod tests;
+
 pub use types::{VcsOperation, RepositoryStatusInfo, CommitInfo};
 pub use processor::VcsProcessor;
 pub use object_handler::ObjectHandler;

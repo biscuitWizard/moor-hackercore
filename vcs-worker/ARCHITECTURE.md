@@ -144,12 +144,38 @@ Manages object metadata:
 
 #### WorkflowHandler
 Orchestrates complex operations:
-- Pull with detailed change analysis
+- Pull with detailed change analysis and commit-by-commit breakdown
 - Commit workflows with pull-before-commit
 - Rebase with automatic conflict resolution
 - Object change analysis and reporting
+- Stash and replay operations using ObjDef models
 
-### 4. Configuration Management
+### 4. Data Structures
+
+#### PullResult
+New comprehensive pull result structure:
+- `commit_results`: Vector of `CommitResult` objects
+- Provides commit-by-commit breakdown of changes
+- Ordered from oldest to newest commits
+
+#### CommitResult
+Represents changes from a single commit:
+- `commit_info`: Basic commit information (author, ID, message)
+- `modified_objects`: List of modified object IDs
+- `deleted_objects`: List of deleted object IDs
+- `added_objects`: List of added object IDs
+- `renamed_objects`: List of renamed object IDs
+- `changes`: Detailed object-level changes
+
+#### ObjectChanges
+Detailed changes for a single object:
+- `obj_id`: Object identifier
+- `modified_verbs`: Map of verb names to verb changes
+- `deleted_verbs`: Map of deleted verb names
+- `modified_props`: Map of property names to property changes
+- `deleted_props`: Map of deleted property names
+
+### 5. Configuration Management
 
 #### Config
 Main application configuration:
@@ -164,7 +190,7 @@ Per-object metadata configuration:
 - Object-specific metadata
 - Stored in `.meta` files alongside MOO objects
 
-### 5. Utility Modules
+### 6. Utility Modules
 
 #### ErrorUtils
 Common error handling patterns:
@@ -203,8 +229,26 @@ Object Dump   Validation   Structure  Filtering    File Ops    .moo Files
 Workflow Request → WorkflowHandler → Multiple Git Ops → Analysis → Results
        ↓               ↓                ↓              ↓          ↓
    Pull/Commit    Orchestration    Execute Steps   Change      MOO Format
-                                    in Sequence    Analysis
+   Stash/Replay                    in Sequence    Analysis
 ```
+
+#### Stash/Replay Workflow
+The stash and replay operations provide a conflict-free way to handle uncommitted changes:
+
+1. **Stash**: 
+   - Identifies changed `.moo` files in working directory
+   - Parses each file into `ObjectDefinition` models
+   - Stores models in memory
+   - Resets working directory (equivalent to `reset`)
+
+2. **Replay**:
+   - Retrieves stashed `ObjectDefinition` models from memory
+   - Applies meta configuration filtering
+   - Converts to MOO object dumps
+   - Writes filtered objects back to disk
+   - Adds changes to git index
+
+This approach avoids conflicts because it uses the same object parsing and filtering logic as the pull operation.
 
 ## Key Features
 
@@ -218,6 +262,8 @@ Workflow Request → WorkflowHandler → Multiple Git Ops → Analysis → Resul
 - Automatic conflict resolution
 - Rebase-based pull operations
 - Rollback capabilities
+- Detailed pull analysis with commit-by-commit breakdown
+- Stash and replay operations for conflict-free workflow
 
 ### 3. SSH Authentication
 - SSH key management
@@ -319,6 +365,9 @@ Each MOO object can have a `.meta` file specifying:
 - Individual operation testing
 - Handler testing
 - Utility function testing
+- Workflow handler testing with comprehensive test coverage
+- Pull result format validation
+- Stash and replay operation testing
 
 ### 2. Integration Tests
 - End-to-end workflow testing

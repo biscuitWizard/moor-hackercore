@@ -127,13 +127,65 @@ worker_request("vcs", {"pull", dry_run})
 - `dry_run` (boolean, optional): If true, returns analysis of what would be modified without making changes
 
 **Returns:**
-- If `dry_run` is true: Analysis of objects that would be modified, deleted, or renamed
-- If `dry_run` is false: Success message with number of commits pulled and conflicts resolved
+- **List of commit results** where each element represents changes from a single commit, ordered from oldest to newest
+- Each commit result contains:
+  - `commit_author`: Author name of the commit
+  - `commit_id`: Short commit hash (8 characters)
+  - `commit_message`: Commit message
+  - `modified_objects`: List of object IDs that were modified
+  - `deleted_objects`: List of object IDs that were deleted
+  - `added_objects`: List of object IDs that were added
+  - `renamed_objects`: List of object IDs that were renamed
+  - `changes`: Array of detailed object changes, where each change contains:
+    - `obj_id`: Object ID
+    - `modified_verbs`: Map of verb names to verb changes
+    - `deleted_verbs`: Map of verb names to deleted verbs
+    - `modified_props`: Map of property names to property changes
+    - `deleted_props`: Map of property names to deleted properties
 
 **Example:**
 ```lisp
 worker_request("vcs", {"pull", false})
 worker_request("vcs", {"pull", true})
+```
+
+**Example Return Format:**
+```lisp
+{
+  {
+    "commit_author" -> "vcs-worker",
+    "commit_id" -> "e38ae7f7", 
+    "commit_message" -> "Add $seq_utils:levenshtein",
+    "modified_objects" -> {#42, #43},
+    "deleted_objects" -> {},
+    "added_objects" -> {#44},
+    "renamed_objects" -> {},
+    "changes" -> {
+      {
+        "obj_id" -> #42,
+        "modified_verbs" -> {"verb_name" -> "verb_changes"},
+        "deleted_verbs" -> {},
+        "modified_props" -> {"prop_name" -> "prop_changes"},
+        "deleted_props" -> {}
+      },
+      {
+        "obj_id" -> #43,
+        "modified_verbs" -> {},
+        "deleted_verbs" -> {},
+        "modified_props" -> {},
+        "deleted_props" -> {}
+      },
+      {
+        "obj_id" -> #44,
+        "modified_verbs" -> {},
+        "deleted_verbs" -> {},
+        "modified_props" -> {},
+        "deleted_props" -> {}
+      }
+    }
+  },
+  // ... additional commits in chronological order
+}
 ```
 
 **Pull Strategy:**
@@ -169,6 +221,47 @@ worker_request("vcs", {"reset"})
 ```
 
 **Warning:** This operation permanently discards all uncommitted changes in the working tree. Use with caution.
+
+### stash
+Stash current uncommitted changes using ObjDef models in memory.
+
+```lisp
+worker_request("vcs", {"stash"})
+```
+
+**Returns:** Success message confirming that changes have been stashed in memory.
+
+**Example:**
+```lisp
+worker_request("vcs", {"stash"})
+```
+
+**Note:** This operation:
+- Loads current changes into ObjDef models in memory
+- Resets the active changes (equivalent to `reset`)
+- Keeps changes available for replay using `replay_stash`
+- Does not use Git's built-in stash system
+
+### replay_stash
+Replay previously stashed changes back to the working tree.
+
+```lisp
+worker_request("vcs", {"replay_stash"})
+```
+
+**Returns:** Success message confirming that stashed changes have been replayed.
+
+**Example:**
+```lisp
+worker_request("vcs", {"replay_stash"})
+```
+
+**Note:** This operation:
+- Retrieves stashed ObjDef models from memory
+- Applies meta configuration filtering
+- Writes the filtered objects back to disk
+- Adds the changes to the git index
+- Works seamlessly with pull operations to avoid conflicts
 
 ## Credential Management Operations
 

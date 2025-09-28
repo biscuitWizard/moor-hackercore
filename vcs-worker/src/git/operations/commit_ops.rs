@@ -185,6 +185,66 @@ impl CommitOps {
         Ok(commits)
     }
     
+    /// Get commits that would be pulled (remote commits not in local)
+    pub fn get_commits_to_pull(
+        repo: &Repository,
+        local_branch: &str,
+        remote_branch: &str,
+    ) -> Result<Vec<CommitInfo>, Box<dyn std::error::Error>> {
+        // Convert local branch to proper reference format
+        let local_ref = if local_branch.starts_with("refs/") {
+            local_branch.to_string()
+        } else {
+            format!("refs/heads/{}", local_branch)
+        };
+        let local_oid = repo.refname_to_id(&local_ref)?;
+        let local_commit = repo.find_commit(local_oid)?;
+        
+        // Convert remote branch to proper reference format
+        let remote_ref = if remote_branch.contains("/") && !remote_branch.starts_with("refs/") {
+            format!("refs/remotes/{}", remote_branch)
+        } else {
+            remote_branch.to_string()
+        };
+        let remote_oid = repo.refname_to_id(&remote_ref)?;
+        let remote_commit = repo.find_commit(remote_oid)?;
+        
+        // Find the common ancestor (merge base)
+        let merge_base = repo.merge_base(local_commit.id(), remote_commit.id())?;
+        
+        // Get commits from merge base to remote (excluding the merge base)
+        let mut revwalk = repo.revwalk()?;
+        revwalk.push(remote_commit.id())?;
+        revwalk.hide(merge_base)?;
+        revwalk.set_sorting(git2::Sort::TIME)?;
+        
+        let mut commits = Vec::new();
+        
+        for commit_id in revwalk {
+            let commit_id = commit_id?;
+            let commit = repo.find_commit(commit_id)?;
+            
+            let id = commit.id().to_string();
+            let short_id = &id[..8];
+            let datetime = commit.time();
+            let timestamp = datetime.seconds();
+            let message = commit.message().unwrap_or("No message").to_string();
+            let author = commit.author().name().unwrap_or("Unknown").to_string();
+            
+            commits.push(CommitInfo {
+                id: short_id.to_string(),
+                full_id: id,
+                datetime: timestamp,
+                message: message.trim().to_string(),
+                author,
+            });
+        }
+        
+        // Reverse to get chronological order (oldest first)
+        commits.reverse();
+        Ok(commits)
+    }
+    
     /// Get changes in a specific commit
     pub fn get_commit_changes(
         repo: &Repository,

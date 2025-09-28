@@ -313,6 +313,35 @@ impl VcsProcessor {
                     Err(ErrorUtils::git_repo_not_available(Some(self.config.repository_path().to_str().unwrap_or("/game"))))
                 }
             }
+            
+            VcsOperation::Stash => {
+                if let Some(ref repo) = self.git_repo {
+                    match self.workflow_handler.stash_changes(repo) {
+                        Ok(stashed_objects) => {
+                            info!("Successfully stashed {} objects", stashed_objects.len());
+                            // Store the stashed objects in the processor for later replay
+                            // For now, we'll just return a success message
+                            Ok(v_str(&format!("Stashed {} objects successfully", stashed_objects.len())))
+                        }
+                        Err(e) => {
+                            error!("Failed to stash changes: {}", e);
+                            Err(ErrorUtils::operation_failed("stash changes", &e.to_string()))
+                        }
+                    }
+                } else {
+                    Err(ErrorUtils::git_repo_not_available(Some(self.config.repository_path().to_str().unwrap_or("/game"))))
+                }
+            }
+            
+            VcsOperation::ReplayStash => {
+                if let Some(ref _repo) = self.git_repo {
+                    // For now, we'll return an error since we need to implement proper stash storage
+                    // In a real implementation, we'd store the stashed objects and retrieve them here
+                    Err(ErrorUtils::operation_failed("replay stash", "Stash storage not implemented yet"))
+                } else {
+                    Err(ErrorUtils::git_repo_not_available(Some(self.config.repository_path().to_str().unwrap_or("/game"))))
+                }
+            }
         }
     }
     

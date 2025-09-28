@@ -58,6 +58,12 @@ pub enum VcsOperation {
     
     /// Reset working tree, discarding all changes
     Reset,
+    
+    /// Stash current changes using ObjDef models
+    Stash,
+    
+    /// Replay stashed changes after pull
+    ReplayStash,
 }
 
 /// Comprehensive repository status information
@@ -111,18 +117,25 @@ pub enum ChangeStatus {
 /// Detailed pull result information
 #[derive(Debug, Clone)]
 pub struct PullResult {
-    /// Objects that were modified (as v_obj types)
+    /// List of commit results in chronological order (oldest first)
+    pub commit_results: Vec<CommitResult>,
+}
+
+/// Result for a single commit in the pull
+#[derive(Debug, Clone)]
+pub struct CommitResult {
+    /// Commit information
+    pub commit_info: CommitInfo,
+    /// Objects that were modified in this commit (as v_obj types)
     pub modified_objects: Vec<moor_var::Obj>,
-    /// Objects that were deleted (as v_obj types)
+    /// Objects that were deleted in this commit (as v_obj types)
     pub deleted_objects: Vec<moor_var::Obj>,
-    /// Objects that were added (as v_obj types)
+    /// Objects that were added in this commit (as v_obj types)
     pub added_objects: Vec<moor_var::Obj>,
-    /// Objects that were renamed (as v_obj types)
+    /// Objects that were renamed in this commit (as v_obj types)
     pub renamed_objects: Vec<moor_var::Obj>,
-    /// Detailed changes for each object
+    /// Detailed changes for each object in this commit
     pub changes: Vec<ObjectChanges>,
-    /// Commits that were pulled
-    pub commits_behind: Vec<CommitInfo>,
 }
 
 /// Changes to a specific object

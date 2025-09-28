@@ -364,7 +364,7 @@ impl ObjectHandler {
     }
 
     /// Find all .moo files in the objects directory
-    fn find_moo_files(&self, objects_path: &std::path::Path) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
+    pub fn find_moo_files(&self, objects_path: &std::path::Path) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
         use std::fs;
         
         if !objects_path.exists() {

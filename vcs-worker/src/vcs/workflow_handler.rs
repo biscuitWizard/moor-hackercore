@@ -3,13 +3,13 @@ use moor_var::{Var, v_str, v_map, v_list, v_obj};
 use crate::config::Config;
 use crate::git::GitRepository;
 use crate::utils::PathUtils;
-use super::types::{PullResult, ObjectChanges, ChangeStatus, CommitInfo};
+use super::types::{PullResult, CommitResult, ObjectChanges, ChangeStatus, CommitInfo};
 use super::object_handler::ObjectHandler;
 use moor_common::tasks::WorkerError;
 
 /// Handles complex VCS workflows like pull, rebase, and merge operations
 pub struct WorkflowHandler {
-    object_handler: ObjectHandler,
+    pub object_handler: ObjectHandler,
 }
 
 impl WorkflowHandler {
@@ -23,18 +23,20 @@ impl WorkflowHandler {
     pub fn execute_pull_with_analysis(&self, repo: &GitRepository, upstream_branch: &str, commits_to_pull: &[CommitInfo]) -> Result<PullResult, WorkerError> {
         info!("Executing pull with detailed analysis");
         
-        let mut result = PullResult {
-            modified_objects: Vec::new(),
-            deleted_objects: Vec::new(),
-            added_objects: Vec::new(),
-            renamed_objects: Vec::new(),
-            changes: Vec::new(),
-            commits_behind: commits_to_pull.to_vec(),
-        };
+        let mut commit_results = Vec::new();
         
         // Analyze each commit to build the detailed change information
         for commit in commits_to_pull {
             info!("Analyzing commit: {} - {}", commit.id, commit.message);
+            
+            let mut commit_result = CommitResult {
+                commit_info: commit.clone(),
+                modified_objects: Vec::new(),
+                deleted_objects: Vec::new(),
+                added_objects: Vec::new(),
+                renamed_objects: Vec::new(),
+                changes: Vec::new(),
+            };
             
             match repo.get_commit_changes(&commit.full_id) {
                 Ok(changes) => {
@@ -45,11 +47,11 @@ impl WorkflowHandler {
                                     // Load the new object to get its OID
                                     if let Ok(content) = repo.get_file_content_at_commit(&commit.full_id, &change.path) {
                                         if let Ok(new_obj) = self.object_handler.parse_object_dump(&content) {
-                                            result.added_objects.push(new_obj.oid);
+                                            commit_result.added_objects.push(new_obj.oid);
                                             
                                             // Analyze changes for new object (no old version)
                                             let obj_changes = self.analyze_object_changes(None, &new_obj);
-                                            result.changes.push(obj_changes);
+                                            commit_result.changes.push(obj_changes);
                                         }
                                     }
                                 }
@@ -60,7 +62,7 @@ impl WorkflowHandler {
                                     
                                     if let Ok(new_content) = new_content {
                                         if let Ok(new_obj) = self.object_handler.parse_object_dump(&new_content) {
-                                            result.modified_objects.push(new_obj.oid);
+                                            commit_result.modified_objects.push(new_obj.oid);
                                             
                                             // Analyze changes
                                             let old_obj = if let Some(old_content) = old_content {
@@ -70,7 +72,7 @@ impl WorkflowHandler {
                                             };
                                             
                                             let obj_changes = self.analyze_object_changes(old_obj.as_ref(), &new_obj);
-                                            result.changes.push(obj_changes);
+                                            commit_result.changes.push(obj_changes);
                                         }
                                     }
                                 }
@@ -78,7 +80,7 @@ impl WorkflowHandler {
                                     // For deleted objects, we need to get the OID from the previous version
                                     if let Ok(old_content) = repo.get_file_content_at_commit("HEAD", &change.path) {
                                         if let Ok(old_obj) = self.object_handler.parse_object_dump(&old_content) {
-                                            result.deleted_objects.push(old_obj.oid);
+                                            commit_result.deleted_objects.push(old_obj.oid);
                                             
                                             // For deleted objects, all verbs and properties are "deleted"
                                             let obj_changes = ObjectChanges {
@@ -96,7 +98,7 @@ impl WorkflowHandler {
                                                     props
                                                 },
                                             };
-                                            result.changes.push(obj_changes);
+                                            commit_result.changes.push(obj_changes);
                                         }
                                     }
                                 }
@@ -108,7 +110,7 @@ impl WorkflowHandler {
                                         
                                         if let Ok(new_content) = new_content {
                                             if let Ok(new_obj) = self.object_handler.parse_object_dump(&new_content) {
-                                                result.renamed_objects.push(new_obj.oid);
+                                                commit_result.renamed_objects.push(new_obj.oid);
                                                 
                                                 // Analyze changes (renamed objects are treated as modified)
                                                 let old_obj = if let Some(old_content) = old_content {
@@ -118,7 +120,7 @@ impl WorkflowHandler {
                                                 };
                                                 
                                                 let obj_changes = self.analyze_object_changes(old_obj.as_ref(), &new_obj);
-                                                result.changes.push(obj_changes);
+                                                commit_result.changes.push(obj_changes);
                                             }
                                         }
                                     }
@@ -132,13 +134,15 @@ impl WorkflowHandler {
                     // Continue with other commits
                 }
             }
+            
+            commit_results.push(commit_result);
         }
         
         // Now perform the actual rebase
         match self.rebase_with_auto_resolution(repo, upstream_branch) {
             Ok(_) => {
                 info!("Successfully completed rebase");
-                Ok(result)
+                Ok(PullResult { commit_results })
             }
             Err(e) => {
                 error!("Failed to complete rebase: {}", e);
@@ -151,18 +155,20 @@ impl WorkflowHandler {
     pub fn analyze_pull_impact_dry_run(&self, repo: &GitRepository, _upstream_branch: &str, commits_to_pull: &[CommitInfo]) -> Result<PullResult, WorkerError> {
         info!("Analyzing pull impact for dry run");
         
-        let mut result = PullResult {
-            modified_objects: Vec::new(),
-            deleted_objects: Vec::new(),
-            added_objects: Vec::new(),
-            renamed_objects: Vec::new(),
-            changes: Vec::new(),
-            commits_behind: commits_to_pull.to_vec(),
-        };
+        let mut commit_results = Vec::new();
         
         // Analyze each commit to build the detailed change information (without executing)
         for commit in commits_to_pull {
             info!("Analyzing commit for dry run: {} - {}", commit.id, commit.message);
+            
+            let mut commit_result = CommitResult {
+                commit_info: commit.clone(),
+                modified_objects: Vec::new(),
+                deleted_objects: Vec::new(),
+                added_objects: Vec::new(),
+                renamed_objects: Vec::new(),
+                changes: Vec::new(),
+            };
             
             match repo.get_commit_changes(&commit.full_id) {
                 Ok(changes) => {
@@ -173,11 +179,11 @@ impl WorkflowHandler {
                                     // Load the new object to get its OID
                                     if let Ok(content) = repo.get_file_content_at_commit(&commit.full_id, &change.path) {
                                         if let Ok(new_obj) = self.object_handler.parse_object_dump(&content) {
-                                            result.added_objects.push(new_obj.oid);
+                                            commit_result.added_objects.push(new_obj.oid);
                                             
                                             // Analyze changes for new object (no old version)
                                             let obj_changes = self.analyze_object_changes(None, &new_obj);
-                                            result.changes.push(obj_changes);
+                                            commit_result.changes.push(obj_changes);
                                         }
                                     }
                                 }
@@ -188,7 +194,7 @@ impl WorkflowHandler {
                                     
                                     if let Ok(new_content) = new_content {
                                         if let Ok(new_obj) = self.object_handler.parse_object_dump(&new_content) {
-                                            result.modified_objects.push(new_obj.oid);
+                                            commit_result.modified_objects.push(new_obj.oid);
                                             
                                             // Analyze changes
                                             let old_obj = if let Some(old_content) = old_content {
@@ -198,7 +204,7 @@ impl WorkflowHandler {
                                             };
                                             
                                             let obj_changes = self.analyze_object_changes(old_obj.as_ref(), &new_obj);
-                                            result.changes.push(obj_changes);
+                                            commit_result.changes.push(obj_changes);
                                         }
                                     }
                                 }
@@ -206,7 +212,7 @@ impl WorkflowHandler {
                                     // For deleted objects, we need to get the OID from the previous version
                                     if let Ok(old_content) = repo.get_file_content_at_commit("HEAD", &change.path) {
                                         if let Ok(old_obj) = self.object_handler.parse_object_dump(&old_content) {
-                                            result.deleted_objects.push(old_obj.oid);
+                                            commit_result.deleted_objects.push(old_obj.oid);
                                             
                                             // For deleted objects, all verbs and properties are "deleted"
                                             let obj_changes = ObjectChanges {
@@ -224,7 +230,7 @@ impl WorkflowHandler {
                                                     props
                                                 },
                                             };
-                                            result.changes.push(obj_changes);
+                                            commit_result.changes.push(obj_changes);
                                         }
                                     }
                                 }
@@ -236,7 +242,7 @@ impl WorkflowHandler {
                                         
                                         if let Ok(new_content) = new_content {
                                             if let Ok(new_obj) = self.object_handler.parse_object_dump(&new_content) {
-                                                result.renamed_objects.push(new_obj.oid);
+                                                commit_result.renamed_objects.push(new_obj.oid);
                                                 
                                                 // Analyze changes (renamed objects are treated as modified)
                                                 let old_obj = if let Some(old_content) = old_content {
@@ -246,7 +252,7 @@ impl WorkflowHandler {
                                                 };
                                                 
                                                 let obj_changes = self.analyze_object_changes(old_obj.as_ref(), &new_obj);
-                                                result.changes.push(obj_changes);
+                                                commit_result.changes.push(obj_changes);
                                             }
                                         }
                                     }
@@ -260,9 +266,11 @@ impl WorkflowHandler {
                     // Continue with other commits
                 }
             }
+            
+            commit_results.push(commit_result);
         }
         
-        Ok(result)
+        Ok(PullResult { commit_results })
     }
 
     /// Analyze detailed changes between two object definitions
@@ -344,48 +352,44 @@ impl WorkflowHandler {
 
     /// Convert PullResult to MOO variables in the required format
     pub fn pull_result_to_moo_vars(&self, result: PullResult) -> Vec<Var> {
-        // Convert object lists to v_obj variables
-        let modified_objects_vars: Vec<Var> = result.modified_objects.iter().map(|&oid| v_obj(oid)).collect();
-        let deleted_objects_vars: Vec<Var> = result.deleted_objects.iter().map(|&oid| v_obj(oid)).collect();
-        let added_objects_vars: Vec<Var> = result.added_objects.iter().map(|&oid| v_obj(oid)).collect();
-        let renamed_objects_vars: Vec<Var> = result.renamed_objects.iter().map(|&oid| v_obj(oid)).collect();
-        
-        // Convert changes to MOO format
-        let changes_vars: Vec<Var> = result.changes.iter().map(|change| {
-            let modified_verbs_vars: Vec<Var> = change.modified_verbs.iter().map(|v| v_str(v)).collect();
-            let modified_props_vars: Vec<Var> = change.modified_props.iter().map(|p| v_str(p)).collect();
-            let deleted_verbs_vars: Vec<Var> = change.deleted_verbs.iter().map(|v| v_str(v)).collect();
-            let deleted_props_vars: Vec<Var> = change.deleted_props.iter().map(|p| v_str(p)).collect();
+        // Convert each commit result to MOO format
+        let commit_results_vars: Vec<Var> = result.commit_results.iter().map(|commit_result| {
+            // Convert object lists to v_obj variables
+            let modified_objects_vars: Vec<Var> = commit_result.modified_objects.iter().map(|&oid| v_obj(oid)).collect();
+            let deleted_objects_vars: Vec<Var> = commit_result.deleted_objects.iter().map(|&oid| v_obj(oid)).collect();
+            let added_objects_vars: Vec<Var> = commit_result.added_objects.iter().map(|&oid| v_obj(oid)).collect();
+            let renamed_objects_vars: Vec<Var> = commit_result.renamed_objects.iter().map(|&oid| v_obj(oid)).collect();
             
+            // Convert changes to MOO format
+            let changes_vars: Vec<Var> = commit_result.changes.iter().map(|change| {
+                let modified_verbs_vars: Vec<Var> = change.modified_verbs.iter().map(|v| v_str(v)).collect();
+                let modified_props_vars: Vec<Var> = change.modified_props.iter().map(|p| v_str(p)).collect();
+                let deleted_verbs_vars: Vec<Var> = change.deleted_verbs.iter().map(|v| v_str(v)).collect();
+                let deleted_props_vars: Vec<Var> = change.deleted_props.iter().map(|p| v_str(p)).collect();
+                
+                v_map(&[
+                    (v_str("obj_id"), v_obj(change.obj_id)),
+                    (v_str("modified_verbs"), v_list(&modified_verbs_vars)),
+                    (v_str("modified_props"), v_list(&modified_props_vars)),
+                    (v_str("deleted_verbs"), v_list(&deleted_verbs_vars)),
+                    (v_str("deleted_props"), v_list(&deleted_props_vars)),
+                ])
+            }).collect();
+            
+            // Create the commit result map
             v_map(&[
-                (v_str("obj_id"), v_obj(change.obj_id)),
-                (v_str("modified_verbs"), v_list(&modified_verbs_vars)),
-                (v_str("modified_props"), v_list(&modified_props_vars)),
-                (v_str("deleted_verbs"), v_list(&deleted_verbs_vars)),
-                (v_str("deleted_props"), v_list(&deleted_props_vars)),
+                (v_str("commit_author"), v_str(&commit_result.commit_info.author)),
+                (v_str("commit_id"), v_str(&commit_result.commit_info.id)),
+                (v_str("commit_message"), v_str(&commit_result.commit_info.message)),
+                (v_str("modified_objects"), v_list(&modified_objects_vars)),
+                (v_str("deleted_objects"), v_list(&deleted_objects_vars)),
+                (v_str("added_objects"), v_list(&added_objects_vars)),
+                (v_str("renamed_objects"), v_list(&renamed_objects_vars)),
+                (v_str("changes"), v_list(&changes_vars)),
             ])
         }).collect();
         
-        // Convert commits to MOO format
-        let commits_vars: Vec<Var> = result.commits_behind.iter().map(|commit| {
-            v_map(&[
-                (v_str("commit_id"), v_str(&commit.id)),
-                (v_str("author"), v_str(&commit.author)),
-                (v_str("message"), v_str(&commit.message)),
-            ])
-        }).collect();
-        
-        // Create the main result map
-        let result_map = v_map(&[
-            (v_str("modified_objects"), v_list(&modified_objects_vars)),
-            (v_str("deleted_objects"), v_list(&deleted_objects_vars)),
-            (v_str("added_objects"), v_list(&added_objects_vars)),
-            (v_str("renamed_objects"), v_list(&renamed_objects_vars)),
-            (v_str("changes"), v_list(&changes_vars)),
-            (v_str("commits_behind"), v_list(&commits_vars)),
-        ]);
-        
-        vec![result_map]
+        commit_results_vars
     }
 
     /// Rebase with automatic conflict resolution using object dump replay
@@ -570,33 +574,173 @@ impl WorkflowHandler {
         repo: &GitRepository,
         dry_run: bool,
     ) -> Result<Var, WorkerError> {
-        use crate::git::operations::pull_ops::PullOps;
+        use crate::git::operations::commit_ops::CommitOps;
+        use crate::git::operations::remote_ops::RemoteOps;
         
-        match PullOps::pull_with_rebase(repo.repo(), &self.object_handler.config, dry_run) {
+        // First, fetch the latest changes from remote
+        let ssh_key_path = self.object_handler.config.ssh_key_path();
+        let keys_dir = self.object_handler.config.keys_directory();
+        
+        match RemoteOps::fetch_remote(repo.repo(), ssh_key_path.as_ref().map(|s| s.as_str()), &keys_dir) {
             Ok(_) => {
+                info!("Successfully fetched from remote");
+            }
+            Err(e) => {
+                error!("Failed to fetch from remote: {}", e);
+                return Err(WorkerError::RequestError(format!("Failed to fetch from remote: {}", e)));
+            }
+        }
+        
+        // Get the current branch and upstream
+        let current_branch = match RemoteOps::get_current_branch(repo.repo()) {
+            Ok(Some(branch)) => branch,
+            Ok(None) => {
+                error!("No current branch found");
+                return Err(WorkerError::RequestError("No current branch found".to_string()));
+            }
+            Err(e) => {
+                error!("Failed to get current branch: {}", e);
+                return Err(WorkerError::RequestError(format!("Failed to get current branch: {}", e)));
+            }
+        };
+        
+        let upstream_branch = format!("origin/{}", current_branch);
+        info!("Current branch: {}, upstream: {}", current_branch, upstream_branch);
+        
+        // Check if there are any commits to pull
+        match CommitOps::get_commits_ahead_behind(repo.repo(), &current_branch, &upstream_branch) {
+            Ok((_ahead, behind)) => {
+                info!("Branch is {} commits behind upstream", behind);
+                
+                if behind == 0 {
+                    info!("No commits to pull");
+                    let empty_result = super::types::PullResult {
+                        commit_results: Vec::new(),
+                    };
+                    return Ok(v_list(&self.pull_result_to_moo_vars(empty_result)));
+                }
+                
+                // Get commits that will be pulled (only remote commits not in local)
+                let commits_to_pull = match CommitOps::get_commits_to_pull(repo.repo(), &current_branch, &upstream_branch) {
+                    Ok(commits) => commits,
+                    Err(e) => {
+                        error!("Failed to get commits to pull from {} to {}: {}", current_branch, upstream_branch, e);
+                        return Err(WorkerError::RequestError(format!("Failed to get commits to pull: {}", e)));
+                    }
+                };
+                
                 if dry_run {
-                    info!("Successfully analyzed pull impact for dry run");
-                    // For dry run, we need to do the analysis without executing
-                    self.analyze_pull_impact_dry_run(repo, "origin/main", &[])
+                    info!("Performing pull dry run analysis");
+                    // For dry run, analyze the changes without executing
+                    self.analyze_pull_impact_dry_run(repo, &upstream_branch, &commits_to_pull)
                         .map(|result| v_list(&self.pull_result_to_moo_vars(result)))
                 } else {
-                    info!("Successfully completed pull workflow");
-                    // Return empty result for now - could be enhanced to return actual changes
-                    let empty_result = super::types::PullResult {
-                        modified_objects: Vec::new(),
-                        deleted_objects: Vec::new(),
-                        added_objects: Vec::new(),
-                        renamed_objects: Vec::new(),
-                        changes: Vec::new(),
-                        commits_behind: Vec::new(),
-                    };
-                    Ok(v_list(&self.pull_result_to_moo_vars(empty_result)))
+                    info!("Executing pull with detailed analysis");
+                    // For live pull, execute with detailed analysis
+                    self.execute_pull_with_analysis(repo, &upstream_branch, &commits_to_pull)
+                        .map(|result| v_list(&self.pull_result_to_moo_vars(result)))
                 }
             }
             Err(e) => {
-                error!("Failed to execute pull workflow: {}", e);
-                Err(WorkerError::RequestError(format!("Failed to execute pull workflow: {}", e)))
+                error!("Failed to check commits ahead/behind: {}", e);
+                Err(WorkerError::RequestError(format!("Failed to check commits ahead/behind: {}", e)))
             }
         }
+    }
+    
+    /// Stash current changes using ObjDef models
+    pub fn stash_changes(&self, repo: &GitRepository) -> Result<Vec<moor_compiler::ObjectDefinition>, WorkerError> {
+        info!("Stashing current changes using ObjDef models");
+        
+        let mut stashed_objects = Vec::new();
+        let objects_dir = self.object_handler.config.objects_directory();
+        let objects_path = repo.work_dir().join(objects_dir);
+        
+        // Find all .moo files that have changes
+        let moo_files = match self.object_handler.find_moo_files(&objects_path) {
+            Ok(files) => files,
+            Err(e) => {
+                error!("Failed to find .moo files: {}", e);
+                return Err(WorkerError::RequestError(format!("Failed to find .moo files: {}", e)));
+            }
+        };
+        
+        // Load each object that has changes
+        for file_path in moo_files {
+            if let Some(object_name) = PathUtils::extract_object_name_from_path(file_path.to_str().unwrap_or("")) {
+                // Check if this file has changes
+                if repo.file_has_changes(&file_path) {
+                    match repo.read_file(&file_path) {
+                        Ok(content) => {
+                            match self.object_handler.parse_object_dump(&content) {
+                                Ok(object_def) => {
+                                    info!("Stashing object: {}", object_name);
+                                    stashed_objects.push(object_def);
+                                }
+                                Err(e) => {
+                                    error!("Failed to parse object dump for {}: {}", object_name, e);
+                                    // Continue with other objects
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            error!("Failed to read file {}: {}", file_path.display(), e);
+                            // Continue with other files
+                        }
+                    }
+                }
+            }
+        }
+        
+        info!("Stashed {} objects", stashed_objects.len());
+        Ok(stashed_objects)
+    }
+    
+    /// Replay stashed changes after pull
+    pub fn replay_stashed_changes(&self, repo: &GitRepository, stashed_objects: Vec<moor_compiler::ObjectDefinition>) -> Result<(), WorkerError> {
+        info!("Replaying {} stashed objects", stashed_objects.len());
+        
+        for mut object_def in stashed_objects {
+            // Load meta configuration
+            let meta_full_path = PathUtils::object_meta_path(repo.work_dir(), &self.object_handler.config, &object_def.name);
+            let meta_config = match self.object_handler.load_or_create_meta_config(&meta_full_path) {
+                Ok(config) => config,
+                Err(e) => {
+                    error!("Failed to load meta config for {}: {}", object_def.name, e);
+                    continue;
+                }
+            };
+            
+            // Apply meta configuration filtering
+            self.object_handler.apply_meta_config(&mut object_def, &meta_config);
+            
+            // Convert back to dump format
+            match self.object_handler.to_dump(&object_def) {
+                Ok(filtered_dump) => {
+                    // Write the filtered object
+                    let object_path = PathUtils::object_path(repo.work_dir(), &self.object_handler.config, &object_def.name);
+                    
+                    if let Err(e) = repo.write_file(&object_path, &filtered_dump) {
+                        error!("Failed to write object {}: {}", object_def.name, e);
+                        continue;
+                    }
+                    
+                    // Add to git
+                    if let Err(e) = repo.add_file(&object_path) {
+                        error!("Failed to add object {} to git: {}", object_def.name, e);
+                        continue;
+                    }
+                    
+                    info!("Replayed object: {}", object_def.name);
+                }
+                Err(e) => {
+                    error!("Failed to convert object {} to dump: {}", object_def.name, e);
+                    continue;
+                }
+            }
+        }
+        
+        info!("Successfully replayed all stashed changes");
+        Ok(())
     }
 }
