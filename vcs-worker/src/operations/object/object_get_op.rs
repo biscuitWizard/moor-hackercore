@@ -33,7 +33,7 @@ impl ObjectGetOperation {
         // Use the index provider to resolve the current state of the object
         match self.database.index().resolve_object_current_state(
             &request.object_name,
-            |obj_name| self.database.refs().get_ref(obj_name).map_err(|e| crate::providers::ProviderError::SerializationError(e.to_string()))
+            |obj_name| self.database.refs().get_ref(obj_name, None).map_err(|e| crate::providers::ProviderError::SerializationError(e.to_string()))
         ).map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))? {
             Some(sha256_key) => {
                 // Object exists - get its content

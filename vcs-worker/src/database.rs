@@ -27,8 +27,6 @@ pub enum ObjectsTreeError {
     SerializationError(String),
 }
 
-// Re-export types for compatibility
-pub use crate::providers::refs::ObjectRef;
 
 /// Database coordinator that aggregates providers for different subsystems
 pub struct Database {

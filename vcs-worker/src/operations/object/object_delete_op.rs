@@ -25,10 +25,10 @@ impl ObjectDeleteOperation {
         info!("Processing object delete for '{}'", request.object_name);
         
         // Validate that the source object exists
-        let existing_ref = self.database.refs().get_ref(&request.object_name)
+        let existing_sha256 = self.database.refs().get_ref(&request.object_name, None)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         
-        if existing_ref.is_none() {
+        if existing_sha256.is_none() {
             error!("Cannot delete object '{}' - object does not exist", request.object_name);
             return Err(ObjectsTreeError::ObjectNotFound(format!("Object '{}' not found", request.object_name)));
         }

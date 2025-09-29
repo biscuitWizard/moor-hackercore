@@ -68,13 +68,6 @@ pub struct RepositoryMetadata {
     pub last_modified: u64,
 }
 
-/// Represents a reference to an object with its current version
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ObjectRef {
-    pub object_name: String,
-    pub version: u64, // Monotonic version number
-    pub sha256_key: String, // SHA256 hash of the object dump
-}
 
 /// Represents the current working state (HEAD) which references object versions
 #[derive(Debug, Clone, Serialize, Deserialize)]

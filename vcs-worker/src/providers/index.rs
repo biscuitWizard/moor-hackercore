@@ -47,9 +47,9 @@ pub trait IndexProvider: Send + Sync {
     fn get_or_create_local_change(&self) -> ProviderResult<crate::types::Change>;
     
     /// Resolve the current state of an object considering the top change in the index.
-    fn resolve_object_current_state<F>(&self, object_name: &str, get_ref: F) -> ProviderResult<Option<String>>
+    fn resolve_object_current_state<F>(&self, object_name: &str, get_sha256: F) -> ProviderResult<Option<String>>
     where
-        F: Fn(&str) -> ProviderResult<Option<crate::providers::refs::ObjectRef>>;
+        F: Fn(&str) -> ProviderResult<Option<String>>;
     
     /// Compute complete object list by walking through all changes chronologically
     fn compute_complete_object_list(&self) -> ProviderResult<Vec<crate::types::ObjectInfo>>;
@@ -359,9 +359,9 @@ impl IndexProvider for IndexProviderImpl {
         Ok(new_change)
     }
     
-    fn resolve_object_current_state<F>(&self, object_name: &str, get_ref: F) -> ProviderResult<Option<String>>
+    fn resolve_object_current_state<F>(&self, object_name: &str, get_sha256: F) -> ProviderResult<Option<String>>
     where
-        F: Fn(&str) -> ProviderResult<Option<crate::providers::refs::ObjectRef>>
+        F: Fn(&str) -> ProviderResult<Option<String>>
     {
         // Get the top change from the index
         if let Some(top_change_id) = self.get_top_change()? {
@@ -379,17 +379,17 @@ impl IndexProvider for IndexProviderImpl {
                         .find(|r| r.from == object_name) {
                         info!("Object '{}' has been renamed to '{}' in top change", object_name, renamed.to);
                         // Recursively resolve the renamed object
-                        return self.resolve_object_current_state(&renamed.to, get_ref);
+                        return self.resolve_object_current_state(&renamed.to, get_sha256);
                     }
                 }
             }
         }
         
         // No top change or object not modified in top change - resolve through refs
-        match get_ref(object_name)? {
-            Some(object_ref) => {
-                info!("Found object '{}' in refs at version {}", object_name, object_ref.version);
-                Ok(Some(object_ref.sha256_key))
+        match get_sha256(object_name)? {
+            Some(sha256) => {
+                info!("Found object '{}' in refs with SHA256 {}", object_name, sha256);
+                Ok(Some(sha256))
             }
             None => {
                 info!("Object '{}' not found in refs", object_name);

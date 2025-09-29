@@ -2,39 +2,27 @@ use fjall::Partition;
 use serde::{Serialize, Deserialize};
 use tracing::{info, warn};
 use tokio::sync::mpsc;
+use std::collections::HashMap;
 
 use super::{ProviderError, ProviderResult};
 
-/// Represents a reference to an object with its current version
+
+/// Represents the refs storage as a HashMap where key is (object_name, version) and value is sha256
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ObjectRef {
-    pub object_name: String,
-    pub version: u64, // Monotonic version number
-    pub sha256_key: String, // SHA256 hash of the object dump
+pub struct RefsStorage {
+    pub refs: HashMap<(String, u64), String>, // (object_name, version) -> sha256
 }
 
 /// Provider trait for reference management
 pub trait RefsProvider: Send + Sync {
-    /// Get reference for an object by name
-    fn get_ref(&self, object_name: &str) -> ProviderResult<Option<ObjectRef>>;
+    /// Get SHA256 for an object by name and optional version (defaults to latest)
+    fn get_ref(&self, object_name: &str, version: Option<u64>) -> ProviderResult<Option<String>>;
     
     /// Update or create a reference
-    fn update_ref(&self, object_ref: &ObjectRef) -> ProviderResult<()>;
-    
-    /// Get the latest version number for an object
-    #[allow(dead_code)]
-    fn get_latest_version(&self, object_name: &str) -> ProviderResult<u64>;
+    fn update_ref(&self, object_name: &str, version: u64, sha256: &str) -> ProviderResult<()>;
     
     /// Get the next version number for an object
     fn get_next_version(&self, object_name: &str) -> ProviderResult<u64>;
-    
-    /// Resolve object name + optional version to SHA256 key
-    #[allow(dead_code)]
-    fn resolve_to_sha256(&self, object_name: &str, version: Option<u64>) -> ProviderResult<Option<String>>;
-    
-    /// Delete a reference
-    #[allow(dead_code)]
-    fn delete_ref(&self, object_name: &str) -> ProviderResult<bool>;
 }
 
 /// Implementation of RefsProvider using Fjall
@@ -48,79 +36,89 @@ impl RefsProviderImpl {
     pub fn new(refs_tree: Partition, flush_sender: mpsc::UnboundedSender<()>) -> Self {
         Self { refs_tree, flush_sender }
     }
+    
+    /// Load the refs storage from the database
+    fn load_refs_storage(&self) -> ProviderResult<RefsStorage> {
+        match self.refs_tree.get(b"refs_storage")? {
+            Some(data) => {
+                let json = String::from_utf8(data.to_vec())?;
+                let storage: RefsStorage = serde_json::from_str(&json)
+                    .map_err(|e| ProviderError::SerializationError(format!("JSON parse error: {e}")))?;
+                Ok(storage)
+            }
+            None => Ok(RefsStorage {
+                refs: HashMap::new(),
+            }),
+        }
+    }
+    
+    /// Save the refs storage to the database
+    fn save_refs_storage(&self, storage: &RefsStorage) -> ProviderResult<()> {
+        let json = serde_json::to_string(storage)
+            .map_err(|e| ProviderError::SerializationError(format!("JSON serialization error: {e}")))?;
+        self.refs_tree.insert(b"refs_storage", json.as_bytes())?;
+        Ok(())
+    }
 }
 
 impl RefsProvider for RefsProviderImpl {
-    fn get_ref(&self, object_name: &str) -> ProviderResult<Option<ObjectRef>> {
-        match self.refs_tree.get(object_name.as_bytes())? {
-            Some(data) => {
-                let json = String::from_utf8(data.to_vec())?;
-                let object_ref: ObjectRef = serde_json::from_str(&json)
-                    .map_err(|e| ProviderError::SerializationError(format!("JSON parse error: {e}")))?;
-                Ok(Some(object_ref))
+    fn get_ref(&self, object_name: &str, version: Option<u64>) -> ProviderResult<Option<String>> {
+        let storage = self.load_refs_storage()?;
+        
+        if let Some(target_version) = version {
+            // Specific version requested
+            Ok(storage.refs.get(&(object_name.to_string(), target_version)).cloned())
+        } else {
+            // Latest version requested
+            let latest_version = storage.refs.keys()
+                .filter(|(name, _)| name == object_name)
+                .map(|(_, version)| *version)
+                .max();
+                
+            if let Some(version) = latest_version {
+                Ok(storage.refs.get(&(object_name.to_string(), version)).cloned())
+            } else {
+                Ok(None)
             }
-            None => Ok(None),
         }
     }
 
-    fn update_ref(&self, object_ref: &ObjectRef) -> ProviderResult<()> {
-        let json = serde_json::to_string(object_ref)
-            .map_err(|e| ProviderError::SerializationError(format!("JSON serialization error: {e}")))?;
-        self.refs_tree.insert(object_ref.object_name.as_bytes(), json.as_bytes())?;
+
+    fn update_ref(&self, object_name: &str, version: u64, sha256: &str) -> ProviderResult<()> {
+        let mut storage = self.load_refs_storage()?;
+        
+        // Add the new reference to the HashMap
+        storage.refs.insert(
+            (object_name.to_string(), version),
+            sha256.to_string()
+        );
+        
+        // Save the updated storage
+        self.save_refs_storage(&storage)?;
         
         // Request background flush
         if self.flush_sender.send(()).is_err() {
             warn!("Failed to request background flush - channel closed");
         }
         
-        info!("Updated ref for object '{}' version {}", object_ref.object_name, object_ref.version);
+        info!("Updated ref for object '{}' version {}", object_name, version);
         Ok(())
     }
 
-    fn get_latest_version(&self, object_name: &str) -> ProviderResult<u64> {
-        match self.get_ref(object_name)? {
-            Some(ref_) => Ok(ref_.version),
-            None => Err(ProviderError::ReferenceNotFound(object_name.to_string())),
-        }
-    }
 
     fn get_next_version(&self, object_name: &str) -> ProviderResult<u64> {
-        match self.get_ref(object_name)? {
-            Some(ref_) => Ok(ref_.version + 1),
+        let storage = self.load_refs_storage()?;
+        
+        let latest_version = storage.refs.keys()
+            .filter(|(name, _)| name == object_name)
+            .map(|(_, version)| *version)
+            .max();
+            
+        match latest_version {
+            Some(version) => Ok(version + 1),
             None => Ok(1), // First version
         }
     }
 
-    fn resolve_to_sha256(&self, object_name: &str, version: Option<u64>) -> ProviderResult<Option<String>> {
-        if let Some(target_version) = version {
-            // Specific version requested
-            if let Some(object_ref) = self.get_ref(object_name)? {
-                if object_ref.version == target_version {
-                    Ok(Some(object_ref.sha256_key))
-                } else {
-                    Err(ProviderError::VersionNotFound(
-                        format!("Object '{}' version {} not found (latest is {})", 
-                                object_name, target_version, object_ref.version)
-                    ))
-                }
-            } else {
-                Err(ProviderError::ReferenceNotFound(object_name.to_string()))
-            }
-        } else {
-            // Latest version requested
-            match self.get_ref(object_name)? {
-                Some(object_ref) => Ok(Some(object_ref.sha256_key)),
-                None => Ok(None),
-            }
-        }
-    }
 
-    fn delete_ref(&self, object_name: &str) -> ProviderResult<bool> {
-        // Check if the key exists first
-        let exists = self.refs_tree.get(object_name.as_bytes())?.is_some();
-        if exists {
-            self.refs_tree.remove(object_name.as_bytes())?;
-        }
-        Ok(exists)
-    }
 }

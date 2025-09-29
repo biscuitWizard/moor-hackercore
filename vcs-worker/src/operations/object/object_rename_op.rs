@@ -25,19 +25,19 @@ impl ObjectRenameOperation {
         info!("Processing object rename from '{}' to '{}'", request.from_name, request.to_name);
         
         // Validate that the source object exists
-        let existing_ref = self.database.refs().get_ref(&request.from_name)
+        let existing_sha256 = self.database.refs().get_ref(&request.from_name, None)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         
-        if existing_ref.is_none() {
+        if existing_sha256.is_none() {
             error!("Cannot rename object '{}' - object does not exist", request.from_name);
             return Err(ObjectsTreeError::ObjectNotFound(format!("Object '{}' not found", request.from_name)));
         }
         
         // Validate that the target object name doesn't already exist
-        let target_ref = self.database.refs().get_ref(&request.to_name)
+        let target_sha256 = self.database.refs().get_ref(&request.to_name, None)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         
-        if target_ref.is_some() {
+        if target_sha256.is_some() {
             error!("Cannot rename to '{}' - object already exists", request.to_name);
             return Err(ObjectsTreeError::InvalidOperation(format!("Object '{}' already exists", request.to_name)));
         }

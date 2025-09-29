@@ -3,7 +3,7 @@ use axum::http::Method;
 use tracing::{error, info, debug};
 use serde::{Deserialize, Serialize};
 
-use crate::database::{DatabaseRef, ObjectsTreeError, ObjectRef};
+use crate::database::{DatabaseRef, ObjectsTreeError};
 use crate::providers::index::IndexProvider;
 use crate::providers::refs::RefsProvider;
 use crate::providers::objects::ObjectsProvider;
@@ -52,10 +52,10 @@ impl ObjectUpdateOperation {
         info!("Generated SHA256 key '{}' for object '{}'", sha256_key, request.object_name);
         
         // Check if this content already exists (exact same SHA256)
-        let existing_ref = self.database.refs().get_ref(&request.object_name)
+        let existing_sha256 = self.database.refs().get_ref(&request.object_name, None)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         
-        let is_duplicate_content = existing_ref.map_or(false, |ref_data| ref_data.sha256_key == sha256_key);
+        let is_duplicate_content = existing_sha256.map_or(false, |existing| existing == sha256_key);
         
         if is_duplicate_content {
             info!("Object '{}' content is unchanged (same SHA256), skipping version increment", request.object_name);
@@ -72,12 +72,7 @@ impl ObjectUpdateOperation {
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         
         // Update or create the object reference (latest version tracking)
-        let object_ref = ObjectRef {
-            object_name: request.object_name.clone(),
-            version,
-            sha256_key: sha256_key.clone(),
-        };
-        self.database.refs().update_ref(&object_ref)
+        self.database.refs().update_ref(&request.object_name, version, &sha256_key)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         
         
@@ -89,7 +84,7 @@ impl ObjectUpdateOperation {
             info!("Object '{}' has been renamed in this change, skipping change tracking", request.object_name);
         } else {
             // Check if this object exists in refs to determine adding vs modifying
-            let is_existing_object = self.database.refs().get_ref(&request.object_name)
+            let is_existing_object = self.database.refs().get_ref(&request.object_name, None)
                 .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
                 .is_some();
             
