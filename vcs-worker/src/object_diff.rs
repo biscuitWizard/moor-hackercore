@@ -1,7 +1,10 @@
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use moor_var::{Var, v_map, v_str};
-use crate::types::Change;
+use crate::database::{DatabaseRef, ObjectsTreeError};
+use crate::providers::objects::ObjectsProvider;
+use crate::providers::refs::RefsProvider;
+use moor_compiler::ObjectDefinition;
 
 /// Represents a single object change with detailed verb and property modifications
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -245,6 +248,167 @@ pub fn obj_id_to_object_name(obj_id: &str, object_name: Option<&str>) -> String 
         }
         _ => obj_id.to_string(),
     }
+}
+
+/// Compare object versions to determine detailed changes
+pub fn compare_object_versions(database: &DatabaseRef, obj_name: &str, local_version: u64) -> Result<ObjectChange, ObjectsTreeError> {
+    let mut object_change = ObjectChange::new(obj_name.to_string());
+    
+    // Get the local version content
+    let local_sha256 = database.refs().get_ref(obj_name, Some(local_version))
+        .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
+        .ok_or_else(|| ObjectsTreeError::SerializationError(format!("Local version {} of object '{}' not found", local_version, obj_name)))?;
+    
+    let local_content = database.objects().get(&local_sha256)
+        .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
+        .ok_or_else(|| ObjectsTreeError::SerializationError(format!("Object content for SHA256 '{}' not found", local_sha256)))?;
+    
+    // Parse local object definition
+    let local_def = database.objects().parse_object_dump(&local_content)
+        .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+    
+    // Get the baseline version (previous version)
+    let baseline_version = if local_version > 1 { local_version - 1 } else { 1 };
+    let baseline_sha256 = database.refs().get_ref(obj_name, Some(baseline_version))
+        .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+    
+    if let Some(baseline_sha256) = baseline_sha256 {
+        // Get baseline content and parse it
+        let baseline_content = database.objects().get(&baseline_sha256)
+            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
+            .ok_or_else(|| ObjectsTreeError::SerializationError(format!("Baseline object content for SHA256 '{}' not found", baseline_sha256)))?;
+        
+        let baseline_def = database.objects().parse_object_dump(&baseline_content)
+            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+        
+        // Compare the two object definitions
+        compare_object_definitions(&baseline_def, &local_def, &mut object_change);
+    } else {
+        // No baseline version - this is a new object, mark all as added
+        for verb in &local_def.verbs {
+            for verb_name in &verb.names {
+                object_change.verbs_added.insert(verb_name.to_string());
+            }
+        }
+        for prop_def in &local_def.property_definitions {
+            object_change.props_added.insert(prop_def.name.to_string());
+        }
+        for prop_override in &local_def.property_overrides {
+            object_change.props_added.insert(prop_override.name.to_string());
+        }
+    }
+    
+    Ok(object_change)
+}
+
+/// Compare two ObjectDefinitions and populate the ObjectChange with detailed differences
+pub fn compare_object_definitions(baseline: &ObjectDefinition, local: &ObjectDefinition, object_change: &mut ObjectChange) {
+    // Compare verbs
+    let baseline_verbs: HashMap<String, &moor_compiler::ObjVerbDef> = baseline.verbs.iter()
+        .flat_map(|v| v.names.iter().map(move |name| (name.to_string(), v)))
+        .collect();
+    
+    let local_verbs: HashMap<String, &moor_compiler::ObjVerbDef> = local.verbs.iter()
+        .flat_map(|v| v.names.iter().map(move |name| (name.to_string(), v)))
+        .collect();
+    
+    // Find added, modified, and deleted verbs
+    for (verb_name, local_verb) in &local_verbs {
+        if let Some(baseline_verb) = baseline_verbs.get(verb_name) {
+            // Verb exists in both - check if it's modified
+            if verbs_differ(baseline_verb, local_verb) {
+                object_change.verbs_modified.insert(verb_name.clone());
+            }
+        } else {
+            // Verb is new
+            object_change.verbs_added.insert(verb_name.clone());
+        }
+    }
+    
+    for verb_name in baseline_verbs.keys() {
+        if !local_verbs.contains_key(verb_name) {
+            // Verb was deleted
+            object_change.verbs_deleted.insert(verb_name.clone());
+        }
+    }
+    
+    // Compare property definitions
+    let baseline_props: HashMap<String, &moor_compiler::ObjPropDef> = baseline.property_definitions.iter()
+        .map(|p| (p.name.to_string(), p))
+        .collect();
+    
+    let local_props: HashMap<String, &moor_compiler::ObjPropDef> = local.property_definitions.iter()
+        .map(|p| (p.name.to_string(), p))
+        .collect();
+    
+    // Find added, modified, and deleted property definitions
+    for (prop_name, local_prop) in &local_props {
+        if let Some(baseline_prop) = baseline_props.get(prop_name) {
+            // Property exists in both - check if it's modified
+            if property_definitions_differ(baseline_prop, local_prop) {
+                object_change.props_modified.insert(prop_name.clone());
+            }
+        } else {
+            // Property is new
+            object_change.props_added.insert(prop_name.clone());
+        }
+    }
+    
+    for prop_name in baseline_props.keys() {
+        if !local_props.contains_key(prop_name) {
+            // Property was deleted
+            object_change.props_deleted.insert(prop_name.clone());
+        }
+    }
+    
+    // Compare property overrides
+    let baseline_overrides: HashMap<String, &moor_compiler::ObjPropOverride> = baseline.property_overrides.iter()
+        .map(|p| (p.name.to_string(), p))
+        .collect();
+    
+    let local_overrides: HashMap<String, &moor_compiler::ObjPropOverride> = local.property_overrides.iter()
+        .map(|p| (p.name.to_string(), p))
+        .collect();
+    
+    // Find added, modified, and deleted property overrides
+    for (prop_name, local_override) in &local_overrides {
+        if let Some(baseline_override) = baseline_overrides.get(prop_name) {
+            // Override exists in both - check if it's modified
+            if property_overrides_differ(baseline_override, local_override) {
+                object_change.props_modified.insert(prop_name.clone());
+            }
+        } else {
+            // Override is new
+            object_change.props_added.insert(prop_name.clone());
+        }
+    }
+    
+    for prop_name in baseline_overrides.keys() {
+        if !local_overrides.contains_key(prop_name) {
+            // Override was deleted
+            object_change.props_deleted.insert(prop_name.clone());
+        }
+    }
+}
+
+/// Check if two verb definitions differ
+pub fn verbs_differ(baseline: &moor_compiler::ObjVerbDef, local: &moor_compiler::ObjVerbDef) -> bool {
+    baseline.argspec != local.argspec ||
+    baseline.owner != local.owner ||
+    baseline.flags != local.flags ||
+    baseline.program != local.program
+}
+
+/// Check if two property definitions differ
+pub fn property_definitions_differ(baseline: &moor_compiler::ObjPropDef, local: &moor_compiler::ObjPropDef) -> bool {
+    baseline.perms != local.perms ||
+    baseline.value != local.value
+}
+
+/// Check if two property overrides differ
+pub fn property_overrides_differ(baseline: &moor_compiler::ObjPropOverride, local: &moor_compiler::ObjPropOverride) -> bool {
+    baseline.value != local.value ||
+    baseline.perms_update != local.perms_update
 }
 
 #[cfg(test)]
