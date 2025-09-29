@@ -1,16 +1,23 @@
 use clap::Parser;
 use clap_derive::Parser;
-use moor_common::tasks::WorkerError;
-use moor_var::{Obj, Symbol, Var, v_str};
 use rpc_async_client::{make_worker_token, worker_loop};
 use rpc_common::client_args::RpcClientArgs;
-use rpc_common::{WorkerToken, load_keypair};
+use rpc_common::load_keypair;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use tokio::select;
 use tokio::signal::unix::{SignalKind, signal};
 use tracing::{error, info};
 use uuid::Uuid;
+
+mod operations;
+mod router;
+mod config;
+mod database;
+mod providers;
+
+use operations::create_default_registry;
+use router::{start_http_server, create_rpc_handler};
 
 // TODO: timeouts, and generally more error handling
 #[derive(Parser, Debug)]
@@ -20,6 +27,9 @@ struct Args {
 
     #[arg(long, help = "Enable debug logging", default_value = "false")]
     debug: bool,
+
+    #[arg(long, help = "HTTP listen address", default_value = "0.0.0.0:3000")]
+    http_address: String,
 }
 
 #[tokio::main(flavor = "multi_thread")]
@@ -60,11 +70,19 @@ async fn main() -> Result<(), eyre::Error> {
     let my_id = Uuid::new_v4();
     let worker_token = make_worker_token(&private_key, my_id);
 
+    // Create operation registry and register operations
+    let (registry, _objects_tree) = create_default_registry()
+        .map_err(|e| eyre::eyre!("Failed to create default registry: {}", e))?;
+    let registry = Arc::new(registry);
+    info!("Registered operations: {:?}", registry.list_operations());
+
     let worker_response_rpc_addr = args.client_args.workers_response_address.clone();
     let worker_request_rpc_addr = args.client_args.workers_request_address.clone();
-    let worker_type = Symbol::mk("vcs");
+    let worker_type = moor_var::Symbol::mk("vcs");
     let ks = kill_switch.clone();
-    let perform_func = Arc::new(process_simple_request);
+    let perform_func = Arc::new(create_rpc_handler(registry.clone()));
+    
+    // Start RPC worker loop
     let worker_loop_thread = tokio::spawn(async move {
         if let Err(e) = worker_loop(
             &ks,
@@ -82,6 +100,15 @@ async fn main() -> Result<(), eyre::Error> {
         }
     });
 
+    // Start HTTP server
+    let http_address = args.http_address.clone();
+    let http_registry = registry.clone();
+    let http_server_thread = tokio::spawn(async move {
+        if let Err(e) = start_http_server(&http_address, http_registry).await {
+            error!("HTTP server error: {}", e);
+        }
+    });
+
     select! {
         _ = hup_signal.recv() => {
             info!("Received HUP signal, reloading configuration is not supported yet");
@@ -92,43 +119,13 @@ async fn main() -> Result<(), eyre::Error> {
         },
         _ = worker_loop_thread => {
             info!("Worker loop thread exited");
+            kill_switch.store(true, std::sync::atomic::Ordering::Relaxed);
+        },
+        _ = http_server_thread => {
+            info!("HTTP server thread exited");
+            kill_switch.store(true, std::sync::atomic::Ordering::Relaxed);
         }
     }
     info!("Done");
     Ok(())
-}
-
-async fn process_simple_request(
-    _token: WorkerToken,
-    _request_id: Uuid,
-    _worker_type: Symbol,
-    _perms: Obj,
-    arguments: Vec<Var>,
-    _timeout: Option<std::time::Duration>,
-) -> Result<Var, WorkerError> {
-    if arguments.is_empty() {
-        return Ok(v_str("No arguments provided"));
-    }
-
-    // First argument should be the operation name
-    let operation_name = match arguments[0].as_string() {
-        Some(name) => name,
-        None => {
-            return Ok(v_str("First argument must be a string (operation name)"));
-        }
-    };
-
-    info!("Processing request: '{}' with {} arguments", operation_name, arguments.len());
-    
-    // Simple proof of concept: respond to "hello" with "goodbye"
-    match operation_name.as_str() {
-        "hello" => {
-            info!("Received 'hello' request, responding with 'goodbye'");
-            Ok(v_str("goodbye"))
-        }
-        _ => {
-            info!("Unknown operation: '{}', responding with 'goodbye' anyway", operation_name);
-            Ok(v_str("goodbye"))
-        }
-    }
 }
