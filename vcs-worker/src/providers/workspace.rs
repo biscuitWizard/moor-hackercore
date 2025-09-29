@@ -170,9 +170,9 @@ impl WorkspaceProvider for WorkspaceProviderImpl {
             // Skip the status index entries, only process actual change entries
             let key_str = String::from_utf8_lossy(&key);
             if key_str.starts_with("change:") {
-                if let Ok(value_str) = String::from_utf8(value.to_vec()) {
+                if let Ok(_value_str) = String::from_utf8(value.to_vec()) {
                     if let Ok(json) = String::from_utf8(value.to_vec()) {
-                        if let Ok(mut change) = serde_json::from_str::<Change>(&json) {
+                        if let Ok(change) = serde_json::from_str::<Change>(&json) {
                             // Verify this change has the requested status
                             if change.status == status {
                                 changes.push(change);

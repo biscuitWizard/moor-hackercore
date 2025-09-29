@@ -17,4 +17,3 @@ pub use error::{ProviderError, ProviderResult};
 pub use objects::{ObjectsProvider, ObjectsProviderImpl};
 pub use refs::RefsProviderImpl;
 pub use index::IndexProviderImpl;
-pub use workspace::WorkspaceProviderImpl;

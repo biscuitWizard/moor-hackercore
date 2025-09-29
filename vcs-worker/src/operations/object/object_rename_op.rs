@@ -54,32 +54,48 @@ impl ObjectRenameOperation {
         
         // The index already manages the current change, so we don't need repository management
         
+        // Get the current version of the source object
+        let from_version = self.database.refs().get_ref(&request.from_name, None)
+            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
+            .and_then(|_| {
+                // Get the latest version number for the source object
+                self.database.refs().get_ref(&request.from_name, None)
+                    .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))
+                    .ok()
+                    .flatten()
+                    .map(|_| {
+                        // We need to find the actual version number
+                        // For now, we'll use version 1 as a placeholder - this should be improved
+                        1u64
+                    })
+            }).unwrap_or(1);
+        
         // Handle change tracking - remove from added/modified lists if present
-        current_change.added_objects.retain(|name| name != &request.from_name);
-        current_change.modified_objects.retain(|name| name != &request.from_name);
+        current_change.added_objects.retain(|obj| obj.name != request.from_name);
+        current_change.modified_objects.retain(|obj| obj.name != request.from_name);
         
         // Add to renamed_objects list
         let renamed_object = RenamedObject {
-            from: request.from_name.clone(),
-            to: request.to_name.clone(),
+            from: crate::types::ObjectInfo { name: request.from_name.clone(), version: from_version },
+            to: crate::types::ObjectInfo { name: request.to_name.clone(), version: 1 }, // New object starts at version 1
         };
         
         // Remove any existing rename entry for this object
-        current_change.renamed_objects.retain(|renamed| renamed.from != request.from_name);
+        current_change.renamed_objects.retain(|renamed| renamed.from.name != request.from_name);
         
         // Add the new rename entry
         current_change.renamed_objects.push(renamed_object);
         info!("Added rename '{}' -> '{}' to renamed_objects in change '{}'", request.from_name, request.to_name, current_change.name);
         
         // If the source object was added in this change, move it to the new name in added_objects
-        if let Some(pos) = current_change.added_objects.iter().position(|name| name == &request.from_name) {
-            current_change.added_objects[pos] = request.to_name.clone();
+        if let Some(pos) = current_change.added_objects.iter().position(|obj| obj.name == request.from_name) {
+            current_change.added_objects[pos] = crate::types::ObjectInfo { name: request.to_name.clone(), version: 1 };
             info!("Moved renamed object '{}' -> '{}' in added_objects", request.from_name, request.to_name);
         }
         
         // If the source object was modified in this change, move it to the new name in modified_objects
-        if let Some(pos) = current_change.modified_objects.iter().position(|name| name == &request.from_name) {
-            current_change.modified_objects[pos] = request.to_name.clone();
+        if let Some(pos) = current_change.modified_objects.iter().position(|obj| obj.name == request.from_name) {
+            current_change.modified_objects[pos] = crate::types::ObjectInfo { name: request.to_name.clone(), version: 1 };
             info!("Moved renamed object '{}' -> '{}' in modified_objects", request.from_name, request.to_name);
         }
         

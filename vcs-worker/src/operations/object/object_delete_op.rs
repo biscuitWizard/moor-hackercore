@@ -39,12 +39,20 @@ impl ObjectDeleteOperation {
         
         // The index already manages the current change, so we don't need repository management
         
-        // Handle change tracking - remove from added/modified lists if present
-        let was_in_added = current_change.added_objects.iter().any(|name| name == &request.object_name);
-        let was_in_modified = current_change.modified_objects.iter().any(|name| name == &request.object_name);
+        // Get the current version of the object being deleted
+        let object_version = self.database.refs().get_ref(&request.object_name, None)
+            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
+            .and_then(|_| {
+                // For now, we'll use version 1 as a placeholder - this should be improved
+                Some(1u64)
+            }).unwrap_or(1);
         
-        current_change.added_objects.retain(|name| name != &request.object_name);
-        current_change.modified_objects.retain(|name| name != &request.object_name);
+        // Handle change tracking - remove from added/modified lists if present
+        let was_in_added = current_change.added_objects.iter().any(|obj| obj.name == request.object_name);
+        let was_in_modified = current_change.modified_objects.iter().any(|obj| obj.name == request.object_name);
+        
+        current_change.added_objects.retain(|obj| obj.name != request.object_name);
+        current_change.modified_objects.retain(|obj| obj.name != request.object_name);
         
         if was_in_added {
             info!("Removed object '{}' from added_objects (now deleting instead)", request.object_name);
@@ -55,13 +63,14 @@ impl ObjectDeleteOperation {
         }
         
         // Add to deleted_objects list if not already present
-        if !current_change.deleted_objects.contains(&request.object_name) {
-            current_change.deleted_objects.push(request.object_name.clone());
+        let obj_info = crate::types::ObjectInfo { name: request.object_name.clone(), version: object_version };
+        if !current_change.deleted_objects.iter().any(|obj| obj.name == request.object_name) {
+            current_change.deleted_objects.push(obj_info);
             info!("Added object '{}' to deleted_objects in change '{}'", request.object_name, current_change.name);
         }
         
         // Remove any rename entries for this object since it's being deleted
-        current_change.renamed_objects.retain(|renamed| renamed.from != request.object_name && renamed.to != request.object_name);
+        current_change.renamed_objects.retain(|renamed| renamed.from.name != request.object_name && renamed.to.name != request.object_name);
         
         // Update the change in the database
         self.database.index().update_change(&current_change)

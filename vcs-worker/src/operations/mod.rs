@@ -11,7 +11,7 @@ pub use object::{ObjectGetOperation, ObjectUpdateOperation, ObjectRenameOperatio
 pub use index::IndexListOperation;
 
 // Re-export common types from crate::types
-pub use crate::types::{OperationRequest, OperationResponse};
+pub use crate::types::OperationRequest;
 
 use axum::http::Method;
 use std::sync::Arc;

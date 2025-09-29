@@ -30,8 +30,8 @@ pub enum ChangeStatus {
 /// Represents a file rename operation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RenamedObject {
-    pub from: String,
-    pub to: String,
+    pub from: ObjectInfo,
+    pub to: ObjectInfo,
 }
 
 /// Represents a change in the version control system
@@ -43,43 +43,12 @@ pub struct Change {
     pub author: String,
     pub timestamp: u64, // Linux UTC epoch
     pub status: ChangeStatus, // MERGED, LOCAL, REVIEW, or IDLE
-    pub added_objects: Vec<String>,
-    pub modified_objects: Vec<String>,
-    pub deleted_objects: Vec<String>,
+    pub added_objects: Vec<ObjectInfo>,
+    pub modified_objects: Vec<ObjectInfo>,
+    pub deleted_objects: Vec<ObjectInfo>,
     pub renamed_objects: Vec<RenamedObject>,
     // Workspace-specific fields
     pub index_change_id: Option<String>, // The indexed change this workspace change is based on
-}
-
-
-/// Represents the current state of the repository
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Repository {
-    pub current_change: Option<String>, // Change ID of current working change
-    pub metadata: RepositoryMetadata,
-}
-
-/// Repository-level metadata
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RepositoryMetadata {
-    pub name: Option<String>,
-    pub description: Option<String>,
-    pub created_timestamp: u64,
-    pub last_modified: u64,
-}
-
-
-/// Represents the current working state (HEAD) which references object versions
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Head {
-    pub refs: Vec<HeadRef>, // List of object_name + version pairs
-}
-
-/// Represents a reference in the HEAD
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HeadRef {
-    pub object_name: String,
-    pub version: u64,
 }
 
 /// Request structure for operations
@@ -90,7 +59,7 @@ pub struct OperationRequest {
 }
 
 /// Information about an object in the complete object list
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct ObjectInfo {
     pub name: String,
     pub version: u64,
@@ -130,17 +99,9 @@ pub struct ChangeStatusRequest {
 pub struct ChangeStatusResponse {
     pub change_id: Option<String>,
     pub change_name: Option<String>,
-    pub status: DetailedChangeStatus,
+    pub status: ChangeStatus,
 }
 
-/// Detailed status of a change (different from ChangeStatus enum)
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DetailedChangeStatus {
-    pub added_objects: Vec<String>,
-    pub modified_objects: Vec<String>,
-    pub deleted_objects: Vec<String>,
-    pub renamed_objects: Vec<RenamedObject>,
-}
 
 /// Request structure for change abandon operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -194,8 +155,6 @@ pub enum ObjectsTreeError {
     ProviderError(#[from] crate::providers::error::ProviderError),
     #[error("Invalid operation: {0}")]
     InvalidOperation(String),
-    #[error("Change not found: {0}")]
-    ChangeNotFound(String),
     #[error("Object not found: {0}")]
     ObjectNotFound(String),
 }

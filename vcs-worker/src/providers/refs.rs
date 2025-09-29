@@ -5,12 +5,13 @@ use tokio::sync::mpsc;
 use std::collections::HashMap;
 
 use super::{ProviderError, ProviderResult};
+use crate::types::ObjectInfo;
 
 
-/// Represents the refs storage as a HashMap where key is (object_name, version) and value is sha256
+/// Represents the refs storage as a HashMap where key is ObjectInfo and value is sha256
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RefsStorage {
-    pub refs: HashMap<(String, u64), String>, // (object_name, version) -> sha256
+    pub refs: HashMap<ObjectInfo, String>, // ObjectInfo -> sha256
 }
 
 /// Provider trait for reference management
@@ -67,16 +68,24 @@ impl RefsProvider for RefsProviderImpl {
         
         if let Some(target_version) = version {
             // Specific version requested
-            Ok(storage.refs.get(&(object_name.to_string(), target_version)).cloned())
+            let object_info = ObjectInfo {
+                name: object_name.to_string(),
+                version: target_version,
+            };
+            Ok(storage.refs.get(&object_info).cloned())
         } else {
             // Latest version requested
             let latest_version = storage.refs.keys()
-                .filter(|(name, _)| name == object_name)
-                .map(|(_, version)| *version)
+                .filter(|obj_info| obj_info.name == object_name)
+                .map(|obj_info| obj_info.version)
                 .max();
                 
             if let Some(version) = latest_version {
-                Ok(storage.refs.get(&(object_name.to_string(), version)).cloned())
+                let object_info = ObjectInfo {
+                    name: object_name.to_string(),
+                    version,
+                };
+                Ok(storage.refs.get(&object_info).cloned())
             } else {
                 Ok(None)
             }
@@ -88,10 +97,11 @@ impl RefsProvider for RefsProviderImpl {
         let mut storage = self.load_refs_storage()?;
         
         // Add the new reference to the HashMap
-        storage.refs.insert(
-            (object_name.to_string(), version),
-            sha256.to_string()
-        );
+        let object_info = ObjectInfo {
+            name: object_name.to_string(),
+            version,
+        };
+        storage.refs.insert(object_info, sha256.to_string());
         
         // Save the updated storage
         self.save_refs_storage(&storage)?;
@@ -110,8 +120,8 @@ impl RefsProvider for RefsProviderImpl {
         let storage = self.load_refs_storage()?;
         
         let latest_version = storage.refs.keys()
-            .filter(|(name, _)| name == object_name)
-            .map(|(_, version)| *version)
+            .filter(|obj_info| obj_info.name == object_name)
+            .map(|obj_info| obj_info.version)
             .max();
             
         match latest_version {

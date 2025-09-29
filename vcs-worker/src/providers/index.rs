@@ -7,9 +7,6 @@ use super::{ProviderError, ProviderResult};
     /// Combined Index and Changes provider - manages both change storage and ordering
 pub trait IndexProvider: Send + Sync {
     // ===== CHANGE ORDERING METHODS =====
-    /// Add a change ID to the end of the ordered list
-    fn append_change(&self, change_id: &str) -> ProviderResult<()>;
-    
     /// Insert a change ID at the front of the ordered list (for current working change)
     fn prepend_change(&self, change_id: &str) -> ProviderResult<()>;
     
@@ -21,9 +18,6 @@ pub trait IndexProvider: Send + Sync {
     
     /// Remove a change ID from the order list
     fn remove_change(&self, change_id: &str) -> ProviderResult<()>;
-    
-    /// Reorder the list when a change status changes
-    fn reorder_on_status_change(&self, change_id: &str, was_local: bool, is_now_local: bool) -> ProviderResult<()>;
     
     // ===== CHANGE STORAGE METHODS =====
     /// Store a change in the database
@@ -122,43 +116,43 @@ impl ChangeOperationProcessor {
     
     fn process_change(&mut self, change: &crate::types::Change) {
         // 1. Handle deletions first (remove from our tracking)
-        for deleted_name in &change.deleted_objects {
-            if self.objects.remove(deleted_name).is_some() {
-                info!("  Deleted object: {}", deleted_name);
+        for deleted_obj in &change.deleted_objects {
+            if self.objects.remove(&deleted_obj.name).is_some() {
+                info!("  Deleted object: {} (version {})", deleted_obj.name, deleted_obj.version);
             }
         }
         
         // 2. Handle renames (rename in our tracking)
         for renamed_obj in &change.renamed_objects {
-            if let Some(version) = self.objects.remove(&renamed_obj.from) {
-                self.objects.insert(renamed_obj.to.clone(), version);
-                info!("  Renamed: {} -> {} (version {})", renamed_obj.from, renamed_obj.to, version);
+            if let Some(version) = self.objects.remove(&renamed_obj.from.name) {
+                self.objects.insert(renamed_obj.to.name.clone(), version);
+                info!("  Renamed: {} -> {} (version {})", renamed_obj.from.name, renamed_obj.to.name, version);
             }
         }
         
         // 3. Handle additions (add to our tracking with version 1)
-        for added_name in &change.added_objects {
-            if !self.objects.contains_key(added_name as &str) {
-                self.objects.insert(added_name.clone(), 1);
-                info!("  Added object: {}", added_name);
+        for added_obj in &change.added_objects {
+            if !self.objects.contains_key(&added_obj.name) {
+                self.objects.insert(added_obj.name.clone(), 1);
+                info!("  Added object: {} (version {})", added_obj.name, added_obj.version);
             }
         }
         
         // 4. Handle modifications (update versions for existing objects)
-        for modified_name in &change.modified_objects {
-            if let Some(&current_version) = self.objects.get(modified_name as &str) {
+        for modified_obj in &change.modified_objects {
+            if let Some(&current_version) = self.objects.get(&modified_obj.name) {
                 let new_version = current_version + 1;
-                self.objects.insert(modified_name.clone(), new_version);
-                info!("  Modified object: {} (version {} -> {})", modified_name, current_version, new_version);
+                self.objects.insert(modified_obj.name.clone(), new_version);
+                info!("  Modified object: {} (version {} -> {})", modified_obj.name, current_version, new_version);
             } else {
                 // Modified object that doesn't exist yet - treat as addition
-                self.objects.insert(modified_name.clone(), 1);
-                warn!("  Modified object '{}' not found in tracking - treating as addition", modified_name);
+                self.objects.insert(modified_obj.name.clone(), 1);
+                warn!("  Modified object '{}' not found in tracking - treating as addition", modified_obj.name);
             }
         }
     }
     
-    fn finalize(mut self) -> Vec<crate::types::ObjectInfo> {
+    fn finalize(self) -> Vec<crate::types::ObjectInfo> {
         // Convert the HashMap to a sorted list for consistent output
         let mut object_list: Vec<crate::types::ObjectInfo> = self.objects.into_iter()
             .map(|(name, version)| crate::types::ObjectInfo { name, version })
@@ -172,19 +166,6 @@ impl ChangeOperationProcessor {
 }
 
 impl IndexProvider for IndexProviderImpl {
-    fn append_change(&self, change_id: &str) -> ProviderResult<()> {
-        // Get current order using helper method
-        let mut order = self.get_change_order_internal()?;
-        
-        // Add to end (oldest)
-        if !order.contains(&change_id.to_string()) {
-            order.push(change_id.to_string());
-            self.save_change_order(&order)?;
-            info!("Added change '{}' to index order", change_id);
-        }
-        
-        Ok(())
-    }
     
     fn prepend_change(&self, change_id: &str) -> ProviderResult<()> {
         // Get current order using helper method
@@ -236,33 +217,6 @@ impl IndexProvider for IndexProviderImpl {
         Ok(())
     }
     
-    fn reorder_on_status_change(&self, change_id: &str, was_local: bool, is_now_local: bool) -> ProviderResult<()> {
-        if was_local == is_now_local {
-            return Ok(()); // No change needed
-        }
-        
-        if is_now_local {
-            // Becoming local/current - move to top
-            self.prepend_change(change_id)?;
-        } else {
-            // Becoming merged - move to bottom
-            self.append_change(change_id)?;
-            // Update top change if this was the top
-            if let Some(top_change) = self.tree.get(Self::TOP_KEY)? {
-                if &top_change.to_vec() == change_id.as_bytes() {
-                    let order = self.get_change_order()?;
-                    let new_top = order.iter().find(|id| **id != change_id).cloned();
-                    if let Some(new_top_id) = new_top {
-                        self.tree.insert(Self::TOP_KEY, new_top_id.as_bytes())?;
-                    } else {
-                        self.tree.remove(Self::TOP_KEY)?;
-                    }
-                }
-            }
-        }
-        
-        Ok(())
-    }
     
     
     // ===== CHANGE STORAGE METHODS =====
@@ -369,17 +323,17 @@ impl IndexProvider for IndexProviderImpl {
                 // Only consider changes that are local (working state)
                 if top_change.status == crate::types::ChangeStatus::Local {
                     // Check if deleted
-                    if top_change.deleted_objects.contains(&object_name.to_string()) {
+                    if top_change.deleted_objects.iter().any(|obj| obj.name == object_name) {
                         info!("Object '{}' has been deleted in top change", object_name);
                         return Ok(None);
                     }
                     
                     // Check for renamed object
                     if let Some(renamed) = top_change.renamed_objects.iter()
-                        .find(|r| r.from == object_name) {
-                        info!("Object '{}' has been renamed to '{}' in top change", object_name, renamed.to);
+                        .find(|r| r.from.name == object_name) {
+                        info!("Object '{}' has been renamed to '{}' in top change", object_name, renamed.to.name);
                         // Recursively resolve the renamed object
-                        return self.resolve_object_current_state(&renamed.to, get_sha256);
+                        return self.resolve_object_current_state(&renamed.to.name, get_sha256);
                     }
                 }
             }

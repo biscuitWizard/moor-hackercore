@@ -192,57 +192,51 @@ impl ObjectDeltaModel {
         self.changes.push(change);
     }
 
-    /// Get an existing object change by obj_id, or create a new one
-    pub fn get_or_create_object_change(&mut self, obj_id: String) -> &mut ObjectChange {
-        // Check if change already exists
-        let exists = self.changes.iter().any(|change| change.obj_id == obj_id);
-        
-        if !exists {
-            // Create new change if not found
-            let new_change = ObjectChange::new(obj_id.clone());
-            self.changes.push(new_change);
-        }
-        
-        // Now find and return the change
-        self.changes.iter_mut().find(|change| change.obj_id == obj_id).unwrap()
-    }
-
     /// Merge another ObjectDeltaModel into this one
     pub fn merge(&mut self, other: ObjectDeltaModel) {
-        // Merge objects_renamed
+        // Merge renamed objects
         for (from, to) in other.objects_renamed {
             self.objects_renamed.insert(from, to);
         }
         
-        // Merge objects_deleted
+        // Merge deleted objects
         for obj_id in other.objects_deleted {
             self.objects_deleted.insert(obj_id);
         }
         
-        // Merge objects_added
+        // Merge added objects
         for obj_id in other.objects_added {
             self.objects_added.insert(obj_id);
         }
         
-        // Merge objects_modified
+        // Merge modified objects
         for obj_id in other.objects_modified {
             self.objects_modified.insert(obj_id);
         }
         
-        // Merge changes - replace existing or add new
-        for other_change in other.changes {
-            self.add_object_change(other_change);
+        // Merge changes
+        for change in other.changes {
+            self.add_object_change(change);
         }
     }
 
-    /// Check if the model has any changes
-    pub fn is_empty(&self) -> bool {
-        self.objects_renamed.is_empty() &&
-        self.objects_deleted.is_empty() &&
-        self.objects_added.is_empty() &&
-        self.objects_modified.is_empty() &&
-        self.changes.is_empty()
+    /// Get or create an object change for the given object ID
+    pub fn get_or_create_object_change(&mut self, obj_id: String) -> &mut ObjectChange {
+        // Check if we already have a change for this object index
+        let existing_index = self.changes.iter().position(|c| c.obj_id == obj_id);
+        
+        if let Some(index) = existing_index {
+            return &mut self.changes[index];
+        }
+        
+        // Create a new change and add it
+        let new_change = ObjectChange::new(obj_id.clone());
+        self.changes.push(new_change);
+        
+        // Return the last element (which we just added)
+        self.changes.last_mut().unwrap()
     }
+
 }
 
 impl Default for ObjectDeltaModel {

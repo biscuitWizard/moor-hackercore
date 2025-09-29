@@ -78,7 +78,7 @@ impl ObjectUpdateOperation {
         
         // Check if this object has been renamed in the current change
         let is_renamed_object = current_change.renamed_objects.iter()
-            .any(|renamed| renamed.from == request.object_name || renamed.to == request.object_name);
+            .any(|renamed| renamed.from.name == request.object_name || renamed.to.name == request.object_name);
         
         if is_renamed_object {
             info!("Object '{}' has been renamed in this change, skipping change tracking", request.object_name);
@@ -90,25 +90,27 @@ impl ObjectUpdateOperation {
             
             if is_existing_object {
                 // Update the modified_objects list if not already present
-                if !current_change.modified_objects.contains(&request.object_name) {
-                    current_change.modified_objects.push(request.object_name.clone());
+                let obj_info = crate::types::ObjectInfo { name: request.object_name.clone(), version };
+                if !current_change.modified_objects.iter().any(|obj| obj.name == request.object_name) {
+                    current_change.modified_objects.push(obj_info.clone());
                     info!("Added object '{}' to modified_objects in change '{}'", request.object_name, current_change.name);
                 }
                 
                 // Remove from added_objects if it was previously added but now we know it's modified
-                if let Some(pos) = current_change.added_objects.iter().position(|name| name == &request.object_name) {
+                if let Some(pos) = current_change.added_objects.iter().position(|obj| obj.name == request.object_name) {
                     current_change.added_objects.remove(pos);
                     info!("Moved object '{}' from added_objects to modified_objects in change '{}'", request.object_name, current_change.name);
                 }
             } else {
                 // Update the added_objects list if not already present
-                if !current_change.added_objects.contains(&request.object_name) {
-                    current_change.added_objects.push(request.object_name.clone());
+                let obj_info = crate::types::ObjectInfo { name: request.object_name.clone(), version };
+                if !current_change.added_objects.iter().any(|obj| obj.name == request.object_name) {
+                    current_change.added_objects.push(obj_info.clone());
                     info!("Added object '{}' to added_objects in change '{}'", request.object_name, current_change.name);
                 }
                 
                 // Remove from modified_objects if it was previously modified but now we know it's new
-                if let Some(pos) = current_change.modified_objects.iter().position(|name| name == &request.object_name) {
+                if let Some(pos) = current_change.modified_objects.iter().position(|obj| obj.name == request.object_name) {
                     current_change.modified_objects.remove(pos);
                     info!("Moved object '{}' from modified_objects to added_objects in change '{}'", request.object_name, current_change.name);
                 }

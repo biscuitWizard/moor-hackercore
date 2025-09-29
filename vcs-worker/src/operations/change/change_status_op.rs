@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::database::{DatabaseRef, ObjectsTreeError};
 use crate::providers::index::IndexProvider;
+use crate::types::ChangeStatus;
 
 /// Request structure for change status operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -20,21 +21,6 @@ pub struct ChangeStatusResponse {
     pub status: ChangeStatus,
 }
 
-/// Detailed status of a change
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChangeStatus {
-    pub added_objects: Vec<String>,
-    pub modified_objects: Vec<String>,
-    pub deleted_objects: Vec<String>,
-    pub renamed_objects: Vec<RenamedObject>,
-}
-
-/// Information about a renamed object
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RenamedObject {
-    pub from: String,
-    pub to: String,
-}
 
 /// Change status operation that lists all objects modified in the current change
 #[derive(Clone)]
@@ -57,22 +43,37 @@ impl ChangeStatusOperation {
         if let Some(current_change) = changes.first() {
             info!("Getting status for current change: {}", current_change.id);
             
-            // Convert strings to Var list of strings for added objects
+            // Convert ObjectInfo to Var list of maps for added objects
             let added_vars: Vec<moor_var::Var> = current_change.added_objects
                 .iter()
-                .map(|name| moor_var::v_str(name))
+                .map(|obj_info| {
+                    moor_var::v_map(&[
+                        (moor_var::v_str("name"), moor_var::v_str(&obj_info.name)),
+                        (moor_var::v_str("version"), moor_var::v_int(obj_info.version as i64)),
+                    ])
+                })
                 .collect();
             
-            // Convert strings to Var list of strings for modified objects
+            // Convert ObjectInfo to Var list of maps for modified objects
             let modified_vars: Vec<moor_var::Var> = current_change.modified_objects
                 .iter()
-                .map(|name| moor_var::v_str(name))
+                .map(|obj_info| {
+                    moor_var::v_map(&[
+                        (moor_var::v_str("name"), moor_var::v_str(&obj_info.name)),
+                        (moor_var::v_str("version"), moor_var::v_int(obj_info.version as i64)),
+                    ])
+                })
                 .collect();
             
-            // Convert strings to Var list of strings for deleted objects
+            // Convert ObjectInfo to Var list of maps for deleted objects
             let deleted_vars: Vec<moor_var::Var> = current_change.deleted_objects
                 .iter()
-                .map(|name| moor_var::v_str(name))
+                .map(|obj_info| {
+                    moor_var::v_map(&[
+                        (moor_var::v_str("name"), moor_var::v_str(&obj_info.name)),
+                        (moor_var::v_str("version"), moor_var::v_int(obj_info.version as i64)),
+                    ])
+                })
                 .collect();
             
             // Convert renamed objects to Var list of maps
@@ -80,8 +81,14 @@ impl ChangeStatusOperation {
                 .iter()
                 .map(|renamed| {
                     moor_var::v_map(&[
-                        (moor_var::v_str("from"), moor_var::v_str(&renamed.from)),
-                        (moor_var::v_str("to"), moor_var::v_str(&renamed.to)),
+                        (moor_var::v_str("from"), moor_var::v_map(&[
+                            (moor_var::v_str("name"), moor_var::v_str(&renamed.from.name)),
+                            (moor_var::v_str("version"), moor_var::v_int(renamed.from.version as i64)),
+                        ])),
+                        (moor_var::v_str("to"), moor_var::v_map(&[
+                            (moor_var::v_str("name"), moor_var::v_str(&renamed.to.name)),
+                            (moor_var::v_str("version"), moor_var::v_int(renamed.to.version as i64)),
+                        ])),
                     ])
                 })
                 .collect();
