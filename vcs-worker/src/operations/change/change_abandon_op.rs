@@ -5,7 +5,7 @@ use tracing::{error, info};
 use crate::database::{DatabaseRef, ObjectsTreeError};
 use crate::providers::index::IndexProvider;
 use crate::types::{ChangeAbandonRequest, ChangeStatus};
-use crate::model::{ObjectDeltaModel, ObjectChange, obj_id_to_object_name};
+use crate::object_diff::{ObjectDiffModel, ObjectChange, obj_id_to_object_name};
 use std::collections::HashMap;
 
 /// Change abandon operation that abandons the top change in the index
@@ -20,8 +20,8 @@ impl ChangeAbandonOperation {
         Self { database }
     }
 
-    /// Process the change abandon request and return an ObjectDeltaModel showing what needs to be undone
-    fn process_change_abandon(&self, _request: ChangeAbandonRequest) -> Result<ObjectDeltaModel, ObjectsTreeError> {
+    /// Process the change abandon request and return an ObjectDiffModel showing what needs to be undone
+    fn process_change_abandon(&self, _request: ChangeAbandonRequest) -> Result<ObjectDiffModel, ObjectsTreeError> {
         // Get the current change from the top of the index
         let changes = self.database.index().list_changes()
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
@@ -37,7 +37,7 @@ impl ChangeAbandonOperation {
             }
             
             // Create a delta model showing what needs to be undone
-            let mut undo_delta = ObjectDeltaModel::new();
+            let mut undo_delta = ObjectDiffModel::new();
             
             // Get object name mappings for better display names
             let object_names = self.get_object_names(change);
@@ -86,7 +86,7 @@ impl ChangeAbandonOperation {
         } else {
             info!("No current change to abandon");
             // Return empty delta model when no change to abandon
-            Ok(ObjectDeltaModel::new())
+            Ok(ObjectDiffModel::new())
         }
     }
 
@@ -121,7 +121,7 @@ impl Operation for ChangeAbandonOperation {
     }
     
     fn description(&self) -> &'static str {
-        "Abandons the top local change in the index, removing it from index. Returns an ObjectDeltaModel showing what changes need to be undone. Cannot abandon merged changes."
+        "Abandons the top local change in the index, removing it from index. Returns an ObjectDiffModel showing what changes need to be undone. Cannot abandon merged changes."
     }
     
     fn routes(&self) -> Vec<OperationRoute> {
@@ -147,7 +147,7 @@ impl Operation for ChangeAbandonOperation {
         match self.process_change_abandon(request) {
             Ok(delta_model) => {
                 info!("Change abandon operation completed successfully, returning undo delta");
-                // Return the ObjectDeltaModel as a MOO variable showing what needs to be undone
+                // Return the ObjectDiffModel as a MOO variable showing what needs to be undone
                 delta_model.to_moo_var()
             }
             Err(e) => {

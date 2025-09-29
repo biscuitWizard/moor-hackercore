@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use moor_var::{Var, v_map, v_str};
+use crate::types::Change;
 
 /// Represents a single object change with detailed verb and property modifications
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -28,7 +29,7 @@ pub struct ObjectChange {
 
 /// Represents a complete set of object changes/deltas for communication to MOO
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ObjectDeltaModel {
+pub struct ObjectDiffModel {
     /// Objects that were renamed (from_obj_id -> to_obj_id mapping)
     pub objects_renamed: HashMap<String, String>,
     /// Objects that were deleted
@@ -116,8 +117,8 @@ impl ObjectChange {
     }
 }
 
-impl ObjectDeltaModel {
-    /// Create a new empty ObjectDeltaModel
+impl ObjectDiffModel {
+    /// Create a new empty ObjectDiffModel
     pub fn new() -> Self {
         Self {
             objects_renamed: HashMap::new(),
@@ -128,7 +129,7 @@ impl ObjectDeltaModel {
         }
     }
 
-    /// Convert this ObjectDeltaModel to a MOO v_map
+    /// Convert this ObjectDiffModel to a MOO v_map
     pub fn to_moo_var(&self) -> Var {
         let mut pairs = Vec::new();
         
@@ -192,8 +193,8 @@ impl ObjectDeltaModel {
         self.changes.push(change);
     }
 
-    /// Merge another ObjectDeltaModel into this one
-    pub fn merge(&mut self, other: ObjectDeltaModel) {
+    /// Merge another ObjectDiffModel into this one
+    pub fn merge(&mut self, other: ObjectDiffModel) {
         // Merge renamed objects
         for (from, to) in other.objects_renamed {
             self.objects_renamed.insert(from, to);
@@ -219,27 +220,9 @@ impl ObjectDeltaModel {
             self.add_object_change(change);
         }
     }
-
-    /// Get or create an object change for the given object ID
-    pub fn get_or_create_object_change(&mut self, obj_id: String) -> &mut ObjectChange {
-        // Check if we already have a change for this object index
-        let existing_index = self.changes.iter().position(|c| c.obj_id == obj_id);
-        
-        if let Some(index) = existing_index {
-            return &mut self.changes[index];
-        }
-        
-        // Create a new change and add it
-        let new_change = ObjectChange::new(obj_id.clone());
-        self.changes.push(new_change);
-        
-        // Return the last element (which we just added)
-        self.changes.last_mut().unwrap()
-    }
-
 }
 
-impl Default for ObjectDeltaModel {
+impl Default for ObjectDiffModel {
     fn default() -> Self {
         Self::new()
     }
@@ -281,8 +264,8 @@ mod tests {
     }
 
     #[test]
-    fn test_object_delta_model_to_moo_var() {
-        let mut model = ObjectDeltaModel::new();
+    fn test_object_diff_model_to_moo_var() {
+        let mut model = ObjectDiffModel::new();
         model.add_object_added("NewObject".to_string());
         model.add_object_deleted("OldObject".to_string());
         
@@ -301,11 +284,11 @@ mod tests {
     }
 
     #[test]
-    fn test_merge_object_delta_models() {
-        let mut model1 = ObjectDeltaModel::new();
+    fn test_merge_object_diff_models() {
+        let mut model1 = ObjectDiffModel::new();
         model1.add_object_added("Object1".to_string());
         
-        let mut model2 = ObjectDeltaModel::new();
+        let mut model2 = ObjectDiffModel::new();
         model2.add_object_added("Object2".to_string());
         model2.add_object_deleted("Object3".to_string());
         
@@ -314,21 +297,5 @@ mod tests {
         assert!(model1.objects_added.contains("Object1"));
         assert!(model1.objects_added.contains("Object2"));
         assert!(model1.objects_deleted.contains("Object3"));
-    }
-
-    #[test]
-    fn test_get_or_create_object_change() {
-        let mut model = ObjectDeltaModel::new();
-        
-        // Get non-existent change - should create new one
-        let change = model.get_or_create_object_change("TestObj".to_string());
-        change.verbs_added.insert("test_verb".to_string());
-        
-        // Get existing change - should return same one
-        let change2 = model.get_or_create_object_change("TestObj".to_string());
-        assert!(change2.verbs_added.contains("test_verb"));
-        
-        // Verify only one change exists
-        assert_eq!(model.changes.len(), 1);
     }
 }
