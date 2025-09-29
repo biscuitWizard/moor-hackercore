@@ -47,6 +47,8 @@ services:
         --use-symbols-in-builtins false
         --symbol-type=false
         --custom-errors true
+        --anonymous-objects true
+        --use-uuobjids true
     ports:
       # ZMQ ports
       - "7899:7899" # RPC listener
