@@ -104,6 +104,13 @@ pub struct OperationRequest {
     pub args: Vec<String>,
 }
 
+/// Information about an object in the complete object list
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ObjectInfo {
+    pub name: String,
+    pub version: u64,
+}
+
 /// Response structure for operations - converted from Var for HTTP
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OperationResponse {

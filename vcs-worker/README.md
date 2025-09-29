@@ -330,6 +330,39 @@ Retrieves object content respecting current LOCAL change overrides.
 
 **Simplified Flow:** Check LOCAL Change → Overrides → Deleted Check → References → Content
 
+#### `object/list` (NEW)
+Lists all objects by walking through the entire change history chronologically, tracking renames, additions, and deletions.
+
+**Request:**
+```json
+{}
+```
+
+**Response:**
+```json
+{
+    "objects": [
+        {"name": "object1", "version": 3},
+        {"name": "object2", "version": 1}
+    ]
+}
+```
+
+**How It Works:**
+1. Retrieves all changes in chronological order (oldest first)
+2. Processes each change sequentially:
+   - **Deletions**: Removes objects from tracking
+   - **Renames**: Updates object names (e.g., `foo` → `baz`)
+   - **Additions**: Adds new objects with version 1
+   - **Modifications**: Increments version numbers
+3. Returns final list of object names with current versions
+
+**Example Scenario:**
+- Change 0: Add `foo` and `bar`
+- Change 1: Rename `foo` → `baz`
+- Change 3: Delete `bar`
+- **Result**: Only `baz` (version 1) appears in final list
+
 ### Change Operations
 
 #### `change/create`
@@ -431,12 +464,17 @@ src/
 │   ├── refs.rs          # Reference resolution
 │   ├── changes.rs       # Change tracking with status
 │   ├── index.rs         # Ordered change management (replaces HEAD)
+│   │                   #   - DRY helper methods for serialization
+│   │                   #   - ChangeOperationProcessor for object list computation
 │   └── repository.rs    # Repository metadata
 └── operations/          # API operation handlers
     ├── mod.rs
     ├── object/
     │   ├── object_update_op.rs
-    │   └── object_get_op.rs
+    │   ├── object_get_op.rs
+    │   ├── object_rename_op.rs  # Object renaming operations
+    │   ├── object_delete_op.rs  # Object deletion operations
+    │   └── object_list_op.rs    # Complete object list computation
     └── change/
         ├── change_create_op.rs
         ├── change_abandon_op.rs
