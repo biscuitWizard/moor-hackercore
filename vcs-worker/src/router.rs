@@ -4,7 +4,8 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 use tracing::info;
 
-use crate::operations::{OperationRegistry, OperationRequest, ObjectUpdateRequest, ObjectGetRequest};
+use crate::operations::{OperationRegistry, OperationRequest};
+use crate::types::{ObjectUpdateRequest, ObjectGetRequest};
 
 // Import moor types for RPC
 use moor_var::{Obj, Symbol, Var, v_str};

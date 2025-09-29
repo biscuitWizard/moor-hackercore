@@ -3,12 +3,12 @@ use axum::http::Method;
 use tracing::{error, info, debug};
 use serde::{Deserialize, Serialize};
 
-use crate::database::{DatabaseRef, ObjectsTreeError, ObjectRef, ObjectVersionOverride};
+use crate::database::{DatabaseRef, ObjectsTreeError, ObjectRef};
 use crate::providers::changes::ChangesProvider;
 use crate::providers::refs::RefsProvider;
 use crate::providers::objects::ObjectsProvider;
-use crate::providers::head::HeadProvider;
 use crate::providers::repository::RepositoryProvider;
+use crate::providers::index::IndexProvider;
 
 /// Request structure for object update operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -33,28 +33,27 @@ impl ObjectUpdateOperation {
     fn process_object_update(&self, request: ObjectUpdateRequest) -> Result<String, ObjectsTreeError> {
         info!("Processing object update for '{}' with {} var(s)", request.object_name, request.vars.len());
         
-        // Check if there's a current change, if not create a blank one
+        // Get or create a local change
         let repository = self.database.repository().get_repository()
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
-        let mut current_change = if let Some(change_id) = repository.current_change {
-            match self.database.changes().get_change(&change_id)
-                .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))? {
-                Some(change) => {
-                    info!("Using existing change '{}' ({})", change.name, change.id);
-                    change
-                }
-                None => {
-                    info!("Change '{}' not found, creating blank change", change_id);
-                    self.database.changes().create_blank_change()
-                        .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
-                }
-            }
-        } else {
-            info!("No current change found, creating blank change");
-            self.database.changes().create_blank_change()
-                .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
-        };
+        let current_change_id = repository.current_change.clone();
+        let mut current_change = self.database.changes().get_or_create_local_change(current_change_id)
+            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         
+        // Ensure this change is properly managed in index and repository
+        self.database.index().prepend_change(&current_change.id)
+            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+        
+        let mut repo_state = repository;
+        let was_current = repo_state.current_change == Some(current_change.id.clone());
+        repo_state.current_change = Some(current_change.id.clone());
+        self.database.repository().set_repository(&repo_state)
+            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+        
+        if !was_current {
+            info!("Set change '{}' as current working change", current_change.name);
+        }
+    
         // Join all the var strings into a single MOO object dump
         let object_dump = request.vars.join("\n");
         
@@ -67,6 +66,18 @@ impl ObjectUpdateOperation {
         // Generate SHA256 hash for the object dump
         let sha256_key = self.database.objects().generate_sha256_hash(&object_dump);
         info!("Generated SHA256 key '{}' for object '{}'", sha256_key, request.object_name);
+        
+        // Check if this content already exists (exact same SHA256)
+        let existing_ref = self.database.refs().get_ref(&request.object_name)
+            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+        
+        let is_duplicate_content = existing_ref.map_or(false, |ref_data| ref_data.sha256_key == sha256_key);
+        
+        if is_duplicate_content {
+            info!("Object '{}' content is unchanged (same SHA256), skipping version increment", request.object_name);
+            // Early return - no changes needed
+            return Ok(format!("Object '{}' unchanged (no modifications)", request.object_name));
+        }
         
         // Store the object definition in the database by SHA256 key
         self.database.objects().store(&sha256_key, &object_dump)
@@ -85,35 +96,44 @@ impl ObjectUpdateOperation {
         self.database.refs().update_ref(&object_ref)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         
-        // Update HEAD to reference the new version
-        self.database.head().update_ref(&request.object_name, version)
-            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         
-        // Create a version override entry for the current change (local override)
-        let version_override = ObjectVersionOverride {
-            object_name: request.object_name.clone(),
-            version,
-            sha256_key: sha256_key.clone(),
-        };
+        // Check if this object has been renamed in the current change
+        let is_renamed_object = current_change.renamed_objects.iter()
+            .any(|renamed| renamed.from == request.object_name || renamed.to == request.object_name);
         
-        // Check if this object is already in the change's version_overrides
-        let existing_override_idx = current_change.version_overrides.iter()
-            .position(|vo| vo.object_name == request.object_name);
-        
-        if let Some(idx) = existing_override_idx {
-            // Update existing override
-            current_change.version_overrides[idx] = version_override.clone();
-            info!("Updated existing version override for object '{}' in change '{}'", request.object_name, current_change.name);
+        if is_renamed_object {
+            info!("Object '{}' has been renamed in this change, skipping change tracking", request.object_name);
         } else {
-            // Add new override
-            current_change.version_overrides.push(version_override);
-            info!("Added new version override for object '{}' in change '{}'", request.object_name, current_change.name);
-        }
-        
-        // Update the modified_objects list if not already present
-        if !current_change.modified_objects.contains(&request.object_name) {
-            current_change.modified_objects.push(request.object_name.clone());
-            info!("Added object '{}' to modified_objects in change '{}'", request.object_name, current_change.name);
+            // Check if this object exists in refs to determine adding vs modifying
+            let is_existing_object = self.database.refs().get_ref(&request.object_name)
+                .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
+                .is_some();
+            
+            if is_existing_object {
+                // Update the modified_objects list if not already present
+                if !current_change.modified_objects.contains(&request.object_name) {
+                    current_change.modified_objects.push(request.object_name.clone());
+                    info!("Added object '{}' to modified_objects in change '{}'", request.object_name, current_change.name);
+                }
+                
+                // Remove from added_objects if it was previously added but now we know it's modified
+                if let Some(pos) = current_change.added_objects.iter().position(|name| name == &request.object_name) {
+                    current_change.added_objects.remove(pos);
+                    info!("Moved object '{}' from added_objects to modified_objects in change '{}'", request.object_name, current_change.name);
+                }
+            } else {
+                // Update the added_objects list if not already present
+                if !current_change.added_objects.contains(&request.object_name) {
+                    current_change.added_objects.push(request.object_name.clone());
+                    info!("Added object '{}' to added_objects in change '{}'", request.object_name, current_change.name);
+                }
+                
+                // Remove from modified_objects if it was previously modified but now we know it's new
+                if let Some(pos) = current_change.modified_objects.iter().position(|name| name == &request.object_name) {
+                    current_change.modified_objects.remove(pos);
+                    info!("Moved object '{}' from modified_objects to added_objects in change '{}'", request.object_name, current_change.name);
+                }
+            }
         }
         
         // Update the change in the database

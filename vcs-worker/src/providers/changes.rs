@@ -1,40 +1,10 @@
 use sled::Tree;
 use std::sync::Arc;
-use serde::{Serialize, Deserialize};
 use tracing::{info, warn};
 use tokio::sync::mpsc;
 
 use super::{ProviderError, ProviderResult};
-
-/// Represents a file rename operation
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RenamedObject {
-    pub from: String,
-    pub to: String,
-}
-
-/// Represents an object version override in a change
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ObjectVersionOverride {
-    pub object_name: String,
-    pub version: u64,
-    pub sha256_key: String,
-}
-
-/// Represents a change in the version control system
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Change {
-    pub id: String,
-    pub name: String,
-    pub description: Option<String>,
-    pub author: String,
-    pub timestamp: u64, // Linux UTC epoch
-    pub added_objects: Vec<String>,
-    pub modified_objects: Vec<String>,
-    pub deleted_objects: Vec<String>,
-    pub renamed_objects: Vec<RenamedObject>,
-    pub version_overrides: Vec<ObjectVersionOverride>, // Object name + version -> SHA256 mappings
-}
+use crate::types::{Change, ChangeStatus, RenamedObject};
 
 /// Provider trait for change management
 pub trait ChangesProvider: Send + Sync {
@@ -57,6 +27,10 @@ pub trait ChangesProvider: Send + Sync {
     
     /// Create a blank change automatically
     fn create_blank_change(&self) -> ProviderResult<Change>;
+    
+    /// Get or create a local change. If current change exists and is local, use it.
+    /// If current change doesn't exist or is not local, create a new local change.
+    fn get_or_create_local_change(&self, current_change_id: Option<String>) -> ProviderResult<Change>;
     
     /// List all changes
     #[allow(dead_code)]
@@ -147,11 +121,11 @@ impl ChangesProvider for ChangesProviderImpl {
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs(),
+            status: ChangeStatus::Local,
             added_objects: Vec::new(),
             modified_objects: Vec::new(),
             deleted_objects: Vec::new(),
             renamed_objects: Vec::new(),
-            version_overrides: Vec::new(),
         };
         
         // Store the change
@@ -159,6 +133,33 @@ impl ChangesProvider for ChangesProviderImpl {
         
         info!("Created blank change '{}'", change.id);
         Ok(change)
+    }
+
+    fn get_or_create_local_change(&self, current_change_id: Option<String>) -> ProviderResult<Change> {
+        match current_change_id {
+            Some(change_id) => {
+                match self.get_change(&change_id)? {
+                    Some(change) => {
+                        if change.status == ChangeStatus::Local {
+                            info!("Using existing local change '{}' ({})", change.name, change.id);
+                            Ok(change)
+                        } else {
+                            info!("Current change '{}' ({}) is not local, creating new local change", change.name, change.id);
+                            let new_change = self.create_blank_change()?;
+                            Ok(new_change)
+                        }
+                    }
+                    None => {
+                        info!("Change '{}' not found, creating blank local change", change_id);
+                        self.create_blank_change()
+                    }
+                }
+            }
+            None => {
+                info!("No current change found, creating blank local change");
+                self.create_blank_change()
+            }
+        }
     }
 
     fn list_changes(&self) -> ProviderResult<Vec<Change>> {

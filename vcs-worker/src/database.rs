@@ -8,8 +8,8 @@ use crate::config::Config;
 use crate::providers::{
     ObjectsProvider, ObjectsProviderImpl,
     RefsProviderImpl,
-    HeadProviderImpl,
     ChangesProviderImpl,
+    IndexProviderImpl,
     RepositoryProviderImpl,
 };
 
@@ -29,7 +29,7 @@ pub enum ObjectsTreeError {
 }
 
 // Re-export types for compatibility
-pub use crate::providers::changes::{Change, ObjectVersionOverride};
+pub use crate::types::Change;
 pub use crate::providers::refs::ObjectRef;
 
 /// Database coordinator that aggregates providers for different subsystems
@@ -40,7 +40,7 @@ pub struct Database {
     // Provider instances
     objects_provider: Arc<ObjectsProviderImpl>,
     refs_provider: Arc<RefsProviderImpl>,
-    head_provider: Arc<HeadProviderImpl>,
+    index_provider: Arc<IndexProviderImpl>,
     changes_provider: Arc<ChangesProviderImpl>,
     repository_provider: Arc<RepositoryProviderImpl>,
     
@@ -62,7 +62,7 @@ impl Database {
         let db = sled::open(&config.db_path)?;
         let objects_tree = db.open_tree("objects")?;
         let refs_tree = db.open_tree("refs")?;
-        let head_tree = db.open_tree("head")?;
+        let index_tree = db.open_tree("index")?;
         let changes_tree = db.open_tree("changes")?;
         let repository_tree = db.open_tree("repository")?;
         
@@ -72,7 +72,7 @@ impl Database {
         // Initialize providers
         let objects_provider = Arc::new(ObjectsProviderImpl::new(objects_tree.clone(), flush_sender.clone()));
         let refs_provider = Arc::new(RefsProviderImpl::new(refs_tree.clone(), flush_sender.clone()));
-        let head_provider = Arc::new(HeadProviderImpl::new(head_tree.clone(), flush_sender.clone()));
+        let index_provider = Arc::new(IndexProviderImpl::new(index_tree.clone()));
         let changes_provider = Arc::new(ChangesProviderImpl::new(changes_tree.clone(), flush_sender.clone()));
         let repository_provider = Arc::new(RepositoryProviderImpl::new(repository_tree.clone(), flush_sender.clone()));
         
@@ -130,7 +130,7 @@ impl Database {
             db,
             objects_provider,
             refs_provider,
-            head_provider,
+            index_provider,
             changes_provider,
             repository_provider,
             flush_sender,
@@ -147,9 +147,9 @@ impl Database {
         &self.refs_provider
     }
 
-    /// Get direct access to the head provider
-    pub fn head(&self) -> &Arc<HeadProviderImpl> {
-        &self.head_provider
+    /// Get direct access to the index provider
+    pub fn index(&self) -> &Arc<IndexProviderImpl> {
+        &self.index_provider
     }
 
     /// Get direct access to the changes provider

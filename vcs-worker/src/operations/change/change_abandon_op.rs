@@ -1,16 +1,12 @@
 use crate::operations::{Operation, OperationRoute};
 use axum::http::Method;
-use tracing::{error, info};
-use serde::{Deserialize, Serialize};
+use tracing::{error, info, warn};
 
 use crate::database::{DatabaseRef, ObjectsTreeError};
 use crate::providers::repository::RepositoryProvider;
-
-/// Request structure for change abandon operations
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChangeAbandonRequest {
-    // No fields needed - just abandons the current change
-}
+use crate::providers::changes::ChangesProvider;
+use crate::providers::index::IndexProvider;
+use crate::types::{ChangeAbandonRequest, ChangeStatus};
 
 /// Change abandon operation that clears the current change
 #[derive(Clone)]
@@ -31,15 +27,45 @@ impl ChangeAbandonOperation {
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         
         if let Some(current_change_id) = repository.current_change {
-            info!("Abandoning current change: {}", current_change_id);
+            info!("Attempting to abandon current change: {}", current_change_id);
             
-            // Clear the current change
-            repository.current_change = None;
-            self.database.repository().set_repository(&repository)
+            // Get the change to check its status
+            let change_opt = self.database.changes().get_change(&current_change_id)
                 .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
             
-            info!("Successfully abandoned change '{}'", current_change_id);
-            Ok(format!("Abandoned change '{current_change_id}'"))
+            match change_opt {
+                Some(change) => {
+                    if change.status == ChangeStatus::Merged {
+                        error!("Cannot abandon change '{}' ({}) - it has already been merged", change.name, change.id);
+                        return Err(ObjectsTreeError::SledError(sled::Error::Unsupported(
+                            format!("Cannot abandon merged change '{}'", change.name)
+                        )));
+                    }
+                    
+                    // Remove from index if it's LOCAL
+                    if change.status == ChangeStatus::Local {
+                        self.database.index().remove_change(&current_change_id)
+                            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+                        info!("Removed change '{}' from index", change.name);
+                    }
+                    
+                    // Clear the current change from repository
+                    repository.current_change = None;
+                    self.database.repository().set_repository(&repository)
+                        .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+                    
+                    info!("Successfully abandoned change '{}' ({})", change.name, change.id);
+                    Ok(format!("Abandoned change '{}' ({})", change.name, change.id))
+                }
+                None => {
+                    // Change ID exists in repository but change not found - clean up
+                    warn!("Change '{}' referenced in repository but not found, clearing reference", current_change_id);
+                    repository.current_change = None;
+                    self.database.repository().set_repository(&repository)
+                        .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+                    Ok(format!("Cleared orphaned change reference '{current_change_id}'"))
+                }
+            }
         } else {
             info!("No current change to abandon");
             Ok("No current change to abandon".to_string())
@@ -53,7 +79,7 @@ impl Operation for ChangeAbandonOperation {
     }
     
     fn description(&self) -> &'static str {
-        "Abandons the current change, clearing it from the repository state"
+        "Abandons the current local change, removing it from index and clearing repository state. Cannot abandon merged changes."
     }
     
     fn routes(&self) -> Vec<OperationRoute> {

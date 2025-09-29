@@ -2,11 +2,16 @@ mod registry;
 mod hello_op;
 mod change;
 mod object;
+mod index;
 
-pub use registry::{OperationRegistry, OperationRequest};
+pub use registry::OperationRegistry;
 pub use hello_op::HelloOperation;
 pub use change::{ChangeCreateOperation, ChangeAbandonOperation, ChangeStatusOperation};
-pub use object::{ObjectGetOperation, ObjectUpdateOperation, ObjectGetRequest, ObjectUpdateRequest};
+pub use object::{ObjectGetOperation, ObjectUpdateOperation, ObjectRenameOperation, ObjectDeleteOperation};
+pub use index::IndexListOperation;
+
+// Re-export common types from crate::types
+pub use crate::types::{OperationRequest, OperationResponse};
 
 use axum::http::Method;
 use std::sync::Arc;
@@ -52,9 +57,12 @@ pub fn create_default_registry() -> Result<(OperationRegistry, DatabaseRef), Obj
     registry.register(HelloOperation);
     registry.register(ObjectUpdateOperation::new(database.clone()));
     registry.register(ObjectGetOperation::new(database.clone()));
+    registry.register(ObjectRenameOperation::new(database.clone()));
+    registry.register(ObjectDeleteOperation::new(database.clone()));
     registry.register(ChangeCreateOperation::new(database.clone()));
     registry.register(ChangeAbandonOperation::new(database.clone()));
     registry.register(ChangeStatusOperation::new(database.clone()));
+    registry.register(IndexListOperation::new(database.clone()));
     
     Ok((registry, database))
 }

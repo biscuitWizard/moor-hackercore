@@ -1,6 +1,6 @@
-# VCS Worker - Provider Pattern Architecture
+# VCS Worker - Change-Based Architecture
 
-A Version Control System (VCS) worker service built with Rust that implements a provider pattern architecture for managing MOO object definitions with Git-like versioning capabilities.
+A Version Control System (VCS) worker service built with Rust that implements a change-status-driven architecture for managing MOO object definitions with Git-like versioning capabilities.
 
 ## Table of Contents
 
@@ -14,24 +14,30 @@ A Version Control System (VCS) worker service built with Rust that implements a 
 
 ## Architecture Overview
 
-The VCS Worker employs a provider pattern that separates concerns into focused, testable, and maintainable components. Each provider handles a specific aspect of the version control system:
+The VCS Worker uses a **change-status-driven architecture** where the current working state is represented by the active LOCAL change, eliminating the need for a separate HEAD provider.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    Database (Coordinator)                    │
 ├─────────────────────────────────────────────────────────────────
-│  ObjectsProvider  │  RefsProvider  │  HeadProvider  │  ...   |
-│  (Content CRUD)   │ (Name→SHA256)  │(Working State) │         │
+│ ObjectsProvider │ RefsProvider │ ChangesProvider │ IndexProvider │
+│ (Content CRUD)  │(Name→SHA256) │(LOCAL/MERGED)   │(Ordering)     │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ### Design Principles
 
-- **Single Responsibility**: Each provider has one focused concern
+- **Change-Based Workflow**: Current working state = current LOCAL change
+- **Status-Driven Design**: Changes have explicit MERGED/LOCAL states
+- **Index Management**: Ordered list of changes with current working change at top
 - **Provider Pattern**: Clean interfaces enable dependency injection and testing
-- **Immutable Content**: Objects are stored by SHA256 hash, ensuring content integrity
-- **Reference Resolution**: Clean separation between content identity and naming
-- **Working State Management**: HEAD provides current working directory semantics
+- **Immutable Content**: Objects stored by SHA256 hash ensuring content integrity
+- **Direct Reference Resolution**: Clean separation between content identity and naming
+
+### Key Architectural Changes
+
+**Before (HEAD-based):** Separate HEAD provider tracked current working state
+**After (Change-based):** Current LOCAL change represents working state through `version_overrides`
 
 ## Data Model
 
@@ -46,13 +52,13 @@ store: HashMap<String, String>
 ```
 
 **Key Benefits:**
-- **Deduplication**: Identical objects share the same SHA256
+- **Deduplication**: Identical objects share the same SHA256 (optimization prevents duplicates)
 - **Integrity**: Content integrity verified by hash
 - **Immutability**: Content never changes once stored
 
 ### References: Name + Version → SHA256
 
-References provide the mapping from human-readable names to content hashes:
+References provide the mapping from human-readable names tocontent hashes:
 
 ```rust
 // Refs Storage: ObjectName → ObjectRef
@@ -70,41 +76,32 @@ refs: HashMap<String, ObjectRef> {
 - **Latest Tracking**: Refs store the current version for each object name
 - **Historical Access**: Full version history through SHA256 references
 
-### HEAD: Working State Management
+### Changes: LOCAL vs MERGED States
 
-HEAD represents the current working state of the repository as a collection of specific object versions:
+Changes now have explicit status indicating their state in the workflow:
 
 ```rust
-// HEAD Storage: List of current working references
-head: HeadState {
-    refs: vec![
-        HeadRef { object_name: "MyObject", version: 42 },
-        HeadRef { object_name: "OtherObject", version: 7 },
-        // ... more working references
-    ]
+#[derive(Debug, Clone)]
+pub enum ChangeStatus {
+    Local,   // Currently active working change
+    Merged,  // Completed and committed changes
 }
-```
 
-**Working Directory Semantics:**
-- **Current Versions**: HEAD specifies which versions of objects are "checked out"
-- **Override Capability**: Current changes can override HEAD for local modifications
-- **Branch-like Behavior**: Different states allow for branch-like operations
-
-### Changes: Local State Overrides
-
-Changes provide temporary overrides for HEAD state, enabling local modifications:
-
-```rust
 // Change Storage: ChangeId → Change
 changes: HashMap<String, Change> {
     "change-123": Change {
-        version_overrides: vec![
+        id: "change-123",
+        name: "Fix MyObject",
+        status: ChangeStatus::Local,        // Currently working
+        version_overrides: vec![           // Local modifications
             ObjectVersionOverride {
                 object_name: "MyObject",
                 version: 43,
-                sha256_key: "x9y8z7..."  // Different from HEAD version
+                sha256_key: "x9y8z7..."  // Different from refs version
             }
         ],
+        added_objects: vec!["NewObject"],
+        modified_objects: vec!["MyObject"],
         deleted_objects: vec!["OldObject"],
         renamed_objects: vec![
             RenamedObject { from: "OldName", to: "NewName" }
@@ -112,6 +109,23 @@ changes: HashMap<String, Change> {
     }
 }
 ```
+
+### Index: Ordered Change Management
+
+The index provider manages change ordering and current working state:
+
+```rust
+// Index Storage: Ordered list of change IDs
+index: ChangeOrder {
+    order: vec!["local-change", "merged-change-1", "merged-change-2", ...],
+    top_change: "local-change"  // Current LOCAL change
+}
+```
+
+**Change Ordering:**
+- **Top Position**: Current LOCAL change (working state)
+- **Chronological Order**: MERGED changes in commit order
+- **Automatic Management**: Index updates when status changes
 
 ## Provider Components
 
@@ -130,10 +144,7 @@ trait ObjectsProvider {
 }
 ```
 
-**Use Cases:**
-- Store new object versions after compilation
-- Retrieve object content via SHA256 hash
-- Content integrity verification
+**Optimization:** Skips storage and version increment if SHA256 is identical to current version.
 
 ### RefsProvider: Reference Resolution
 
@@ -145,7 +156,6 @@ trait RefsProvider {
     fn get_ref(&self, object_name: &str) -> ProviderResult<Option<ObjectRef>>
     fn update_ref(&self, object_ref: &ObjectRef) -> ProviderResult<()>
     fn get_next_version(&self, object_name: &str) -> ProviderResult<u64>
-    fn resolve_to_sha256(&self, object_name: &str, version: Option<u64>) -> ProviderResult<Option<String>>
 }
 ```
 
@@ -155,125 +165,134 @@ Object Name → Latest Version → SHA256 → Content Retrieval
 "MyObject" → version 42 → "a1b2c3..." → Object Content
 ```
 
-**Specific Version Resolution:**
-```
-Object Name + Version → SHA256 → Content Retrieval
-"MyObject" + version 40 → "x9y8z7..." → Earlier Object Content
-```
+### ChangesProvider: Change Tracking with Status
 
-### HeadProvider: Working State Management
-
-Manages the current working state as a collection of active references.
-
-**Core Operations:**
-```rust
-trait HeadProvider {
-    fn get_head(&self) -> ProviderResult<HeadState>
-    fn update_ref(&self, object_name: &str, version: u64) -> ProviderResult<()>
-    fn remove_ref(&self, object_name: &str) -> ProviderResult<()>
-    fn contains_ref(&self, object_name: &str) -> ProviderResult<bool>
-}
-```
-
-**Working State Examples:**
-- **Checkout Scenario**: HEAD specifies version 42 of MyObject
-- **Update Scenario**: Local change updates to version 43
-- **Delete Scenario**: Object removed from HEAD entirely
-
-### ChangesProvider: Change Tracking
-
-Handles change creation, metadata, and version overrides.
+Handles change creation and tracks LOCAL vs MERGED states.
 
 **Core Operations:**
 ```rust
 trait ChangesProvider {
     fn store_change(&self, change: &Change) -> ProviderResult<()>
     fn get_change(&self, change_id: &str) -> ProviderResult<Option<Change>>
+    fn update_change(&self, change: &Change) -> ProviderResult<()>
     fn create_blank_change(&self) -> ProviderResult<Change>
-    fn get_current_change(&self) -> ProviderResult<Option<Change>>
 }
 ```
 
-**Change Override Priority:**
-1. **Current Change Overrides**: Local modifications take precedence
-2. **HEAD State**: Base working directory reference
-3. **Reference Resolution**: Latest version as fallback
+**Change Status Workflow:**
+1. **Create Change**: Set status to LOCAL (becomes working state)
+2. **Development**: Object updates add version_overrides to LOCAL change
+3. **Commit**: Change status transitions to MERGED
+4. **New Working State**: Index provider promotes new LOCAL change or creates blank one
+
+### IndexProvider: Working State Management
+
+Replaces HEAD provider by managing ordered changes and current working state.
+
+**Core Operations:**
+```rust
+trait IndexProvider {
+    fn append_change(&self, change_id: &str) -> ProviderResult<()>     // Add to bottom (MERGED)
+    fn prepend_change(&self, change_id: &str) -> ProviderResult<()>   // Add to top (LOCAL)
+    fn get_change_order(&self) -> ProviderResult<Vec<String>>        // Get ordered list
+    fn get_top_change(&self) -> ProviderResult<Option<String>>       // Get current LOCAL change
+    fn remove_change(&self, change_id: &str) -> ProviderResult<()>
+    fn reorder_on_status_change(&self, change_id: &str, was_local: bool, is_now_local: bool) -> ProviderResult<()>
+}
+```
+
+**Working State Management:**
+- **Current Working**: Top change with LOCAL status represents working state
+- **Automatic Promotion**: When LOCAL change becomes MERGED, next LOCAL change becomes top
+- **Blank Change Creation**: No valid LOCAL change at top triggers blank change creation
 
 ### RepositoryProvider: Metadata Management
-
-Manages repository-level configuration and metadata.
 
 **Core Operations:**
 ```rust
 trait RepositoryProvider {
     fn get_repository(&self) -> ProviderResult<Repository>
-    fn set_current_change(&self, change_id: Option<String>) -> ProviderResult<()>
-    fn update_metadata(&self, metadata: &RepositoryMetadata) -> ProviderResult<()>
+    fn set_repository(&self, repo: &Repository) -> ProviderResult<()>
 }
 ```
 
 ## Version Control Flow
 
-### Object Update Process
+### Object Update Process (New Architecture)
 
 ```mermaid
 graph TD
     A[Object Update Request] --> B[Parse MOO Object Dump]
     B --> C[Generate SHA256 Hash]
-    C --> D[Store Object by SHA256]
-    D --> E[Increment Version Number]
-    E --> F[Update Object Reference]
-    F --> G[Update HEAD Reference]
-    G --> H[Create Change Override]
-]
+    C --> D{Content Changed?}
+    D -->|No| E[Return 'unchanged']
+    D -->|Yes| F[Store Object by SHA256]
+    F --> G[Increment Version Number]
+    G --> H[Update Object Reference]
+    H --> I[Check Current Change Status]
+    I --> J{Current Change LOCAL?}
+    J -->|Yes| K[Add Version Override]
+    J -->|No| L[Create New LOCAL Change]
+    L --> K
+    K --> M[Update Change Objects Lists]
+    M --> N[Success Response]
 ```
 
 **Detailed Steps:**
 
 1. **Compilation**: MOO object dump parsed and validated
 2. **Hash Generation**: SHA256 computed for content integrity
-3. **Content Storage**: Object stored by SHA256 hash (deduplication)
-4. **Version Increment**: Next monotonic version for object name
-5. **Reference Update**: RefsProvider updates name→version→SHA256 mapping
-6. **HEAD Update**: HeadProvider adds/updates working state reference
-7. **Change Override**: Current change tracks local modifications
+3. **Duplicate Check**: Skip processing if content unchanged (optimization)
+4. **Content Storage**: Object stored by SHA256 hash (deduplication)
+5. **Version Increment**: Next monotonic version for object name
+6. **Reference Update**: RefsProvider updates name→version→SHA256 mapping
+7. **Change Status Check**: Verify current change is LOCAL
+8. **Change Creation**: Create new LOCAL change if current change is MERGED
+9. **Version Override**: Add override to current LOCAL change
+10. **Status Tracking**: Update added/modified lists based on object existence
 
-### Object Retrieval Process
+### Object Retrieval Process (Simplified)
 
 ```mermaid
 graph TD
     A[Object Get Request] --> B{Current Change Active?}
-    B -->|Yes| C[Check Change Overrides]
-    B -->|No| D[Resolve via HEAD]
+    B -->|Yes LOCAL| C[Check Change Version Overrides]
+    B -->|No| D[Resolve via References]
     C --> E{Override Found?}
     E -->|Yes| F[Use Override SHA256]
-    E -->|No| G[Resolve via HEAD]
-    D --> H[Find Object in HEAD]
-    G --> H
-    H --> I[Get SHA256 from References]
-    I --> J[Retrieve Object Content]
-    F --> J
+    E -->|No| G[Check Deleted Objects]
+    G --> H{Object Deleted?}
+    H -->|Yes| I[Return Error]
+    H -->|No| J[Resolve via References]
+    D --> J
+    J --> K[Get SHA256 from References]
+    F --> L[Retrieve Object Content]
+    K --> L
 ```
 
 **Resolution Priority:**
 
-1. **Change Overrides**: Active change modifications (deletures, renames, versions)
-2. **HEAD Resolution**: Current working state reference
-3. **Reference Resolution**: Latest version fallback
+1. **Change Overrides**: Active LOCAL change modifications (versions, deletions, renames)
+2. **Reference Resolution**: Latest version from refs provider
+3. **Error Handling**: Deleted objects return "not found" error
 
-### Change Management
+### Change Management Workflow
 
 ```mermaid
 graph TD
-    A[Change Creation] --> B[Generate Change ID]
-    B --> C[Initialize Empty Change]
-    C --> D[Set as Current Change]
-    D --> E[Object Updates Add Overrides]
-    E --> F[Object Deletions Tracked]
-    F --> G[Renames Tracked]
-    G --> H[Change Commitment]
-    H --> I[Clear Current Change]
-]
+    A[Change Creation] --> B[Set Status to LOCAL]
+    B --> C[Add to Index Top]
+    C --> D[Object Updates Track Overrides]
+    D --> E[Change Status Check]
+    E --> F{Status = LOCAL?}
+    F -->|Yes| G[Continue Working]
+    F -->|No MERGED| H[Create New LOCAL Change]
+    H --> I[Set as New Working State]
+    G --> J[Development Continues]
+    J --> K[Commit Change]
+    K --> L[Set Status to MERGED]
+    L --> M[Move to Bottom of Index]
+    M --> N[Promote Next LOCAL Change]
 ```
 
 ## API Operations
@@ -281,7 +300,7 @@ graph TD
 ### Object Operations
 
 #### `object/update`
-Stores a new version of an object.
+Stores a new version of an object, automatically managing LOCAL vs MERGED change states.
 
 **Request:**
 ```json
@@ -295,10 +314,12 @@ Stores a new version of an object.
 }
 ```
 
-**Flow:** Parse → Hash → Store → Version → Update Refs → Update HEAD → Track Change
+**Enhanced Flow:** Parse → Hash → Duplicate Check → Store → Version → Update Refs → Check Change Status → Add Override → Track Added/Modified
+
+**Response:** `"Object 'MyObject' updated successfully with version 42"` or `"Object 'MyObject' unchanged (no modifications)"`
 
 #### `object/get`
-Retrieves object content respecting current change overrides.
+Retrieves object content respecting current LOCAL change overrides.
 
 **Request:**
 ```json
@@ -307,12 +328,12 @@ Retrieves object content respecting current change overrides.
 }
 ```
 
-**Flow:** Check Changes → Resolve HEAD → Fetch References → Retrieve Content
+**Simplified Flow:** Check LOCAL Change → Overrides → Deleted Check → References → Content
 
 ### Change Operations
 
 #### `change/create`
-Creates a new change for tracking modifications.
+Creates a new LOCAL change for tracking modifications.
 
 **Request:**
 ```json
@@ -323,10 +344,33 @@ Creates a new change for tracking modifications.
 }
 ```
 
+**Response:** `"Created change 'Fix bug in MyObject' with ID: abc-123-def"`
+
 #### `change/abandon`
-Abandons current changes, reverting to HEAD state.
+Abandons current changes, clearing the working state.
 
 **Request:** Empty body
+
+**Response:** `"Abandoned change 'change-id'"` or `"No current change to abandon"`
+
+#### `change/status` (NEW)
+Lists all objects modified in the current change.
+
+**Request:** Empty body
+
+**Response:**
+```json
+{
+  "change_id": "abc-123-def", 
+  "change_name": "Fix bug in MyObject",
+  "added": ["new_object"],
+  "modified": ["MyObject", "OtherObject"],
+  "deleted": ["old_object"],
+  "renamed": [
+    {"from": "old_name", "to": "new_name"}
+  ]
+}
+```
 
 ## Usage Examples
 
@@ -349,21 +393,24 @@ curl -X POST http://localhost:8080/api/object/get \
 
 ### Creating a Change Branch
 ```bash
-# Create change
+# Create LOCAL change (becomes working state)
 curl -X POST http://localhost:8080/api/change/create \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Feature Branch",
-    "description": "Development branch for new features",
+    "description": "Development branch for new features", 
     "author": "developer"
   }'
 
-# Make modifications (automatically tracked in change)
+# Make modifications (automatically tracked in LOCAL change)
 curl -X POST http://localhost:8080/api/object/update \
   -H "Content-Type: application/json" \
   -d '{"object_name": "Player", "vars": ["..."]}'
 
-# Abandon changes to revert to main branch
+# Check change status
+curl -X GET http://localhost:8080/api/change/status
+
+# Abandon changes to revert to previous state
 curl -X POST http://localhost:8080/api/change/abandon
 ```
 
@@ -375,21 +422,25 @@ src/
 ├── main.rs              # Application entry point
 ├── config.rs            # Configuration management
 ├── router.rs            # HTTP routing
+├── util.rs              # Utility functions (time stamps, etc.)
 ├── database.rs          # Database coordinator with provider aggregation
 ├── providers/           # Provider pattern implementations
-│   ├── mod.rs          # Provider exports
+│   ├── mod.rs          # Provider exports and architecture docs
 │   ├── error.rs         # Unified error handling
 │   ├── objects.rs       # Content CRUD operations
 │   ├── refs.rs          # Reference resolution
-│   ├── head.rs          # Working state management
-│   ├── changes.rs       # Change tracking
+│   ├── changes.rs       # Change tracking with status
+│   ├── index.rs         # Ordered change management (replaces HEAD)
 │   └── repository.rs    # Repository metadata
 └── operations/          # API operation handlers
     ├── mod.rs
-    ├── object_update_op.rs
-    ├── object_get_op.rs
-    ├── change_create_op.rs
-    └── change_abandon_op.rs
+    ├── object/
+    │   ├── object_update_op.rs
+    │   └── object_get_op.rs
+    └── change/
+        ├── change_create_op.rs
+        ├── change_abandon_op.rs
+        └── change_status_op.rs
 ```
 
 ### Building and Running
@@ -404,37 +455,22 @@ cargo run
 # The service will start on http://localhost:8080
 ```
 
-### Testing Provider Behavior
+### Key Architectural Benefits
 
-Each provider can be tested independently:
+**Simplified Data Flow:**
+- Eliminated HEAD provider redundancy
+- Current LOCAL change represents working state directly
+- Index provider manages change ordering automatically
 
-```rust
-#[cfg(test)]
-mod tests {
-    use super::*;
-    
-    #[tokio::test]
-    async fn test_objects_provider_crud() {
-        let provider = create_test_objects_provider();
-        let content = "test object content";
-        let hash = provider.generate_sha256_hash(content);
-        
-        provider.store(&hash, content).await.unwrap();
-        let retrieved = provider.get(&hash).await.unwrap().unwrap();
-        assert_eq!(content, retrieved);
-    }
-}
-```
+**Performance Optimizations:**
+- Duplicate content detection prevents unnecessary storage
+- Direct refs access eliminates HEAD indirection
+- SHA256-based content integrity checking
 
-### Adding New Providers
-
-To add a new provider:
-
-1. Create provider module in `src/providers/`
-2. Implement trait and concrete implementation
-3. Update `src/providers/mod.rs` to export
-4. Add to Database coordinator
-5. Update operations to use new provider
+**Cleaner Architecture:**
+- Single source of truth for working state
+- Explicit change status management
+- Provider isolation for testing and development
 
 ### Configuration
 
@@ -450,8 +486,14 @@ host = "localhost"
 port = 8080
 ```
 
-## Conclusion
+## Summary
 
-This provider pattern architecture provides a clean, maintainable foundation for version control operations. The separation of concerns makes the codebase easier to understand, test, and extend while providing Git-like semantics for MOO object management.
+This change-status-driven architecture provides a cleaner, more efficient version control system by:
 
-Each provider can be developed, tested, and optimized independently, enabling team development and focused expertise in different aspects of the version control system.
+1. **Eliminating Redundancy**: Removing HEAD provider in favor of current LOCAL change
+2. **Explicit Status Management**: MERGED/LOCAL states provide clear workflow semantics
+3. **Automatic Ordering**: Index provider manages change chronology and working state
+4. **Performance Optimization**: Duplicate content detection and direct refs access
+5. **Simplified Logic**: Object retrieval checks LOCAL change overrides first, then refs
+
+The provider pattern maintains clean separation of concerns while the change-status system provides Git-like semantics optimized for MOO object development workflows.

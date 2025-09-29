@@ -1,19 +1,12 @@
 use crate::operations::{Operation, OperationRoute};
 use axum::http::Method;
 use tracing::{error, info};
-use serde::{Deserialize, Serialize};
 
-use crate::database::{DatabaseRef, ObjectsTreeError, Change};
+use crate::database::{DatabaseRef, ObjectsTreeError};
 use crate::providers::changes::ChangesProvider;
 use crate::providers::repository::RepositoryProvider;
-
-/// Request structure for change create operations
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChangeCreateRequest {
-    pub name: String,
-    pub description: Option<String>,
-    pub author: String,
-}
+use crate::providers::index::IndexProvider;
+use crate::types::{ChangeCreateRequest, Change, ChangeStatus};
 
 /// Change create operation that creates a new change and sets it as current
 #[derive(Clone)]
@@ -36,19 +29,20 @@ impl ChangeCreateOperation {
             name: request.name.clone(),
             description: request.description,
             author: request.author,
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs(),
+            timestamp: crate::util::current_unix_timestamp(),
+            status: ChangeStatus::Local,
             added_objects: Vec::new(),
             modified_objects: Vec::new(),
             deleted_objects: Vec::new(),
             renamed_objects: Vec::new(),
-            version_overrides: Vec::new(),
         };
         
         // Store the change
         self.database.changes().store_change(&change)
+            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+        
+        // Add change to the top of the index (since it's local)
+        self.database.index().prepend_change(&change.id)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         
         // Set it as the current change

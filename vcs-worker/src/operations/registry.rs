@@ -1,23 +1,8 @@
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tracing::{error, info};
 
 use super::{Operation, OperationRoute};
-
-/// Request structure for operations
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OperationRequest {
-    pub operation: String,
-    pub args: Vec<String>,
-}
-
-/// Response structure for operations - converted from Var for HTTP
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OperationResponse {
-    pub result: serde_json::Value,
-    pub success: bool,
-    pub operation: String,
-}
+use crate::types::{OperationRequest, OperationResponse};
 
 /// Registry that holds all registered operations
 #[derive(Default)]

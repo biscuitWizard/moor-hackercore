@@ -13,8 +13,10 @@ use uuid::Uuid;
 mod operations;
 mod router;
 mod config;
+mod util;
 mod database;
 mod providers;
+mod types;
 
 use operations::create_default_registry;
 use router::{start_http_server, create_rpc_handler};

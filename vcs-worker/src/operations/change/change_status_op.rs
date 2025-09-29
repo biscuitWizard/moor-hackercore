@@ -91,12 +91,6 @@ impl ChangeStatusOperation {
                     })
                     .collect();
                 
-                // Add summary information
-                let total_changes = current_change.added_objects.len()
-                    + current_change.modified_objects.len()
-                    + current_change.deleted_objects.len()
-                    + current_change.renamed_objects.len();
-                
                 // Create the main status map
                 let status_map = moor_var::v_map(&[
                     (moor_var::v_str("change_id"), moor_var::v_str(&current_change.id)),
@@ -105,7 +99,6 @@ impl ChangeStatusOperation {
                     (moor_var::v_str("modified"), moor_var::v_list(&modified_vars)),
                     (moor_var::v_str("deleted"), moor_var::v_list(&deleted_vars)),
                     (moor_var::v_str("renamed"), moor_var::v_list(&renamed_vars)),
-                    (moor_var::v_str("total_changes"), moor_var::v_int(total_changes as i64)),
                 ]);
                 
                 info!("Successfully retrieved change status for '{}'", current_change.name);
@@ -128,7 +121,6 @@ impl ChangeStatusOperation {
                 (moor_var::v_str("modified"), moor_var::v_list(&empty_vec)),
                 (moor_var::v_str("deleted"), moor_var::v_list(&empty_vec)),
                 (moor_var::v_str("renamed"), moor_var::v_list(&empty_vec)),
-                (moor_var::v_str("total_changes"), moor_var::v_int(0)),
             ]);
             Ok(no_change_map)
         }

@@ -4,11 +4,10 @@ use tracing::{error, info};
 use serde::{Deserialize, Serialize};
 
 use crate::database::{DatabaseRef, ObjectsTreeError};
+use crate::providers::objects::ObjectsProvider;
+use crate::providers::index::IndexProvider;
 use crate::providers::changes::ChangesProvider;
 use crate::providers::refs::RefsProvider;
-use crate::providers::objects::ObjectsProvider;
-use crate::providers::head::HeadProvider;
-use crate::providers::repository::RepositoryProvider;
 
 /// Request structure for object get operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -32,75 +31,23 @@ impl ObjectGetOperation {
     fn process_object_get(&self, request: ObjectGetRequest) -> Result<String, ObjectsTreeError> {
         info!("Retrieving object '{}'", request.object_name);
         
-        // First check current change for overrides
-        let repository = self.database.repository().get_repository()
-            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
-        if let Some(change_id) = repository.current_change {
-            if let Ok(Some(current_change)) = self.database.changes().get_change(&change_id)
-                .map_err(|e| ObjectsTreeError::SerializationError(e.to_string())) {
-                // Check if deleted
-                if current_change.deleted_objects.contains(&request.object_name) {
-                    error!("Object '{}' has been deleted in current change", request.object_name);
-                    return Err(ObjectsTreeError::SledError(sled::Error::Unsupported(
-                        format!("Object '{}' has been deleted", request.object_name)
-                    )));
-                }
-                
-                // Check for renamed object
-                if let Some(renamed) = current_change.renamed_objects.iter()
-                    .find(|r| r.from == request.object_name) {
-                    info!("Object '{}' has been renamed to '{}' in current change", request.object_name, renamed.to);
-                    return self.process_object_get(ObjectGetRequest { object_name: renamed.to.clone() });
-                }
-                
-                // Check for version override
-                if let Some(version_override) = current_change.version_overrides.iter()
-                    .find(|vo| vo.object_name == request.object_name) {
-                    info!("Found version override for object '{}' in current change", request.object_name);
-                    return self.database.objects().get(&version_override.sha256_key)
-                        .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))
-                        .and_then(|opt| opt.ok_or_else(|| ObjectsTreeError::SerializationError(
-                            format!("Object '{}' content not found", request.object_name)
-                        )));
-                }
-            }
-        }
-        
-        // No override found, resolve through HEAD
-        let head = self.database.head().get_head()
-            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
-        match head.refs.iter().find(|head_ref| head_ref.object_name == request.object_name) {
-            Some(head_ref) => {
-                info!("Found object '{}' in HEAD at version {}", request.object_name, head_ref.version);
-                // Verify the reference exists and get the SHA256
-                match self.database.refs().get_ref(&request.object_name)
-                    .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))? {
-                    Some(object_ref) => {
-                        if object_ref.version == head_ref.version {
-                            self.database.objects().get(&object_ref.sha256_key)
-                                .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))
-                                .and_then(|opt| opt.ok_or_else(|| ObjectsTreeError::SerializationError(
-                                    format!("Object '{}' content not found", request.object_name)
-                                )))
-                        } else {
-                            error!("Version mismatch: HEAD has version {}, but ref has version {}", 
-                                   head_ref.version, object_ref.version);
-                            Err(ObjectsTreeError::SerializationError(
-                                "Version mismatch between HEAD and refs".to_string()
-                            ))
-                        }
-                    }
-                    None => {
-                        error!("Object '{}' not found in refs but present in HEAD", request.object_name);
-                        Err(ObjectsTreeError::SerializationError(
-                            "Object reference not found".to_string()
-                        ))
-                    }
-                }
+        // Use the index provider to resolve the current state of the object
+        match self.database.index().resolve_object_current_state(
+            &request.object_name,
+            |change_id| self.database.changes().get_change(change_id).map_err(|e| crate::providers::ProviderError::SerializationError(e.to_string())),
+            |obj_name| self.database.refs().get_ref(obj_name).map_err(|e| crate::providers::ProviderError::SerializationError(e.to_string()))
+        ).map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))? {
+            Some(sha256_key) => {
+                // Object exists - get its content
+                self.database.objects().get(&sha256_key)
+                    .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))
+                    .and_then(|opt| opt.ok_or_else(|| ObjectsTreeError::SerializationError(
+                        format!("Object '{}' content not found", request.object_name)
+                    )))
             }
             None => {
-                info!("Object '{}' not found in HEAD", request.object_name);
-                error!("Object '{}' not found", request.object_name);
+                // Object is deleted or doesn't exist
+                error!("Object '{}' not found or has been deleted", request.object_name);
                 Err(ObjectsTreeError::SledError(sled::Error::Unsupported(
                     format!("Object '{}' not found", request.object_name)
                 )))
