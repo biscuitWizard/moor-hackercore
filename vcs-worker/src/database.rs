@@ -9,7 +9,6 @@ use crate::providers::{
     ObjectsProvider, ObjectsProviderImpl,
     RefsProviderImpl,
     IndexProviderImpl,
-    RepositoryProviderImpl,
     WorkspaceProviderImpl,
 };
 
@@ -40,7 +39,6 @@ pub struct Database {
     objects_provider: Arc<ObjectsProviderImpl>,
     refs_provider: Arc<RefsProviderImpl>,
     index_provider: Arc<IndexProviderImpl>,
-    repository_provider: Arc<RepositoryProviderImpl>,
     workspace_provider: Arc<WorkspaceProviderImpl>,
     
     #[allow(dead_code)]
@@ -63,7 +61,6 @@ impl Database {
         let refs_tree = keyspace.open_partition("refs", fjall::PartitionCreateOptions::default())?;
         let index_tree = keyspace.open_partition("index", fjall::PartitionCreateOptions::default())?;
         let changes_tree = keyspace.open_partition("changes", fjall::PartitionCreateOptions::default())?;
-        let repository_tree = keyspace.open_partition("repository", fjall::PartitionCreateOptions::default())?;
         let workspace_tree = keyspace.open_partition("workspace", fjall::PartitionCreateOptions::default())?;
         
         // Create channel for background flushing
@@ -73,7 +70,6 @@ impl Database {
         let objects_provider = Arc::new(ObjectsProviderImpl::new(objects_tree.clone(), flush_sender.clone()));
         let refs_provider = Arc::new(RefsProviderImpl::new(refs_tree.clone(), flush_sender.clone()));
         let index_provider = Arc::new(IndexProviderImpl::new(index_tree.clone(), changes_tree.clone(), flush_sender.clone()));
-        let repository_provider = Arc::new(RepositoryProviderImpl::new(repository_tree.clone(), flush_sender.clone()));
         let workspace_provider = Arc::new(WorkspaceProviderImpl::new(workspace_tree.clone(), flush_sender.clone()));
         
         info!("Database initialized with {} objects", objects_provider.count());
@@ -132,7 +128,6 @@ impl Database {
             objects_provider,
             refs_provider,
             index_provider,
-            repository_provider,
             workspace_provider,
             flush_sender,
         })
@@ -153,11 +148,6 @@ impl Database {
         &self.index_provider
     }
 
-
-    /// Get direct access to the repository provider
-    pub fn repository(&self) -> &Arc<RepositoryProviderImpl> {
-        &self.repository_provider
-    }
 
     /// Get direct access to the workspace provider
     pub fn workspace(&self) -> &Arc<WorkspaceProviderImpl> {

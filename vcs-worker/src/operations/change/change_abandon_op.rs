@@ -1,15 +1,14 @@
 use crate::operations::{Operation, OperationRoute};
 use axum::http::Method;
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
 use crate::database::{DatabaseRef, ObjectsTreeError};
-use crate::providers::repository::RepositoryProvider;
 use crate::providers::index::IndexProvider;
 use crate::types::{ChangeAbandonRequest, ChangeStatus};
 use crate::model::{ObjectDeltaModel, ObjectChange, obj_id_to_object_name};
 use std::collections::HashMap;
 
-/// Change abandon operation that clears the current change
+/// Change abandon operation that abandons the top change in the index
 #[derive(Clone)]
 pub struct ChangeAbandonOperation {
     database: DatabaseRef,
@@ -23,90 +22,67 @@ impl ChangeAbandonOperation {
 
     /// Process the change abandon request and return an ObjectDeltaModel showing what needs to be undone
     fn process_change_abandon(&self, _request: ChangeAbandonRequest) -> Result<ObjectDeltaModel, ObjectsTreeError> {
-        // Get the current repository state
-        let mut repository = self.database.repository().get_repository()
+        // Get the current change from the top of the index
+        let changes = self.database.index().list_changes()
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         
-        if let Some(current_change_id) = repository.current_change {
-            info!("Attempting to abandon current change: {}", current_change_id);
+        if let Some(change) = changes.first() {
+            info!("Attempting to abandon current change: {}", change.id);
             
-            // Get the change to check its status
-            let change_opt = self.database.index().get_change(&current_change_id)
-                .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
-            
-            match change_opt {
-                Some(change) => {
-                    if change.status == ChangeStatus::Merged {
-                        error!("Cannot abandon change '{}' ({}) - it has already been merged", change.name, change.id);
-                        return Err(ObjectsTreeError::SerializationError(
-                            format!("Cannot abandon merged change '{}'", change.name)
-                        ));
-                    }
-                    
-                    // Create a delta model showing what needs to be undone
-                    let mut undo_delta = ObjectDeltaModel::new();
-                    
-                    // Get object name mappings for better display names
-                    let object_names = self.get_object_names(&change);
-                    
-                    // Process added objects - to undo, we need to delete them
-                    for added_obj in &change.added_objects {
-                        let object_name = obj_id_to_object_name(added_obj, object_names.get(added_obj).map(|s| s.as_str()));
-                        undo_delta.add_object_deleted(object_name);
-                    }
-                    
-                    // Process deleted objects - to undo, we need to add them back
-                    for deleted_obj in &change.deleted_objects {
-                        let object_name = obj_id_to_object_name(deleted_obj, object_names.get(deleted_obj).map(|s| s.as_str()));
-                        undo_delta.add_object_added(object_name);
-                    }
-                    
-                    // Process renamed objects - to undo, we need to rename them back
-                    for renamed in &change.renamed_objects {
-                        let from_name = obj_id_to_object_name(&renamed.from, object_names.get(&renamed.from).map(|s| s.as_str()));
-                        let to_name = obj_id_to_object_name(&renamed.to, object_names.get(&renamed.to).map(|s| s.as_str()));
-                        undo_delta.add_object_renamed(to_name, from_name);
-                    }
-                    
-                    // Process modified objects - to undo, we need to mark them as modified
-                    // and create basic ObjectChange entries
-                    for modified_obj in &change.modified_objects {
-                        let object_name = obj_id_to_object_name(modified_obj, object_names.get(modified_obj).map(|s| s.as_str()));
-                        undo_delta.add_object_modified(object_name.clone());
-                        
-                        // Create a basic ObjectChange for modified objects
-                        // In a real implementation, you'd want to track what specifically changed
-                        let mut object_change = ObjectChange::new(object_name);
-                        object_change.props_modified.insert("content".to_string());
-                        undo_delta.add_object_change(object_change);
-                    }
-                    
-                    // Remove from index if it's LOCAL
-                    if change.status == ChangeStatus::Local {
-                        self.database.index().remove_change(&current_change_id)
-                            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
-                        info!("Removed change '{}' from index", change.name);
-                    }
-                    
-                    // Clear the current change from repository
-                    repository.current_change = None;
-                    self.database.repository().set_repository(&repository)
-                        .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
-                    
-                    info!("Successfully abandoned change '{}' ({}), created undo delta", change.name, change.id);
-                    Ok(undo_delta)
-                }
-                None => {
-                    // Change ID exists in repository but change not found - clean up
-                    warn!("Change '{}' referenced in repository but not found, clearing reference", current_change_id);
-                    repository.current_change = None;
-                    self.database.repository().set_repository(&repository)
-                        .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
-                    
-                    // Return empty delta model for orphaned change
-                    Ok(ObjectDeltaModel::new())
-                }
+            if change.status == ChangeStatus::Merged {
+                error!("Cannot abandon change '{}' ({}) - it has already been merged", change.name, change.id);
+                return Err(ObjectsTreeError::SerializationError(
+                    format!("Cannot abandon merged change '{}'", change.name)
+                ));
             }
+            
+            // Create a delta model showing what needs to be undone
+            let mut undo_delta = ObjectDeltaModel::new();
+            
+            // Get object name mappings for better display names
+            let object_names = self.get_object_names(change);
+            
+            // Process added objects - to undo, we need to delete them
+            for added_obj in &change.added_objects {
+                let object_name = obj_id_to_object_name(added_obj, object_names.get(added_obj).map(|s| s.as_str()));
+                undo_delta.add_object_deleted(object_name);
+            }
+            
+            // Process deleted objects - to undo, we need to add them back
+            for deleted_obj in &change.deleted_objects {
+                let object_name = obj_id_to_object_name(deleted_obj, object_names.get(deleted_obj).map(|s| s.as_str()));
+                undo_delta.add_object_added(object_name);
+            }
+            
+            // Process renamed objects - to undo, we need to rename them back
+            for renamed in &change.renamed_objects {
+                let from_name = obj_id_to_object_name(&renamed.from, object_names.get(&renamed.from).map(|s| s.as_str()));
+                let to_name = obj_id_to_object_name(&renamed.to, object_names.get(&renamed.to).map(|s| s.as_str()));
+                undo_delta.add_object_renamed(to_name, from_name);
+            }
+            
+            // Process modified objects - to undo, we need to mark them as modified
+            // and create basic ObjectChange entries
+            for modified_obj in &change.modified_objects {
+                let object_name = obj_id_to_object_name(modified_obj, object_names.get(modified_obj).map(|s| s.as_str()));
+                undo_delta.add_object_modified(object_name.clone());
+                
+                // Create a basic ObjectChange for modified objects
+                // In a real implementation, you'd want to track what specifically changed
+                let mut object_change = ObjectChange::new(object_name);
+                object_change.props_modified.insert("content".to_string());
+                undo_delta.add_object_change(object_change);
+            }
+            
+            // Remove from index if it's LOCAL
+            if change.status == ChangeStatus::Local {
+                self.database.index().remove_change(&change.id)
+                    .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+                info!("Removed change '{}' from index", change.name);
+            }
+            
+            info!("Successfully abandoned change '{}' ({}), created undo delta", change.name, change.id);
+            Ok(undo_delta)
         } else {
             info!("No current change to abandon");
             // Return empty delta model when no change to abandon
@@ -145,7 +121,7 @@ impl Operation for ChangeAbandonOperation {
     }
     
     fn description(&self) -> &'static str {
-        "Abandons the current local change, removing it from index and clearing repository state. Returns an ObjectDeltaModel showing what changes need to be undone. Cannot abandon merged changes."
+        "Abandons the top local change in the index, removing it from index. Returns an ObjectDeltaModel showing what changes need to be undone. Cannot abandon merged changes."
     }
     
     fn routes(&self) -> Vec<OperationRoute> {

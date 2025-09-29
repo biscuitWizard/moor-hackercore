@@ -4,10 +4,9 @@ use tracing::{error, info};
 
 use crate::database::{DatabaseRef, ObjectsTreeError};
 use crate::providers::index::IndexProvider;
-use crate::providers::repository::RepositoryProvider;
 use crate::types::{ChangeCreateRequest, Change, ChangeStatus};
 
-/// Change create operation that creates a new change and sets it as current
+/// Change create operation that creates a new change
 #[derive(Clone)]
 pub struct ChangeCreateOperation {
     database: DatabaseRef,
@@ -22,6 +21,21 @@ impl ChangeCreateOperation {
     /// Process the change create request
     fn process_change_create(&self, request: ChangeCreateRequest) -> Result<String, ObjectsTreeError> {
         info!("Creating new change '{}' with author '{}'", request.name, request.author);
+        
+        // Check if there's already a local change at the top of the index
+        let changes = self.database.index().list_changes()
+            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+        
+        if let Some(existing_change) = changes.first() {
+            if existing_change.status == ChangeStatus::Local {
+                error!("Cannot create new change '{}' - already in a local change '{}' ({})", 
+                       request.name, existing_change.name, existing_change.id);
+                return Err(ObjectsTreeError::SerializationError(
+                    format!("Already in a local change '{}' ({}). Abandon the current change before creating a new one.", 
+                            existing_change.name, existing_change.id)
+                ));
+            }
+        }
         
         let change = Change {
             id: uuid::Uuid::new_v4().to_string(),
@@ -45,13 +59,6 @@ impl ChangeCreateOperation {
         self.database.index().prepend_change(&change.id)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         
-        // Set it as the current change
-        let mut repository = self.database.repository().get_repository()
-            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
-        repository.current_change = Some(change.id.clone());
-        self.database.repository().set_repository(&repository)
-            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
-        
         info!("Successfully created change '{}' ({})", change.name, change.id);
         Ok(format!("Created change '{}' with ID: {}", change.name, change.id))
     }
@@ -63,7 +70,7 @@ impl Operation for ChangeCreateOperation {
     }
     
     fn description(&self) -> &'static str {
-        "Creates a new change with the given name, description, and author"
+        "Creates a new change with the given name, description, and author. Fails if already in a local change."
     }
     
     fn routes(&self) -> Vec<OperationRoute> {
