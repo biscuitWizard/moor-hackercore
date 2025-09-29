@@ -34,6 +34,7 @@ impl ChangeCreateOperation {
             modified_objects: Vec::new(),
             deleted_objects: Vec::new(),
             renamed_objects: Vec::new(),
+            index_change_id: None,
         };
         
         // Store the change

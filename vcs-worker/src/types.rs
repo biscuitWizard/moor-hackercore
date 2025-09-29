@@ -49,16 +49,8 @@ pub struct Change {
     pub renamed_objects: Vec<RenamedObject>,
     // Workspace-specific fields
     pub index_change_id: Option<String>, // The indexed change this workspace change is based on
-    pub version_overrides: Vec<ObjectVersionOverride>, // Local modifications from indexed change
 }
 
-/// Represents a version override for changes that aren't yet on the index
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ObjectVersionOverride {
-    pub object_name: String,
-    pub version: u64,
-    pub sha256_key: String,
-}
 
 /// Represents the current state of the repository
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -199,8 +191,8 @@ pub struct IndexListRequest {
 /// General error types for the VCS worker
 #[derive(Error, Debug)]
 pub enum ObjectsTreeError {
-    #[error("Sled database error: {0}")]
-    SledError(#[from] sled::Error),
+    #[error("Fjall database error: {0}")]
+    FjallError(#[from] fjall::Error),
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
     #[error("Serialization error: {0}")]

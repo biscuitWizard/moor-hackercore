@@ -71,7 +71,7 @@ lazy_static = "1.4"
 libc = "0.2"
 
 ## Embedded database for objects storage
-sled = "0.34"
+fjall = { version = "2.11", default-features = false, features = ["lz4"] }
 
 ## Error handling
 thiserror = "1.0"

@@ -1,4 +1,4 @@
-use sled::Tree;
+use fjall::Partition;
 use moor_compiler::{compile_object_definitions, ObjFileContext, CompileOptions, ObjectDefinition};
 use tracing::{info, warn};
 use tokio::sync::mpsc;
@@ -28,15 +28,15 @@ pub trait ObjectsProvider: Send + Sync {
     fn count(&self) -> usize;
 }
 
-/// Implementation of ObjectsProvider using Sled
+/// Implementation of ObjectsProvider using Fjall
 pub struct ObjectsProviderImpl {
-    objects_tree: Tree,
+    objects_tree: Partition,
     flush_sender: mpsc::UnboundedSender<()>,
 }
 
 impl ObjectsProviderImpl {
     /// Create a new objects provider
-    pub fn new(objects_tree: Tree, flush_sender: mpsc::UnboundedSender<()>) -> Self {
+    pub fn new(objects_tree: Partition, flush_sender: mpsc::UnboundedSender<()>) -> Self {
         Self { objects_tree, flush_sender }
     }
 }
@@ -88,11 +88,15 @@ impl ObjectsProvider for ObjectsProviderImpl {
     }
 
     fn delete(&self, sha256_key: &str) -> ProviderResult<bool> {
-        let result = self.objects_tree.remove(sha256_key.as_bytes())?;
-        Ok(result.is_some())
+        // Check if the key exists first
+        let exists = self.objects_tree.get(sha256_key.as_bytes())?.is_some();
+        if exists {
+            self.objects_tree.remove(sha256_key.as_bytes())?;
+        }
+        Ok(exists)
     }
 
     fn count(&self) -> usize {
-        self.objects_tree.len()
+        self.objects_tree.len().unwrap_or(0)
     }
 }

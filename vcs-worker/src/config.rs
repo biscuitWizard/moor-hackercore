@@ -4,7 +4,7 @@ use std::path::PathBuf;
 /// Configuration for the VCS worker
 #[derive(Debug, Clone)]
 pub struct Config {
-    /// Path to the sled database directory
+    /// Path to the fjall database directory
     pub db_path: PathBuf,
 }
 

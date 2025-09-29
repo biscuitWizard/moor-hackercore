@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use std::time::Duration;
-use sled::Db;
+use fjall::{Config as FjallConfig, Keyspace, PersistMode};
 use tracing::{info, warn, error};
 use tokio::sync::mpsc;
 use tokio::time::sleep;
@@ -16,8 +16,8 @@ use crate::providers::{
 #[derive(Debug, thiserror::Error)]
 #[allow(clippy::enum_variant_names)]
 pub enum ObjectsTreeError {
-    #[error("Sled database error: {0}")]
-    SledError(#[from] sled::Error),
+    #[error("Fjall database error: {0}")]
+    FjallError(#[from] fjall::Error),
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
     #[error("UTF-8 error: {0}")]
@@ -34,7 +34,7 @@ pub use crate::providers::refs::ObjectRef;
 /// Database coordinator that aggregates providers for different subsystems
 pub struct Database {
     #[allow(dead_code)]
-    db: Db,
+    keyspace: Keyspace,
     
     // Provider instances
     objects_provider: Arc<ObjectsProviderImpl>,
@@ -50,7 +50,7 @@ pub struct Database {
 impl Database {
     /// Create a new database with the given config
     pub fn new(config: &Config) -> Result<Self, ObjectsTreeError> {
-        info!("Opening sled database at: {:?}", config.db_path);
+        info!("Opening fjall database at: {:?}", config.db_path);
         
         // Create the database directory if it doesn't exist
         if let Some(parent) = config.db_path.parent() {
@@ -58,13 +58,13 @@ impl Database {
             info!("Created database directory: {:?}", parent);
         }
         
-        let db = sled::open(&config.db_path)?;
-        let objects_tree = db.open_tree("objects")?;
-        let refs_tree = db.open_tree("refs")?;
-        let index_tree = db.open_tree("index")?;
-        let changes_tree = db.open_tree("changes")?;
-        let repository_tree = db.open_tree("repository")?;
-        let workspace_tree = db.open_tree("workspace")?;
+        let keyspace = FjallConfig::new(&config.db_path).open()?;
+        let objects_tree = keyspace.open_partition("objects", fjall::PartitionCreateOptions::default())?;
+        let refs_tree = keyspace.open_partition("refs", fjall::PartitionCreateOptions::default())?;
+        let index_tree = keyspace.open_partition("index", fjall::PartitionCreateOptions::default())?;
+        let changes_tree = keyspace.open_partition("changes", fjall::PartitionCreateOptions::default())?;
+        let repository_tree = keyspace.open_partition("repository", fjall::PartitionCreateOptions::default())?;
+        let workspace_tree = keyspace.open_partition("workspace", fjall::PartitionCreateOptions::default())?;
         
         // Create channel for background flushing
         let (flush_sender, mut flush_receiver) = mpsc::unbounded_channel();
@@ -77,9 +77,9 @@ impl Database {
         let workspace_provider = Arc::new(WorkspaceProviderImpl::new(workspace_tree.clone(), flush_sender.clone()));
         
         info!("Database initialized with {} objects", objects_provider.count());
-        info!("Changes tree initialized with {} changes", changes_tree.len());
-        info!("Workspace tree initialized with {} workspace changes", workspace_tree.len());
-        info!("Refs tree initialized with {} refs", refs_tree.len());
+        info!("Changes tree initialized with {} changes", changes_tree.len().unwrap_or(0));
+        info!("Workspace tree initialized with {} workspace changes", workspace_tree.len().unwrap_or(0));
+        info!("Refs tree initialized with {} refs", refs_tree.len().unwrap_or(0));
         
         // List existing objects for debugging
         let object_count = objects_provider.count();
@@ -96,7 +96,7 @@ impl Database {
         }
         
         // Spawn background flush task
-        let db_clone = db.clone();
+        let keyspace_clone = keyspace.clone();
         tokio::spawn(async move {
             let mut last_flush = std::time::Instant::now();
             let flush_interval = Duration::from_secs(5); // Flush every 5 seconds
@@ -105,7 +105,7 @@ impl Database {
                 tokio::select! {
                     _ = flush_receiver.recv() => {
                         // Immediate flush requested
-                        if let Err(e) = db_clone.flush() {
+                        if let Err(e) = keyspace_clone.persist(PersistMode::SyncAll) {
                             warn!("Background flush failed: {}", e);
                         } else {
                             info!("Background flush completed");
@@ -115,7 +115,7 @@ impl Database {
                     _ = sleep(flush_interval) => {
                         // Periodic flush
                         if last_flush.elapsed() >= flush_interval {
-                            if let Err(e) = db_clone.flush() {
+                            if let Err(e) = keyspace_clone.persist(PersistMode::SyncAll) {
                                 warn!("Periodic background flush failed: {}", e);
                             } else {
                                 info!("Periodic background flush completed");
@@ -128,7 +128,7 @@ impl Database {
         });
         
         Ok(Self {
-            db,
+            keyspace,
             objects_provider,
             refs_provider,
             index_provider,

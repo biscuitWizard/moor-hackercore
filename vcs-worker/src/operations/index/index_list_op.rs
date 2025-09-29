@@ -77,6 +77,8 @@ impl IndexListOperation {
                     (moor_var::v_str("status"), moor_var::v_str(match change.status {
                         crate::types::ChangeStatus::Local => "local",
                         crate::types::ChangeStatus::Merged => "merged",
+                        crate::types::ChangeStatus::Review => "review",
+                        crate::types::ChangeStatus::Idle => "idle",
                     })),
                 ]);
                 

@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use sled::Tree;
+use fjall::Partition;
 use std::sync::Arc;
 use tracing::{info, warn, debug};
 use tokio::sync::mpsc;
@@ -65,12 +65,12 @@ pub trait WorkspaceProvider: Send + Sync {
 }
 
 pub struct WorkspaceProviderImpl {
-    workspace_tree: Tree,
+    workspace_tree: Partition,
     flush_sender: mpsc::UnboundedSender<()>,
 }
 
 impl WorkspaceProviderImpl {
-    pub fn new(workspace_tree: Tree, flush_sender: mpsc::UnboundedSender<()>) -> Self {
+    pub fn new(workspace_tree: Partition, flush_sender: mpsc::UnboundedSender<()>) -> Self {
         Self { 
             workspace_tree,
             flush_sender,
@@ -142,7 +142,11 @@ impl WorkspaceProvider for WorkspaceProviderImpl {
         let key = Self::change_to_workspace_key(change_id);
         
         // Remove main entry
-        let removed = self.workspace_tree.remove(&key)?.is_some();
+        let exists = self.workspace_tree.get(&key)?.is_some();
+        if exists {
+            self.workspace_tree.remove(&key)?;
+        }
+        let removed = exists;
         
         // Remove from all possible status indexes
         for status in [ChangeStatus::Review, ChangeStatus::Idle] {
@@ -160,11 +164,11 @@ impl WorkspaceProvider for WorkspaceProviderImpl {
         let mut changes = Vec::new();
         let prefix = Self::status_to_prefix(status.clone());
         
-        for result in self.workspace_tree.scan_prefix(prefix.as_bytes()) {
+        for result in self.workspace_tree.prefix(prefix.as_bytes()) {
             let (key, value) = result?;
             
             // Skip the status index entries, only process actual change entries
-            let key_str = String::from_utf8_from_end_lossy(&key);
+            let key_str = String::from_utf8_lossy(&key);
             if key_str.starts_with("change:") {
                 if let Ok(value_str) = String::from_utf8(value.to_vec()) {
                     if let Ok(json) = String::from_utf8(value.to_vec()) {
@@ -186,7 +190,7 @@ impl WorkspaceProvider for WorkspaceProviderImpl {
     fn list_all_workspace_changes(&self) -> ProviderResult<Vec<Change>> {
         let mut changes = Vec::new();
         
-        for result in self.workspace_tree.scan_prefix(b"change:") {
+        for result in self.workspace_tree.prefix(b"change:") {
             let (_, value) = result?;
             if let Ok(json) = String::from_utf8(value.to_vec()) {
                 if let Ok(change) = serde_json::from_str::<Change>(&json) {
@@ -237,7 +241,6 @@ impl WorkspaceProvider for WorkspaceProviderImpl {
             deleted_objects: Vec::new(),
             renamed_objects: Vec::new(),
             index_change_id: Some(index_change_id.to_string()),
-            version_overrides: Vec::new(),
         };
         
         self.store_workspace_change(&new_change)?;
@@ -250,7 +253,7 @@ impl WorkspaceProvider for WorkspaceProviderImpl {
             .ok_or_else(|| ProviderError::InvalidOperation(format!("Workspace change '{}' not found", change_id)))?;
         
         let old_status = change.status.clone();
-        change.status = status;
+        change.status = status.clone();
         
         self.update_workspace_change(&change)?;
         

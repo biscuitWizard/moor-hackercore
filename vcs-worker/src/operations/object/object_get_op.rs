@@ -46,9 +46,9 @@ impl ObjectGetOperation {
             None => {
                 // Object is deleted or doesn't exist
                 error!("Object '{}' not found or has been deleted", request.object_name);
-                Err(ObjectsTreeError::SledError(sled::Error::Unsupported(
+                Err(ObjectsTreeError::SerializationError(
                     format!("Object '{}' not found", request.object_name)
-                )))
+                ))
             }
         }
     }

@@ -36,9 +36,9 @@ impl ChangeAbandonOperation {
                 Some(change) => {
                     if change.status == ChangeStatus::Merged {
                         error!("Cannot abandon change '{}' ({}) - it has already been merged", change.name, change.id);
-                        return Err(ObjectsTreeError::SledError(sled::Error::Unsupported(
+                        return Err(ObjectsTreeError::SerializationError(
                             format!("Cannot abandon merged change '{}'", change.name)
-                        )));
+                        ));
                     }
                     
                     // Remove from index if it's LOCAL

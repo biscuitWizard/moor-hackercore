@@ -1,4 +1,4 @@
-use sled::Tree;
+use fjall::Partition;
 use tracing::{info, warn};
 use tokio::sync::mpsc;
 
@@ -56,13 +56,13 @@ pub trait IndexProvider: Send + Sync {
 }
 
 pub struct IndexProviderImpl {
-    tree: Tree,
-    changes_tree: Tree,
+    tree: Partition,
+    changes_tree: Partition,
     flush_sender: mpsc::UnboundedSender<()>,
 }
 
 impl IndexProviderImpl {
-    pub fn new(index_tree: Tree, changes_tree: Tree, flush_sender: mpsc::UnboundedSender<()>) -> Self {
+    pub fn new(index_tree: Partition, changes_tree: Partition, flush_sender: mpsc::UnboundedSender<()>) -> Self {
         Self { 
             tree: index_tree,
             changes_tree,
@@ -312,7 +312,6 @@ impl IndexProvider for IndexProviderImpl {
             deleted_objects: Vec::new(),
             renamed_objects: Vec::new(),
             index_change_id: None,
-            version_overrides: Vec::new(),
         };
         
         self.store_change(&change)?;

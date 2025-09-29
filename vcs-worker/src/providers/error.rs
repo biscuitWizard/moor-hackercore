@@ -3,8 +3,8 @@ use thiserror::Error;
 /// Error type for provider operations
 #[derive(Debug, Error)]
 pub enum ProviderError {
-    #[error("Sled database error: {0}")]
-    SledError(#[from] sled::Error),
+    #[error("Fjall database error: {0}")]
+    FjallError(#[from] fjall::Error),
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
     #[error("UTF-8 error: {0}")]
@@ -26,6 +26,8 @@ pub enum ProviderError {
     #[error("Invalid version: expected at least 1, got {0}")]
     #[allow(dead_code)]
     InvalidVersion(u64),
+    #[error("Invalid operation: {0}")]
+    InvalidOperation(String),
 }
 
 /// Alias for Result using ProviderError

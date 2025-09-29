@@ -1,4 +1,4 @@
-use sled::Tree;
+use fjall::Partition;
 use serde::{Serialize, Deserialize};
 use tracing::{info, warn};
 use tokio::sync::mpsc;
@@ -47,13 +47,13 @@ pub trait RepositoryProvider: Send + Sync {
 
 /// Implementation of RepositoryProvider using Sled
 pub struct RepositoryProviderImpl {
-    repository_tree: Tree,
+    repository_tree: Partition,
     flush_sender: mpsc::UnboundedSender<()>,
 }
 
 impl RepositoryProviderImpl {
     /// Create a new repository provider
-    pub fn new(repository_tree: Tree, flush_sender: mpsc::UnboundedSender<()>) -> Self {
+    pub fn new(repository_tree: Partition, flush_sender: mpsc::UnboundedSender<()>) -> Self {
         Self { repository_tree, flush_sender }
     }
 }

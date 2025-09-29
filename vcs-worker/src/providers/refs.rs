@@ -1,4 +1,4 @@
-use sled::Tree;
+use fjall::Partition;
 use serde::{Serialize, Deserialize};
 use tracing::{info, warn};
 use tokio::sync::mpsc;
@@ -37,15 +37,15 @@ pub trait RefsProvider: Send + Sync {
     fn delete_ref(&self, object_name: &str) -> ProviderResult<bool>;
 }
 
-/// Implementation of RefsProvider using Sled
+/// Implementation of RefsProvider using Fjall
 pub struct RefsProviderImpl {
-    refs_tree: Tree,
+    refs_tree: Partition,
     flush_sender: mpsc::UnboundedSender<()>,
 }
 
 impl RefsProviderImpl {
     /// Create a new refs provider
-    pub fn new(refs_tree: Tree, flush_sender: mpsc::UnboundedSender<()>) -> Self {
+    pub fn new(refs_tree: Partition, flush_sender: mpsc::UnboundedSender<()>) -> Self {
         Self { refs_tree, flush_sender }
     }
 }
@@ -116,7 +116,11 @@ impl RefsProvider for RefsProviderImpl {
     }
 
     fn delete_ref(&self, object_name: &str) -> ProviderResult<bool> {
-        let result = self.refs_tree.remove(object_name.as_bytes())?;
-        Ok(result.is_some())
+        // Check if the key exists first
+        let exists = self.refs_tree.get(object_name.as_bytes())?.is_some();
+        if exists {
+            self.refs_tree.remove(object_name.as_bytes())?;
+        }
+        Ok(exists)
     }
 }
