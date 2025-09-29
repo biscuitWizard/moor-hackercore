@@ -4,10 +4,8 @@ use tracing::{error, info};
 
 use crate::database::DatabaseRef;
 use crate::types::ObjectsTreeError;
-use crate::providers::changes::ChangesProvider;
-use crate::providers::refs::RefsProvider;
-use crate::providers::repository::RepositoryProvider;
 use crate::providers::index::IndexProvider;
+use crate::providers::refs::RefsProvider;
 use crate::types::ObjectDeleteRequest;
 
 /// Object delete operation that marks an object for deletion within the current change
@@ -36,25 +34,10 @@ impl ObjectDeleteOperation {
         }
         
         // Get or create a local change
-        let repository = self.database.repository().get_repository()
-            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
-        let current_change_id = repository.current_change.clone();
-        let mut current_change = self.database.changes().get_or_create_local_change(current_change_id)
+        let mut current_change = self.database.index().get_or_create_local_change()
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         
-        // Ensure this change is properly managed in index and repository
-        self.database.index().prepend_change(&current_change.id)
-            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
-        
-        let mut repo_state = repository;
-        let was_current = repo_state.current_change == Some(current_change.id.clone());
-        repo_state.current_change = Some(current_change.id.clone());
-        self.database.repository().set_repository(&repo_state)
-            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
-        
-        if !was_current {
-            info!("Set change '{}' as current working change", current_change.name);
-        }
+        // The index already manages the current change, so we don't need repository management
         
         // Handle change tracking - remove from added/modified lists if present
         let was_in_added = current_change.added_objects.iter().any(|name| name == &request.object_name);
@@ -81,7 +64,7 @@ impl ObjectDeleteOperation {
         current_change.renamed_objects.retain(|renamed| renamed.from != request.object_name && renamed.to != request.object_name);
         
         // Update the change in the database
-        self.database.changes().update_change(&current_change)
+        self.database.index().update_change(&current_change)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         
         info!("Successfully queued deletion of '{}' for change '{}'", request.object_name, current_change.name);

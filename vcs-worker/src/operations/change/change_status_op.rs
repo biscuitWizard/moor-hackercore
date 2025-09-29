@@ -4,7 +4,7 @@ use tracing::{error, info};
 use serde::{Deserialize, Serialize};
 
 use crate::database::{DatabaseRef, ObjectsTreeError};
-use crate::providers::changes::ChangesProvider;
+use crate::providers::index::IndexProvider;
 use crate::providers::repository::RepositoryProvider;
 
 /// Request structure for change status operations
@@ -59,7 +59,7 @@ impl ChangeStatusOperation {
             info!("Getting status for current change: {}", change_id);
             
             // Get the change details
-            if let Ok(Some(current_change)) = self.database.changes().get_change(&change_id)
+            if let Ok(Some(current_change)) = self.database.index().get_change(&change_id)
                 .map_err(|e| ObjectsTreeError::SerializationError(e.to_string())) {
                 
                 // Convert strings to Var list of strings for added objects

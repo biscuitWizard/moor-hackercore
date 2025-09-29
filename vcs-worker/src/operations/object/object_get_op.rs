@@ -6,7 +6,6 @@ use serde::{Deserialize, Serialize};
 use crate::database::{DatabaseRef, ObjectsTreeError};
 use crate::providers::objects::ObjectsProvider;
 use crate::providers::index::IndexProvider;
-use crate::providers::changes::ChangesProvider;
 use crate::providers::refs::RefsProvider;
 
 /// Request structure for object get operations
@@ -34,7 +33,6 @@ impl ObjectGetOperation {
         // Use the index provider to resolve the current state of the object
         match self.database.index().resolve_object_current_state(
             &request.object_name,
-            |change_id| self.database.changes().get_change(change_id).map_err(|e| crate::providers::ProviderError::SerializationError(e.to_string())),
             |obj_name| self.database.refs().get_ref(obj_name).map_err(|e| crate::providers::ProviderError::SerializationError(e.to_string()))
         ).map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))? {
             Some(sha256_key) => {

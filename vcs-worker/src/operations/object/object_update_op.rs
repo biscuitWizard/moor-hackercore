@@ -4,11 +4,9 @@ use tracing::{error, info, debug};
 use serde::{Deserialize, Serialize};
 
 use crate::database::{DatabaseRef, ObjectsTreeError, ObjectRef};
-use crate::providers::changes::ChangesProvider;
+use crate::providers::index::IndexProvider;
 use crate::providers::refs::RefsProvider;
 use crate::providers::objects::ObjectsProvider;
-use crate::providers::repository::RepositoryProvider;
-use crate::providers::index::IndexProvider;
 
 /// Request structure for object update operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -33,26 +31,12 @@ impl ObjectUpdateOperation {
     fn process_object_update(&self, request: ObjectUpdateRequest) -> Result<String, ObjectsTreeError> {
         info!("Processing object update for '{}' with {} var(s)", request.object_name, request.vars.len());
         
-        // Get or create a local change
-        let repository = self.database.repository().get_repository()
-            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
-        let current_change_id = repository.current_change.clone();
-        let mut current_change = self.database.changes().get_or_create_local_change(current_change_id)
+        // Get or create a local change using the index
+        let mut current_change = self.database.index().get_or_create_local_change()
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         
-        // Ensure this change is properly managed in index and repository
-        self.database.index().prepend_change(&current_change.id)
-            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
-        
-        let mut repo_state = repository;
-        let was_current = repo_state.current_change == Some(current_change.id.clone());
-        repo_state.current_change = Some(current_change.id.clone());
-        self.database.repository().set_repository(&repo_state)
-            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
-        
-        if !was_current {
-            info!("Set change '{}' as current working change", current_change.name);
-        }
+        // The index already manages the current change, so we don't need repository management
+        // The change is already set as top change in index via get_or_create_local_change
     
         // Join all the var strings into a single MOO object dump
         let object_dump = request.vars.join("\n");
@@ -137,7 +121,7 @@ impl ObjectUpdateOperation {
         }
         
         // Update the change in the database
-        self.database.changes().update_change(&current_change)
+        self.database.index().update_change(&current_change)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         
         info!("Successfully updated object '{}' (version {})", request.object_name, version);

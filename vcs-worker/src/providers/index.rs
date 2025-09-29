@@ -2,11 +2,13 @@ use sled::Tree;
 use std::sync::Arc;
 use serde::{Serialize, Deserialize};
 use tracing::{info, warn};
+use tokio::sync::mpsc;
 
 use super::{ProviderError, ProviderResult};
 
-/// Index provider manages ordered collections of change IDs
+    /// Combined Index and Changes provider - manages both change storage and ordering
 pub trait IndexProvider: Send + Sync {
+    // ===== CHANGE ORDERING METHODS =====
     /// Add a change ID to the end of the ordered list
     fn append_change(&self, change_id: &str) -> ProviderResult<()>;
     
@@ -25,21 +27,46 @@ pub trait IndexProvider: Send + Sync {
     /// Reorder the list when a change status changes
     fn reorder_on_status_change(&self, change_id: &str, was_local: bool, is_now_local: bool) -> ProviderResult<()>;
     
+    // ===== CHANGE STORAGE METHODS =====
+    /// Store a change in the database
+    fn store_change(&self, change: &crate::types::Change) -> ProviderResult<()>;
+    
+    /// Get a change by ID
+    fn get_change(&self, change_id: &str) -> ProviderResult<Option<crate::types::Change>>;
+    
+    /// Update an existing change
+    fn update_change(&self, change: &crate::types::Change) -> ProviderResult<()>;
+    
+    /// Create a blank change automatically
+    fn create_blank_change(&self) -> ProviderResult<crate::types::Change>;
+    
+    /// List all changes (optional/for debugging)
+    #[allow(dead_code)]
+    fn list_changes(&self) -> ProviderResult<Vec<crate::types::Change>>;
+    
+    // ===== COMBINED METHODS =====
+    /// Get or create a local change - uses internal change storage now
+    fn get_or_create_local_change(&self) -> ProviderResult<crate::types::Change>;
+    
     /// Resolve the current state of an object considering the top change in the index.
-    /// Takes closure functions to get change and ref data to avoid trait bound issues.
-    fn resolve_object_current_state<F1, F2>(&self, object_name: &str, get_change: F1, get_ref: F2) -> ProviderResult<Option<String>>
+    fn resolve_object_current_state<F>(&self, object_name: &str, get_ref: F) -> ProviderResult<Option<String>>
     where
-        F1: Fn(&str) -> ProviderResult<Option<crate::types::Change>>,
-        F2: Fn(&str) -> ProviderResult<Option<crate::providers::refs::ObjectRef>>;
+        F: Fn(&str) -> ProviderResult<Option<crate::providers::refs::ObjectRef>>;
 }
 
 pub struct IndexProviderImpl {
     tree: Tree,
+    changes_tree: Tree,
+    flush_sender: mpsc::UnboundedSender<()>,
 }
 
 impl IndexProviderImpl {
-    pub fn new(tree: Tree) -> Self {
-        Self { tree }
+    pub fn new(index_tree: Tree, changes_tree: Tree, flush_sender: mpsc::UnboundedSender<()>) -> Self {
+        Self { 
+            tree: index_tree,
+            changes_tree,
+            flush_sender,
+        }
     }
     
     const ORDER_KEY: &'static str = "change_order";
@@ -157,14 +184,107 @@ impl IndexProvider for IndexProviderImpl {
         Ok(())
     }
     
-    fn resolve_object_current_state<F1, F2>(&self, object_name: &str, get_change: F1, get_ref: F2) -> ProviderResult<Option<String>>
+    
+    // ===== CHANGE STORAGE METHODS =====
+    fn store_change(&self, change: &crate::types::Change) -> ProviderResult<()> {
+        let json = serde_json::to_string(change)
+            .map_err(|e| ProviderError::SerializationError(format!("JSON serialization error: {e}")))?;
+        self.changes_tree.insert(change.id.as_bytes(), json.as_bytes())?;
+        
+        // Request background flush
+        if self.flush_sender.send(()).is_err() {
+            warn!("Failed to request flush for change '{}'", change.id);
+        }
+        
+        Ok(())
+    }
+    
+    fn get_change(&self, change_id: &str) -> ProviderResult<Option<crate::types::Change>> {
+        match self.changes_tree.get(change_id.as_bytes())? {
+            Some(value) => {
+                let json = String::from_utf8(value.to_vec())
+                    .map_err(|e| ProviderError::SerializationError(format!("UTF-8 error: {e}")))?;
+                let change: crate::types::Change = serde_json::from_str(&json)
+                    .map_err(|e| ProviderError::SerializationError(format!("JSON deserialization error: {e}")))?;
+                Ok(Some(change))
+            }
+            None => Ok(None),
+        }
+    }
+    
+    fn update_change(&self, change: &crate::types::Change) -> ProviderResult<()> {
+        self.store_change(change)
+    }
+    
+    fn create_blank_change(&self) -> ProviderResult<crate::types::Change> {
+        let change = crate::types::Change {
+            id: uuid::Uuid::new_v4().to_string(),
+            name: String::new(), // Blank name
+            description: None,
+            author: "system".to_string(),
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+            status: crate::types::ChangeStatus::Local,
+            added_objects: Vec::new(),
+            modified_objects: Vec::new(),
+            deleted_objects: Vec::new(),
+            renamed_objects: Vec::new(),
+        };
+        
+        self.store_change(&change)?;
+        info!("Created blank change '{}'", change.id);
+        Ok(change)
+    }
+    
+    fn list_changes(&self) -> ProviderResult<Vec<crate::types::Change>> {
+        let mut changes = Vec::new();
+        
+        for result in self.changes_tree.iter() {
+            let (_, value) = result?;
+            if let Ok(json) = String::from_utf8(value.to_vec()) {
+                if let Ok(change) = serde_json::from_str::<crate::types::Change>(&json) {
+                    changes.push(change);
+                }
+            }
+        }
+        
+        Ok(changes)
+    }
+    
+    // ===== UPDATED COMBINED METHODS =====
+    fn get_or_create_local_change(&self) -> ProviderResult<crate::types::Change> {
+        // Check if we have a top change and if it's local
+        if let Some(top_change_id) = self.get_top_change()? {
+            if let Some(change) = self.get_change(&top_change_id)? {
+                if change.status == crate::types::ChangeStatus::Local {
+                    info!("Using existing local change '{}' ({})", change.name, change.id);
+                    return Ok(change);
+                } else {
+                    info!("Top change '{}' ({}) is not local, creating new local change", change.name, change.id);
+                }
+            } else {
+                info!("Top change '{}' not found, creating new local change", top_change_id);
+            }
+        } else {
+            info!("No top change found, creating new local change");
+        }
+        
+        // Create new local change and set it as top
+        let new_change = self.create_blank_change()?;
+        self.prepend_change(&new_change.id)?;
+        info!("Created and set new local change '{}' ({})", new_change.name, new_change.id);
+        Ok(new_change)
+    }
+    
+    fn resolve_object_current_state<F>(&self, object_name: &str, get_ref: F) -> ProviderResult<Option<String>>
     where
-        F1: Fn(&str) -> ProviderResult<Option<crate::types::Change>>,
-        F2: Fn(&str) -> ProviderResult<Option<crate::providers::refs::ObjectRef>>,
+        F: Fn(&str) -> ProviderResult<Option<crate::providers::refs::ObjectRef>>
     {
         // Get the top change from the index
         if let Some(top_change_id) = self.get_top_change()? {
-            if let Some(top_change) = get_change(&top_change_id)? {
+            if let Some(top_change) = self.get_change(&top_change_id)? {
                 // Only consider changes that are local (working state)
                 if top_change.status == crate::types::ChangeStatus::Local {
                     // Check if deleted
@@ -178,7 +298,7 @@ impl IndexProvider for IndexProviderImpl {
                         .find(|r| r.from == object_name) {
                         info!("Object '{}' has been renamed to '{}' in top change", object_name, renamed.to);
                         // Recursively resolve the renamed object
-                        return self.resolve_object_current_state(&renamed.to, get_change, get_ref);
+                        return self.resolve_object_current_state(&renamed.to, get_ref);
                     }
                 }
             }

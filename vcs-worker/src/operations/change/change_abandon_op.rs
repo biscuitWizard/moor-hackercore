@@ -4,7 +4,6 @@ use tracing::{error, info, warn};
 
 use crate::database::{DatabaseRef, ObjectsTreeError};
 use crate::providers::repository::RepositoryProvider;
-use crate::providers::changes::ChangesProvider;
 use crate::providers::index::IndexProvider;
 use crate::types::{ChangeAbandonRequest, ChangeStatus};
 
@@ -30,7 +29,7 @@ impl ChangeAbandonOperation {
             info!("Attempting to abandon current change: {}", current_change_id);
             
             // Get the change to check its status
-            let change_opt = self.database.changes().get_change(&current_change_id)
+            let change_opt = self.database.index().get_change(&current_change_id)
                 .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
             
             match change_opt {

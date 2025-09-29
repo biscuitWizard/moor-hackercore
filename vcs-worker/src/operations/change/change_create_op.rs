@@ -3,9 +3,8 @@ use axum::http::Method;
 use tracing::{error, info};
 
 use crate::database::{DatabaseRef, ObjectsTreeError};
-use crate::providers::changes::ChangesProvider;
-use crate::providers::repository::RepositoryProvider;
 use crate::providers::index::IndexProvider;
+use crate::providers::repository::RepositoryProvider;
 use crate::types::{ChangeCreateRequest, Change, ChangeStatus};
 
 /// Change create operation that creates a new change and sets it as current
@@ -38,7 +37,7 @@ impl ChangeCreateOperation {
         };
         
         // Store the change
-        self.database.changes().store_change(&change)
+        self.database.index().store_change(&change)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         
         // Add change to the top of the index (since it's local)

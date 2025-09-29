@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::database::{DatabaseRef, ObjectsTreeError};
 use crate::providers::index::IndexProvider;
-use crate::providers::changes::ChangesProvider;
 
 /// Request structure for index list operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -65,7 +64,7 @@ impl IndexListOperation {
         let mut changes_list = Vec::new();
         
         for change_id in page_change_ids {
-            if let Some(change) = self.database.changes().get_change(change_id)
+            if let Some(change) = self.database.index().get_change(change_id)
                 .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))? {
                 
                 // Create map representing the Change struct directly

@@ -8,7 +8,6 @@ use crate::config::Config;
 use crate::providers::{
     ObjectsProvider, ObjectsProviderImpl,
     RefsProviderImpl,
-    ChangesProviderImpl,
     IndexProviderImpl,
     RepositoryProviderImpl,
 };
@@ -41,7 +40,6 @@ pub struct Database {
     objects_provider: Arc<ObjectsProviderImpl>,
     refs_provider: Arc<RefsProviderImpl>,
     index_provider: Arc<IndexProviderImpl>,
-    changes_provider: Arc<ChangesProviderImpl>,
     repository_provider: Arc<RepositoryProviderImpl>,
     
     #[allow(dead_code)]
@@ -72,8 +70,7 @@ impl Database {
         // Initialize providers
         let objects_provider = Arc::new(ObjectsProviderImpl::new(objects_tree.clone(), flush_sender.clone()));
         let refs_provider = Arc::new(RefsProviderImpl::new(refs_tree.clone(), flush_sender.clone()));
-        let index_provider = Arc::new(IndexProviderImpl::new(index_tree.clone()));
-        let changes_provider = Arc::new(ChangesProviderImpl::new(changes_tree.clone(), flush_sender.clone()));
+        let index_provider = Arc::new(IndexProviderImpl::new(index_tree.clone(), changes_tree.clone(), flush_sender.clone()));
         let repository_provider = Arc::new(RepositoryProviderImpl::new(repository_tree.clone(), flush_sender.clone()));
         
         info!("Database initialized with {} objects", objects_provider.count());
@@ -131,7 +128,6 @@ impl Database {
             objects_provider,
             refs_provider,
             index_provider,
-            changes_provider,
             repository_provider,
             flush_sender,
         })
@@ -152,10 +148,6 @@ impl Database {
         &self.index_provider
     }
 
-    /// Get direct access to the changes provider
-    pub fn changes(&self) -> &Arc<ChangesProviderImpl> {
-        &self.changes_provider
-    }
 
     /// Get direct access to the repository provider
     pub fn repository(&self) -> &Arc<RepositoryProviderImpl> {
