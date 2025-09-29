@@ -6,6 +6,8 @@ use crate::database::{DatabaseRef, ObjectsTreeError};
 use crate::providers::repository::RepositoryProvider;
 use crate::providers::index::IndexProvider;
 use crate::types::{ChangeAbandonRequest, ChangeStatus};
+use crate::model::{ObjectDeltaModel, ObjectChange, obj_id_to_object_name};
+use std::collections::HashMap;
 
 /// Change abandon operation that clears the current change
 #[derive(Clone)]
@@ -19,8 +21,8 @@ impl ChangeAbandonOperation {
         Self { database }
     }
 
-    /// Process the change abandon request
-    fn process_change_abandon(&self, _request: ChangeAbandonRequest) -> Result<String, ObjectsTreeError> {
+    /// Process the change abandon request and return an ObjectDeltaModel showing what needs to be undone
+    fn process_change_abandon(&self, _request: ChangeAbandonRequest) -> Result<ObjectDeltaModel, ObjectsTreeError> {
         // Get the current repository state
         let mut repository = self.database.repository().get_repository()
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
@@ -41,6 +43,44 @@ impl ChangeAbandonOperation {
                         ));
                     }
                     
+                    // Create a delta model showing what needs to be undone
+                    let mut undo_delta = ObjectDeltaModel::new();
+                    
+                    // Get object name mappings for better display names
+                    let object_names = self.get_object_names(&change);
+                    
+                    // Process added objects - to undo, we need to delete them
+                    for added_obj in &change.added_objects {
+                        let object_name = obj_id_to_object_name(added_obj, object_names.get(added_obj).map(|s| s.as_str()));
+                        undo_delta.add_object_deleted(object_name);
+                    }
+                    
+                    // Process deleted objects - to undo, we need to add them back
+                    for deleted_obj in &change.deleted_objects {
+                        let object_name = obj_id_to_object_name(deleted_obj, object_names.get(deleted_obj).map(|s| s.as_str()));
+                        undo_delta.add_object_added(object_name);
+                    }
+                    
+                    // Process renamed objects - to undo, we need to rename them back
+                    for renamed in &change.renamed_objects {
+                        let from_name = obj_id_to_object_name(&renamed.from, object_names.get(&renamed.from).map(|s| s.as_str()));
+                        let to_name = obj_id_to_object_name(&renamed.to, object_names.get(&renamed.to).map(|s| s.as_str()));
+                        undo_delta.add_object_renamed(to_name, from_name);
+                    }
+                    
+                    // Process modified objects - to undo, we need to mark them as modified
+                    // and create basic ObjectChange entries
+                    for modified_obj in &change.modified_objects {
+                        let object_name = obj_id_to_object_name(modified_obj, object_names.get(modified_obj).map(|s| s.as_str()));
+                        undo_delta.add_object_modified(object_name.clone());
+                        
+                        // Create a basic ObjectChange for modified objects
+                        // In a real implementation, you'd want to track what specifically changed
+                        let mut object_change = ObjectChange::new(object_name);
+                        object_change.props_modified.insert("content".to_string());
+                        undo_delta.add_object_change(object_change);
+                    }
+                    
                     // Remove from index if it's LOCAL
                     if change.status == ChangeStatus::Local {
                         self.database.index().remove_change(&current_change_id)
@@ -53,8 +93,8 @@ impl ChangeAbandonOperation {
                     self.database.repository().set_repository(&repository)
                         .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
                     
-                    info!("Successfully abandoned change '{}' ({})", change.name, change.id);
-                    Ok(format!("Abandoned change '{}' ({})", change.name, change.id))
+                    info!("Successfully abandoned change '{}' ({}), created undo delta", change.name, change.id);
+                    Ok(undo_delta)
                 }
                 None => {
                     // Change ID exists in repository but change not found - clean up
@@ -62,13 +102,40 @@ impl ChangeAbandonOperation {
                     repository.current_change = None;
                     self.database.repository().set_repository(&repository)
                         .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
-                    Ok(format!("Cleared orphaned change reference '{current_change_id}'"))
+                    
+                    // Return empty delta model for orphaned change
+                    Ok(ObjectDeltaModel::new())
                 }
             }
         } else {
             info!("No current change to abandon");
-            Ok("No current change to abandon".to_string())
+            // Return empty delta model when no change to abandon
+            Ok(ObjectDeltaModel::new())
         }
+    }
+
+    /// Get object names for the change objects to improve display names
+    fn get_object_names(&self, change: &crate::types::Change) -> HashMap<String, String> {
+        let mut object_names = HashMap::new();
+        
+        // Try to get object names from workspace provider
+        // This is a simplified implementation - in practice you'd want to
+        // query the actual object names from the MOO database
+        for obj_id in change.added_objects.iter()
+            .chain(change.modified_objects.iter())
+            .chain(change.deleted_objects.iter()) {
+            
+            // For now, we'll just use the object ID as the name
+            // In a real implementation, you'd query the actual object names
+            object_names.insert(obj_id.clone(), obj_id.clone());
+        }
+        
+        for renamed in &change.renamed_objects {
+            object_names.insert(renamed.from.clone(), renamed.from.clone());
+            object_names.insert(renamed.to.clone(), renamed.to.clone());
+        }
+        
+        object_names
     }
 }
 
@@ -78,7 +145,7 @@ impl Operation for ChangeAbandonOperation {
     }
     
     fn description(&self) -> &'static str {
-        "Abandons the current local change, removing it from index and clearing repository state. Cannot abandon merged changes."
+        "Abandons the current local change, removing it from index and clearing repository state. Returns an ObjectDeltaModel showing what changes need to be undone. Cannot abandon merged changes."
     }
     
     fn routes(&self) -> Vec<OperationRoute> {
@@ -102,9 +169,10 @@ impl Operation for ChangeAbandonOperation {
         let request = ChangeAbandonRequest {};
 
         match self.process_change_abandon(request) {
-            Ok(result) => {
-                info!("Change abandon operation completed successfully");
-                moor_var::v_str(&result)
+            Ok(delta_model) => {
+                info!("Change abandon operation completed successfully, returning undo delta");
+                // Return the ObjectDeltaModel as a MOO variable showing what needs to be undone
+                delta_model.to_moo_var()
             }
             Err(e) => {
                 error!("Change abandon operation failed: {}", e);

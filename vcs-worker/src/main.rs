@@ -17,6 +17,7 @@ mod util;
 mod database;
 mod providers;
 mod types;
+mod model;
 
 use operations::create_default_registry;
 use router::{start_http_server, create_rpc_handler};
