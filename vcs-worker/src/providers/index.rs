@@ -1,6 +1,4 @@
 use sled::Tree;
-use std::sync::Arc;
-use serde::{Serialize, Deserialize};
 use tracing::{info, warn};
 use tokio::sync::mpsc;
 
@@ -231,6 +229,8 @@ impl IndexProvider for IndexProviderImpl {
             modified_objects: Vec::new(),
             deleted_objects: Vec::new(),
             renamed_objects: Vec::new(),
+            index_change_id: None,
+            version_overrides: Vec::new(),
         };
         
         self.store_change(&change)?;

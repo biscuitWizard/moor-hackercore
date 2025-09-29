@@ -17,10 +17,14 @@ use thiserror::Error;
 /// Status of a change in the VCS workflow
 /// MERGED: The change has been committed and merged into the main branch
 /// LOCAL: The change is currently being worked on (current working change)
+/// REVIEW: The change is pending review/approval
+/// IDLE: The change is inactive but preserved for future work
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ChangeStatus {
-    Merged, // or "COMMITTED" 
-    Local,  // or "WORKING"
+    Merged,  // or "COMMITTED" 
+    Local,   // or "WORKING"
+    Review,  // Awaiting approval/review
+    Idle,    // Inactive but preserved
 }
 
 /// Represents a file rename operation
@@ -38,11 +42,22 @@ pub struct Change {
     pub description: Option<String>,
     pub author: String,
     pub timestamp: u64, // Linux UTC epoch
-    pub status: ChangeStatus, // MERGED or LOCAL
+    pub status: ChangeStatus, // MERGED, LOCAL, REVIEW, or IDLE
     pub added_objects: Vec<String>,
     pub modified_objects: Vec<String>,
     pub deleted_objects: Vec<String>,
     pub renamed_objects: Vec<RenamedObject>,
+    // Workspace-specific fields
+    pub index_change_id: Option<String>, // The indexed change this workspace change is based on
+    pub version_overrides: Vec<ObjectVersionOverride>, // Local modifications from indexed change
+}
+
+/// Represents a version override for changes that aren't yet on the index
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ObjectVersionOverride {
+    pub object_name: String,
+    pub version: u64,
+    pub sha256_key: String,
 }
 
 /// Represents the current state of the repository
