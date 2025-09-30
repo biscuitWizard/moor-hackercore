@@ -14,7 +14,7 @@ pub use object::{ObjectGetOperation, ObjectUpdateOperation, ObjectRenameOperatio
 pub use index::IndexListOperation;
 pub use clone_op::CloneOperation;
 pub use user::StatOperation;
-pub use workspace::WorkspaceSubmitOperation;
+pub use workspace::{WorkspaceSubmitOperation, WorkspaceListOperation};
 
 // Re-export common types from crate::types
 pub use crate::types::OperationRequest;
@@ -80,6 +80,7 @@ pub fn create_default_registry() -> Result<(OperationRegistry, DatabaseRef), Obj
     registry.register(CloneOperation::new(database.clone()));
     registry.register(StatOperation);
     registry.register(WorkspaceSubmitOperation::new(database.clone()));
+    registry.register(WorkspaceListOperation::new(database.clone()));
     registry.register(ChangeSwitchOperation::new(database.clone()));
     
     Ok((registry, database))

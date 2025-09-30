@@ -22,7 +22,7 @@ use utoipa::ToSchema;
 /// LOCAL: The change is currently being worked on (current working change)
 /// REVIEW: The change is pending review/approval
 /// IDLE: The change is inactive but preserved for future work
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, ToSchema)]
 pub enum ChangeStatus {
     Merged,  // or "COMMITTED" 
     Local,   // or "WORKING"
