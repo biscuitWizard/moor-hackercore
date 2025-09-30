@@ -29,11 +29,8 @@ use crate::providers::user::UserProvider;
 
 #[derive(Debug, Clone)]
 pub struct OperationRoute {
-    #[allow(dead_code)]
     pub path: String,
-    #[allow(dead_code)]
     pub method: Method,
-    #[allow(dead_code)]
     pub is_json: bool, // Whether to expect JSON body vs query params
 }
 
@@ -42,11 +39,9 @@ pub trait Operation: Send + Sync {
     fn name(&self) -> &'static str;
     
     /// Description of what the operation does
-    #[allow(dead_code)]
     fn description(&self) -> &'static str;
     
     /// HTTP routing information for this operation
-    #[allow(dead_code)]
     fn routes(&self) -> Vec<OperationRoute>;
     
     /// Execute the operation with the given arguments and user context, returning a moor Var

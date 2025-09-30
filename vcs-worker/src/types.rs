@@ -15,13 +15,14 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use std::collections::HashSet;
 use moor_var::Obj;
+use utoipa::ToSchema;
 
 /// Status of a change in the VCS workflow
 /// MERGED: The change has been committed and merged into the main branch
 /// LOCAL: The change is currently being worked on (current working change)
 /// REVIEW: The change is pending review/approval
 /// IDLE: The change is inactive but preserved for future work
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
 pub enum ChangeStatus {
     Merged,  // or "COMMITTED" 
     Local,   // or "WORKING"
@@ -68,17 +69,22 @@ pub struct ObjectInfo {
 }
 
 /// Response structure for operations - converted from Var for HTTP
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct OperationResponse {
+    /// The result of the operation
     pub result: serde_json::Value,
+    /// Whether the operation was successful
     pub success: bool,
+    /// The operation that was executed
     pub operation: String,
 }
 
 /// Request structure for HTTP requests
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct HttpRequest {
+    /// The operation to execute
     pub operation: String,
+    /// Arguments for the operation
     pub args: Vec<String>,
 }
 
@@ -130,16 +136,19 @@ pub struct ChangeSwitchRequest {
 }
 
 /// Request structure for object get operations
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ObjectGetRequest {
+    /// Name of the object to retrieve
     pub object_name: String,
 }
 
 /// Request structure for object update operations
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ObjectUpdateRequest {
+    /// Name of the object to update
     pub object_name: String,
-    pub vars: Vec<String>, // List of strings representing the MOO object dump
+    /// List of strings representing the MOO object dump
+    pub vars: Vec<String>,
 }
 
 /// Request structure for object rename operations

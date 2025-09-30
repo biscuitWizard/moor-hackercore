@@ -121,6 +121,10 @@ services:
         --events-address=tcp://moor-daemon:7898 
         --workers-request-address=tcp://moor-daemon:7896 
         --workers-response-address=tcp://moor-daemon:7897
+        --http-address=0.0.0.0:9998
+    ports:
+      # HTTP API and Swagger UI
+      - "9998:9998"
     networks:
       - moor_net
   

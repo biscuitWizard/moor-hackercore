@@ -98,7 +98,6 @@ impl OperationRegistry {
     }
     
     /// Get all HTTP routes from registered operations
-    #[allow(dead_code)]
     pub fn get_all_routes(&self) -> Vec<(OperationRoute, String)> {
         let mut routes = Vec::new();
         for op_name in self.operations.keys() {
@@ -109,6 +108,11 @@ impl OperationRegistry {
             }
         }
         routes
+    }
+    
+    /// Get the description of an operation by name
+    pub fn get_operation_description(&self, name: &str) -> Option<&'static str> {
+        self.operations.get(name).map(|op| op.description())
     }
 }
 
