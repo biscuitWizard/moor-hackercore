@@ -3,6 +3,7 @@ use moor_compiler::{compile_object_definitions, ObjFileContext, CompileOptions, 
 use tracing::{info, warn};
 use tokio::sync::mpsc;
 use sha2::{Sha256, Digest};
+use std::collections::HashMap;
 
 use super::{ProviderError, ProviderResult};
 
@@ -26,6 +27,12 @@ pub trait ObjectsProvider: Send + Sync {
     
     /// Get count of stored objects
     fn count(&self) -> usize;
+    
+    /// Get all objects as a HashMap (for export/cloning)
+    fn get_all_objects(&self) -> ProviderResult<HashMap<String, String>>;
+    
+    /// Clear all objects from storage
+    fn clear(&self) -> ProviderResult<()>;
 }
 
 /// Implementation of ObjectsProvider using Fjall
@@ -98,5 +105,32 @@ impl ObjectsProvider for ObjectsProviderImpl {
 
     fn count(&self) -> usize {
         self.objects_tree.len().unwrap_or(0)
+    }
+    
+    fn get_all_objects(&self) -> ProviderResult<HashMap<String, String>> {
+        let mut objects = std::collections::HashMap::new();
+        
+        for result in self.objects_tree.iter() {
+            let (key, value) = result?;
+            let sha256 = String::from_utf8(key.to_vec())?;
+            let data = String::from_utf8(value.to_vec())?;
+            objects.insert(sha256, data);
+        }
+        
+        Ok(objects)
+    }
+    
+    fn clear(&self) -> ProviderResult<()> {
+        let keys: Vec<_> = self.objects_tree.iter()
+            .filter_map(|result| result.ok())
+            .map(|(key, _)| key.to_vec())
+            .collect();
+        
+        for key in keys {
+            self.objects_tree.remove(&key)?;
+        }
+        
+        info!("Cleared all objects from storage");
+        Ok(())
     }
 }

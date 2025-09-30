@@ -150,11 +150,28 @@ pub struct IndexListRequest {
     pub page: Option<usize>,
 }
 
+/// Request structure for clone operations
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CloneRequest {
+    pub url: Option<String>, // If None, exports; if Some, imports from URL
+}
+
+/// Data structure for clone export/import
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CloneData {
+    pub refs: std::collections::HashMap<ObjectInfo, String>, // ObjectInfo -> sha256
+    pub objects: std::collections::HashMap<String, String>, // sha256 -> object data
+    pub changes: Vec<Change>, // All changes
+    pub change_order: Vec<String>, // Order of changes
+    pub source: Option<String>, // Source URL if this is a clone
+}
+
 /// User permissions in the system
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum Permission {
     ApproveChanges,
     SubmitChanges,
+    Clone,
 }
 
 impl Permission {
@@ -163,6 +180,7 @@ impl Permission {
         vec![
             Permission::ApproveChanges,
             Permission::SubmitChanges,
+            Permission::Clone,
         ]
     }
     
@@ -171,6 +189,7 @@ impl Permission {
         match self {
             Permission::ApproveChanges => "Approve_Changes".to_string(),
             Permission::SubmitChanges => "Submit_Changes".to_string(),
+            Permission::Clone => "Clone".to_string(),
         }
     }
     
@@ -179,6 +198,7 @@ impl Permission {
         match s {
             "Approve_Changes" => Some(Permission::ApproveChanges),
             "Submit_Changes" => Some(Permission::SubmitChanges),
+            "Clone" => Some(Permission::Clone),
             _ => None,
         }
     }

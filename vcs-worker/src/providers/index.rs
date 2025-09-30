@@ -13,6 +13,9 @@ pub trait IndexProvider: Send + Sync {
     /// Get the ordered list of change IDs (most recent first)
     fn get_change_order(&self) -> ProviderResult<Vec<String>>;
     
+    /// Set the complete change order (for bulk operations like cloning)
+    fn set_change_order(&self, order: Vec<String>) -> ProviderResult<()>;
+    
     /// Get the top (most recent/current) change ID
     fn get_top_change(&self) -> ProviderResult<Option<String>>;
     
@@ -47,6 +50,17 @@ pub trait IndexProvider: Send + Sync {
     
     /// Compute complete object list by walking through all changes chronologically
     fn compute_complete_object_list(&self) -> ProviderResult<Vec<crate::types::ObjectInfo>>;
+    
+    // ===== SOURCE METHODS =====
+    /// Get the source URL if this is a clone
+    fn get_source(&self) -> ProviderResult<Option<String>>;
+    
+    /// Set the source URL for this clone
+    fn set_source(&self, url: &str) -> ProviderResult<()>;
+    
+    // ===== CLEAR METHODS =====
+    /// Clear all changes and index data
+    fn clear(&self) -> ProviderResult<()>;
 }
 
 pub struct IndexProviderImpl {
@@ -66,6 +80,7 @@ impl IndexProviderImpl {
     
     const ORDER_KEY: &'static str = "change_order";
     const TOP_KEY: &'static str = "top_change";
+    const SOURCE_KEY: &'static str = "source_url";
     
     // ===== DRY HELPER METHODS =====
     
@@ -184,6 +199,21 @@ impl IndexProvider for IndexProviderImpl {
     
     fn get_change_order(&self) -> ProviderResult<Vec<String>> {
         self.get_change_order_internal()
+    }
+    
+    fn set_change_order(&self, order: Vec<String>) -> ProviderResult<()> {
+        self.save_change_order(&order)?;
+        
+        // Update top change to the first in the order
+        if let Some(top_change_id) = order.first() {
+            self.tree.insert(Self::TOP_KEY, top_change_id.as_bytes())?;
+            info!("Set change order with {} changes, top change: {}", order.len(), top_change_id);
+        } else {
+            self.tree.remove(Self::TOP_KEY)?;
+            info!("Set empty change order");
+        }
+        
+        Ok(())
     }
     
     fn get_top_change(&self) -> ProviderResult<Option<String>> {
@@ -391,5 +421,45 @@ impl IndexProvider for IndexProviderImpl {
         info!("Final object list contains {} objects", object_list.len());
         
         Ok(object_list)
+    }
+    
+    fn get_source(&self) -> ProviderResult<Option<String>> {
+        if let Some(data) = self.tree.get(Self::SOURCE_KEY)? {
+            Ok(Some(String::from_utf8(data.to_vec())
+                .map_err(|e| ProviderError::SerializationError(e.to_string()))?))
+        } else {
+            Ok(None)
+        }
+    }
+    
+    fn set_source(&self, url: &str) -> ProviderResult<()> {
+        self.tree.insert(Self::SOURCE_KEY, url.as_bytes())?;
+        info!("Set source URL to: {}", url);
+        Ok(())
+    }
+    
+    fn clear(&self) -> ProviderResult<()> {
+        // Clear the index tree (change order, top change, source)
+        let index_keys: Vec<_> = self.tree.iter()
+            .filter_map(|result| result.ok())
+            .map(|(key, _)| key.to_vec())
+            .collect();
+        
+        for key in index_keys {
+            self.tree.remove(&key)?;
+        }
+        
+        // Clear the changes tree
+        let changes_keys: Vec<_> = self.changes_tree.iter()
+            .filter_map(|result| result.ok())
+            .map(|(key, _)| key.to_vec())
+            .collect();
+        
+        for key in changes_keys {
+            self.changes_tree.remove(&key)?;
+        }
+        
+        info!("Cleared all index and changes data");
+        Ok(())
     }
 }

@@ -24,6 +24,12 @@ pub trait RefsProvider: Send + Sync {
     
     /// Get the next version number for an object
     fn get_next_version(&self, object_name: &str) -> ProviderResult<u64>;
+    
+    /// Get all refs as a HashMap (for export/cloning)
+    fn get_all_refs(&self) -> ProviderResult<HashMap<ObjectInfo, String>>;
+    
+    /// Clear all refs from storage
+    fn clear(&self) -> ProviderResult<()>;
 }
 
 /// Implementation of RefsProvider using Fjall
@@ -129,6 +135,20 @@ impl RefsProvider for RefsProviderImpl {
             None => Ok(1), // First version
         }
     }
-
+    
+    fn get_all_refs(&self) -> ProviderResult<HashMap<ObjectInfo, String>> {
+        let storage = self.load_refs_storage()?;
+        Ok(storage.refs.clone())
+    }
+    
+    fn clear(&self) -> ProviderResult<()> {
+        let empty_storage = RefsStorage {
+            refs: HashMap::new(),
+        };
+        self.save_refs_storage(&empty_storage)?;
+        
+        info!("Cleared all refs from storage");
+        Ok(())
+    }
 
 }
