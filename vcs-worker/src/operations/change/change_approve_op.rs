@@ -85,33 +85,15 @@ impl ChangeApproveOperation {
     fn build_object_diff(&self, local_change: &crate::types::Change) -> Result<ObjectDiffModel, ObjectsTreeError> {
         let mut diff_model = ObjectDiffModel::new();
         
-        // Get all changes in chronological order (oldest first)
-        let mut changes_order = self.database.index().get_change_order()
+        // Get the complete object list from the index state (excluding the local change)
+        let complete_object_list = self.database.index().compute_complete_object_list()
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
-        changes_order.reverse(); // Reverse to get oldest first
         
-        // Find the local change in the order and get all changes below it
-        let local_change_index = changes_order.iter()
-            .position(|id| id == &local_change.id)
-            .ok_or_else(|| ObjectsTreeError::SerializationError(format!("Local change '{}' not found in order", local_change.id)))?;
-        
-        // Get all changes below the local change (these are the "compiled changes")
-        let compiled_changes: Vec<&String> = changes_order[..local_change_index].iter().collect();
-        
-        info!("Found {} compiled changes below local change '{}'", compiled_changes.len(), local_change.name);
+        info!("Using complete object list with {} objects as baseline for change '{}'", 
+              complete_object_list.len(), local_change.name);
         
         // Process the local change to build the diff
         self.process_change_for_diff(&mut diff_model, local_change)?;
-        
-        // Process all compiled changes to understand the baseline state
-        for change_id in compiled_changes {
-            if let Some(change) = self.database.index().get_change(change_id)
-                .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))? {
-                // Note: We don't add these to the diff model, but we could use them
-                // to understand the baseline state if needed for more sophisticated comparison
-                info!("Skipping compiled change '{}' (status: {:?})", change.name, change.status);
-            }
-        }
         
         Ok(diff_model)
     }

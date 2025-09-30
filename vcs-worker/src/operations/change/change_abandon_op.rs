@@ -36,6 +36,13 @@ impl ChangeAbandonOperation {
                 ));
             }
             
+            // Get the complete object list from the index state for comparison
+            let complete_object_list = self.database.index().compute_complete_object_list()
+                .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+            
+            info!("Using complete object list with {} objects as baseline for abandoning change '{}'", 
+                  complete_object_list.len(), change.name);
+            
             // Create a delta model showing what needs to be undone
             let mut undo_delta = ObjectDiffModel::new();
             
