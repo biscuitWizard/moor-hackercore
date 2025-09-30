@@ -6,7 +6,7 @@ mod index;
 
 pub use registry::OperationRegistry;
 pub use hello_op::HelloOperation;
-pub use change::{ChangeCreateOperation, ChangeAbandonOperation, ChangeStatusOperation};
+pub use change::{ChangeCreateOperation, ChangeAbandonOperation, ChangeStatusOperation, ChangeApproveOperation};
 pub use object::{ObjectGetOperation, ObjectUpdateOperation, ObjectRenameOperation, ObjectDeleteOperation, ObjectListOperation};
 pub use index::IndexListOperation;
 
@@ -63,6 +63,7 @@ pub fn create_default_registry() -> Result<(OperationRegistry, DatabaseRef), Obj
     registry.register(ChangeCreateOperation::new(database.clone()));
     registry.register(ChangeAbandonOperation::new(database.clone()));
     registry.register(ChangeStatusOperation::new(database.clone()));
+    registry.register(ChangeApproveOperation::new(database.clone()));
     registry.register(IndexListOperation::new(database.clone()));
     
     Ok((registry, database))

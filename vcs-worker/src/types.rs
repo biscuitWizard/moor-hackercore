@@ -109,6 +109,12 @@ pub struct ChangeAbandonRequest {
     // No fields needed - just abandons the current change
 }
 
+/// Request structure for change approve operations
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChangeApproveRequest {
+    pub change_id: String,
+}
+
 /// Request structure for object get operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ObjectGetRequest {
