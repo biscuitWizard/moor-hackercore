@@ -9,6 +9,7 @@ use crate::providers::{
     ObjectsProvider, ObjectsProviderImpl,
     RefsProviderImpl,
     IndexProviderImpl,
+    UserProviderImpl,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -36,6 +37,7 @@ pub struct Database {
     objects_provider: Arc<ObjectsProviderImpl>,
     refs_provider: Arc<RefsProviderImpl>,
     index_provider: Arc<IndexProviderImpl>,
+    user_provider: Arc<UserProviderImpl>,
     
     #[allow(dead_code)]
     flush_sender: mpsc::UnboundedSender<()>,
@@ -58,6 +60,7 @@ impl Database {
         let index_tree = keyspace.open_partition("index", fjall::PartitionCreateOptions::default())?;
         let changes_tree = keyspace.open_partition("changes", fjall::PartitionCreateOptions::default())?;
         let workspace_tree = keyspace.open_partition("workspace", fjall::PartitionCreateOptions::default())?;
+        let users_tree = keyspace.open_partition("users", fjall::PartitionCreateOptions::default())?;
         
         // Create channel for background flushing
         let (flush_sender, mut flush_receiver) = mpsc::unbounded_channel();
@@ -66,6 +69,7 @@ impl Database {
         let objects_provider = Arc::new(ObjectsProviderImpl::new(objects_tree.clone(), flush_sender.clone()));
         let refs_provider = Arc::new(RefsProviderImpl::new(refs_tree.clone(), flush_sender.clone()));
         let index_provider = Arc::new(IndexProviderImpl::new(index_tree.clone(), changes_tree.clone(), flush_sender.clone()));
+        let user_provider = Arc::new(UserProviderImpl::new(users_tree.clone(), flush_sender.clone()));
         
         info!("Database initialized with {} objects", objects_provider.count());
         info!("Changes tree initialized with {} changes", changes_tree.len().unwrap_or(0));
@@ -123,6 +127,7 @@ impl Database {
             objects_provider,
             refs_provider,
             index_provider,
+            user_provider,
             flush_sender,
         })
     }
@@ -142,7 +147,10 @@ impl Database {
         &self.index_provider
     }
 
-
+    /// Get direct access to the user provider
+    pub fn users(&self) -> &Arc<UserProviderImpl> {
+        &self.user_provider
+    }
 }
 
 /// Shared reference to the database for use across the application

@@ -18,6 +18,8 @@ use std::sync::Arc;
 
 use crate::config::Config;
 use crate::database::{Database, DatabaseRef, ObjectsTreeError};
+use crate::types::User;
+use crate::providers::user::UserProvider;
 
 #[derive(Debug, Clone)]
 pub struct OperationRoute {
@@ -41,8 +43,8 @@ pub trait Operation: Send + Sync {
     #[allow(dead_code)]
     fn routes(&self) -> Vec<OperationRoute>;
     
-    /// Execute the operation with the given arguments, returning a moor Var
-    fn execute(&self, args: Vec<String>) -> moor_var::Var;
+    /// Execute the operation with the given arguments and user context, returning a moor Var
+    fn execute(&self, args: Vec<String>, user: &User) -> moor_var::Var;
 }
 
 /// Create the default registry with built-in operations
@@ -52,6 +54,14 @@ pub fn create_default_registry() -> Result<(OperationRegistry, DatabaseRef), Obj
     // Initialize config and database
     let config = Config::new();
     let database = Arc::new(Database::new(&config)?);
+    
+    // Set the user provider in the registry
+    registry.set_user_provider(database.users().clone());
+    
+    // Ensure the Everyone user exists
+    if let Err(e) = database.users().ensure_everyone_user() {
+        tracing::warn!("Failed to ensure Everyone user exists: {}", e);
+    }
     
     // Register built-in operations
     registry.register(HelloOperation);

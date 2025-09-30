@@ -4,6 +4,7 @@ use tracing::{error, info};
 use serde::{Deserialize, Serialize};
 
 use crate::database::{DatabaseRef, ObjectsTreeError};
+use crate::types::User;
 use crate::providers::index::IndexProvider;
 use crate::types::ChangeStatus;
 use crate::object_diff::build_object_diff_from_change;
@@ -98,7 +99,7 @@ impl Operation for ChangeStatusOperation {
         ]
     }
     
-    fn execute(&self, _args: Vec<String>) -> moor_var::Var {
+    fn execute(&self, _args: Vec<String>, _user: &User) -> moor_var::Var {
         info!("Change status operation executed");
         
         let request = ChangeStatusRequest {};

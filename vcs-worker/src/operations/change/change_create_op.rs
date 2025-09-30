@@ -3,6 +3,7 @@ use axum::http::Method;
 use tracing::{error, info};
 
 use crate::database::{DatabaseRef, ObjectsTreeError};
+use crate::types::User;
 use crate::providers::index::IndexProvider;
 use crate::types::{ChangeCreateRequest, Change, ChangeStatus};
 
@@ -88,7 +89,7 @@ impl Operation for ChangeCreateOperation {
         ]
     }
     
-    fn execute(&self, args: Vec<String>) -> moor_var::Var {
+    fn execute(&self, args: Vec<String>, _user: &User) -> moor_var::Var {
         info!("Change create operation received {} arguments: {:?}", args.len(), args);
         
         if args.len() < 2 {

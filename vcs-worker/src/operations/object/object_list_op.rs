@@ -4,7 +4,7 @@ use tracing::{error, info};
 use serde::{Deserialize, Serialize};
 
 use crate::database::{DatabaseRef, ObjectsTreeError};
-use crate::types::ObjectInfo;
+use crate::types::{ObjectInfo, User};
 use crate::providers::index::IndexProvider;
 
 /// Request structure for object list operations
@@ -75,7 +75,7 @@ impl Operation for ObjectListOperation {
         ]
     }
     
-    fn execute(&self, args: Vec<String>) -> moor_var::Var {
+    fn execute(&self, args: Vec<String>, _user: &User) -> moor_var::Var {
         info!("Executing object list operation with {} args", args.len());
         
         let request = ObjectListRequest {

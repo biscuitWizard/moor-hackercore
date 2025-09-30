@@ -3,7 +3,7 @@ use axum::http::Method;
 use tracing::{error, info};
 
 use crate::database::DatabaseRef;
-use crate::types::ObjectsTreeError;
+use crate::types::{ObjectsTreeError, User};
 use crate::providers::index::IndexProvider;
 use crate::providers::refs::RefsProvider;
 use crate::types::ObjectDeleteRequest;
@@ -105,7 +105,7 @@ impl Operation for ObjectDeleteOperation {
         ]
     }
     
-    fn execute(&self, args: Vec<String>) -> moor_var::Var {
+    fn execute(&self, args: Vec<String>, _user: &User) -> moor_var::Var {
         info!("Object delete operation received {} arguments: {:?}", args.len(), args);
         
         if args.len() < 1 {

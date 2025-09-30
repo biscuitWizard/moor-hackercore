@@ -3,6 +3,7 @@ use axum::http::Method;
 use tracing::{error, info};
 
 use crate::database::{DatabaseRef, ObjectsTreeError};
+use crate::types::User;
 use crate::providers::index::IndexProvider;
 use crate::types::{ChangeAbandonRequest, ChangeStatus};
 use crate::object_diff::{ObjectDiffModel, build_abandon_diff_from_change};
@@ -80,7 +81,7 @@ impl Operation for ChangeAbandonOperation {
         ]
     }
     
-    fn execute(&self, args: Vec<String>) -> moor_var::Var {
+    fn execute(&self, args: Vec<String>, _user: &User) -> moor_var::Var {
         info!("Change abandon operation received {} arguments", args.len());
         
         let request = ChangeAbandonRequest {};

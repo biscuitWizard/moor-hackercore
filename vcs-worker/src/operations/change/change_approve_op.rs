@@ -4,7 +4,7 @@ use tracing::{error, info};
 
 use crate::database::{DatabaseRef, ObjectsTreeError};
 use crate::providers::index::IndexProvider;
-use crate::types::{ChangeApproveRequest, ChangeStatus};
+use crate::types::{ChangeApproveRequest, ChangeStatus, User, Permission};
 use crate::object_diff::{ObjectDiffModel, build_object_diff_from_change};
 use moor_var::{v_error, E_INVARG};
 
@@ -21,15 +21,23 @@ impl ChangeApproveOperation {
     }
 
     /// Process the change approve request
-    fn process_change_approve(&self, request: ChangeApproveRequest) -> Result<ObjectDiffModel, ObjectsTreeError> {
+    fn process_change_approve(&self, request: ChangeApproveRequest, user: &User) -> Result<ObjectDiffModel, ObjectsTreeError> {
         let change_id = request.change_id;
+        
+        // Check if user has permission to approve changes
+        if !user.has_permission(&Permission::ApproveChanges) {
+            error!("User '{}' does not have permission to approve changes", user.id);
+            return Err(ObjectsTreeError::SerializationError(
+                format!("User '{}' does not have permission to approve changes", user.id)
+            ));
+        }
         
         // Get the change by ID
         let mut change = self.database.index().get_change(&change_id)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
             .ok_or_else(|| ObjectsTreeError::SerializationError(format!("Change '{}' not found", change_id)))?;
         
-        info!("Attempting to approve change: {} ({})", change.name, change.id);
+        info!("User '{}' attempting to approve change: {} ({})", user.id, change.name, change.id);
         
         // Check if the change is local
         if change.status != ChangeStatus::Local {
@@ -107,8 +115,8 @@ impl Operation for ChangeApproveOperation {
         ]
     }
     
-    fn execute(&self, args: Vec<String>) -> moor_var::Var {
-        info!("Change approve operation received {} arguments", args.len());
+    fn execute(&self, args: Vec<String>, user: &User) -> moor_var::Var {
+        info!("Change approve operation received {} arguments for user: {}", args.len(), user.id);
         
         if args.is_empty() {
             error!("Change approve operation requires a change ID argument");
@@ -118,7 +126,7 @@ impl Operation for ChangeApproveOperation {
         let change_id = args[0].clone();
         let request = ChangeApproveRequest { change_id };
 
-        match self.process_change_approve(request) {
+        match self.process_change_approve(request, user) {
             Ok(diff_model) => {
                 info!("Change approve operation completed successfully, returning change diff");
                 // Return the ObjectDiffModel as a MOO variable showing what was approved

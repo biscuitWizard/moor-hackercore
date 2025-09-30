@@ -1,5 +1,6 @@
 use super::{Operation, OperationRoute};
 use axum::http::Method;
+use crate::types::User;
 
 /// Simple hello operation implementation
 #[derive(Clone)]
@@ -29,7 +30,7 @@ impl Operation for HelloOperation {
         ]
     }
     
-    fn execute(&self, _args: Vec<String>) -> moor_var::Var {
+    fn execute(&self, _args: Vec<String>, _user: &User) -> moor_var::Var {
         tracing::info!("Executing hello operation");
         moor_var::v_str("goodbye")
     }

@@ -13,6 +13,8 @@
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use std::collections::HashSet;
+use moor_var::Obj;
 
 /// Status of a change in the VCS workflow
 /// MERGED: The change has been committed and merged into the main branch
@@ -146,6 +148,105 @@ pub struct ObjectDeleteRequest {
 pub struct IndexListRequest {
     pub limit: Option<usize>,
     pub page: Option<usize>,
+}
+
+/// User permissions in the system
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub enum Permission {
+    ApproveChanges,
+    SubmitChanges,
+}
+
+impl Permission {
+    /// Get all available permissions
+    pub fn all() -> Vec<Permission> {
+        vec![
+            Permission::ApproveChanges,
+            Permission::SubmitChanges,
+        ]
+    }
+    
+    /// Convert permission to string for storage
+    pub fn to_string(&self) -> String {
+        match self {
+            Permission::ApproveChanges => "Approve_Changes".to_string(),
+            Permission::SubmitChanges => "Submit_Changes".to_string(),
+        }
+    }
+    
+    /// Parse permission from string
+    pub fn from_string(s: &str) -> Option<Permission> {
+        match s {
+            "Approve_Changes" => Some(Permission::ApproveChanges),
+            "Submit_Changes" => Some(Permission::SubmitChanges),
+            _ => None,
+        }
+    }
+}
+
+/// Represents a user in the system
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct User {
+    pub id: String,
+    pub email: String,
+    pub v_obj: Obj,
+    pub authorized_keys: Vec<String>,
+    pub permissions: HashSet<Permission>,
+}
+
+impl User {
+    /// Create a new user
+    pub fn new(id: String, email: String, v_obj: Obj) -> Self {
+        Self {
+            id,
+            email,
+            v_obj,
+            authorized_keys: Vec::new(),
+            permissions: HashSet::new(),
+        }
+    }
+    
+    /// Add an authorized key
+    pub fn add_authorized_key(&mut self, key: String) {
+        if !self.authorized_keys.contains(&key) {
+            self.authorized_keys.push(key);
+        }
+    }
+    
+    /// Remove an authorized key
+    pub fn remove_authorized_key(&mut self, key: &str) -> bool {
+        if let Some(pos) = self.authorized_keys.iter().position(|k| k == key) {
+            self.authorized_keys.remove(pos);
+            true
+        } else {
+            false
+        }
+    }
+    
+    /// Add a permission
+    pub fn add_permission(&mut self, permission: Permission) {
+        self.permissions.insert(permission);
+    }
+    
+    /// Remove a permission
+    pub fn remove_permission(&mut self, permission: &Permission) -> bool {
+        self.permissions.remove(permission)
+    }
+    
+    /// Check if user has a specific permission
+    pub fn has_permission(&self, permission: &Permission) -> bool {
+        self.permissions.contains(permission)
+    }
+    
+    /// Check if user has any of the specified permissions
+    pub fn has_any_permission(&self, permissions: &[Permission]) -> bool {
+        permissions.iter().any(|p| self.permissions.contains(p))
+    }
+    
+    /// Check if user has all of the specified permissions
+    pub fn has_all_permissions(&self, permissions: &[Permission]) -> bool {
+        permissions.iter().all(|p| self.permissions.contains(p))
+    }
 }
 
 /// General error types for the VCS worker

@@ -7,6 +7,7 @@ use crate::database::{DatabaseRef, ObjectsTreeError};
 use crate::providers::index::IndexProvider;
 use crate::providers::refs::RefsProvider;
 use crate::providers::objects::ObjectsProvider;
+use crate::types::User;
 
 /// Request structure for object update operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -150,7 +151,7 @@ impl Operation for ObjectUpdateOperation {
         ]
     }
     
-    fn execute(&self, args: Vec<String>) -> moor_var::Var {
+    fn execute(&self, args: Vec<String>, _user: &User) -> moor_var::Var {
         // For RPC calls, we expect the args to contain:
         // args[0] = object_name
         // args[1..] = the var strings (either JSON encoded or individual strings)
