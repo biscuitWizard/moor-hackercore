@@ -196,31 +196,12 @@ pub enum Permission {
 }
 
 impl Permission {
-    /// Get all available permissions
-    pub fn all() -> Vec<Permission> {
-        vec![
-            Permission::ApproveChanges,
-            Permission::SubmitChanges,
-            Permission::Clone,
-        ]
-    }
-    
     /// Convert permission to string for storage
     pub fn to_string(&self) -> String {
         match self {
             Permission::ApproveChanges => "Approve_Changes".to_string(),
             Permission::SubmitChanges => "Submit_Changes".to_string(),
             Permission::Clone => "Clone".to_string(),
-        }
-    }
-    
-    /// Parse permission from string
-    pub fn from_string(s: &str) -> Option<Permission> {
-        match s {
-            "Approve_Changes" => Some(Permission::ApproveChanges),
-            "Submit_Changes" => Some(Permission::SubmitChanges),
-            "Clone" => Some(Permission::Clone),
-            _ => None,
         }
     }
 }
@@ -279,15 +260,6 @@ impl User {
         self.permissions.contains(permission)
     }
     
-    /// Check if user has any of the specified permissions
-    pub fn has_any_permission(&self, permissions: &[Permission]) -> bool {
-        permissions.iter().any(|p| self.permissions.contains(p))
-    }
-    
-    /// Check if user has all of the specified permissions
-    pub fn has_all_permissions(&self, permissions: &[Permission]) -> bool {
-        permissions.iter().all(|p| self.permissions.contains(p))
-    }
 }
 
 /// General error types for the VCS worker
