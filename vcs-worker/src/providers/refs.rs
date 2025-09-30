@@ -11,7 +11,7 @@ use crate::types::ObjectInfo;
 /// Represents the refs storage as a HashMap where key is ObjectInfo and value is sha256
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RefsStorage {
-    pub refs: HashMap<ObjectInfo, String>, // ObjectInfo -> sha256
+    pub refs: HashMap<String, String>, // "name:version" -> sha256
 }
 
 /// Provider trait for reference management
@@ -74,24 +74,24 @@ impl RefsProvider for RefsProviderImpl {
         
         if let Some(target_version) = version {
             // Specific version requested
-            let object_info = ObjectInfo {
-                name: object_name.to_string(),
-                version: target_version,
-            };
-            Ok(storage.refs.get(&object_info).cloned())
+            let key = format!("{}:{}", object_name, target_version);
+            Ok(storage.refs.get(&key).cloned())
         } else {
             // Latest version requested
             let latest_version = storage.refs.keys()
-                .filter(|obj_info| obj_info.name == object_name)
-                .map(|obj_info| obj_info.version)
+                .filter(|key| key.starts_with(&format!("{}:", object_name)))
+                .filter_map(|key| {
+                    if let Some(version_str) = key.split(':').nth(1) {
+                        version_str.parse::<u64>().ok()
+                    } else {
+                        None
+                    }
+                })
                 .max();
                 
             if let Some(version) = latest_version {
-                let object_info = ObjectInfo {
-                    name: object_name.to_string(),
-                    version,
-                };
-                Ok(storage.refs.get(&object_info).cloned())
+                let key = format!("{}:{}", object_name, version);
+                Ok(storage.refs.get(&key).cloned())
             } else {
                 Ok(None)
             }
@@ -103,11 +103,8 @@ impl RefsProvider for RefsProviderImpl {
         let mut storage = self.load_refs_storage()?;
         
         // Add the new reference to the HashMap
-        let object_info = ObjectInfo {
-            name: object_name.to_string(),
-            version,
-        };
-        storage.refs.insert(object_info, sha256.to_string());
+        let key = format!("{}:{}", object_name, version);
+        storage.refs.insert(key, sha256.to_string());
         
         // Save the updated storage
         self.save_refs_storage(&storage)?;
@@ -126,8 +123,14 @@ impl RefsProvider for RefsProviderImpl {
         let storage = self.load_refs_storage()?;
         
         let latest_version = storage.refs.keys()
-            .filter(|obj_info| obj_info.name == object_name)
-            .map(|obj_info| obj_info.version)
+            .filter(|key| key.starts_with(&format!("{}:", object_name)))
+            .filter_map(|key| {
+                if let Some(version_str) = key.split(':').nth(1) {
+                    version_str.parse::<u64>().ok()
+                } else {
+                    None
+                }
+            })
             .max();
             
         match latest_version {
@@ -138,7 +141,21 @@ impl RefsProvider for RefsProviderImpl {
     
     fn get_all_refs(&self) -> ProviderResult<HashMap<ObjectInfo, String>> {
         let storage = self.load_refs_storage()?;
-        Ok(storage.refs.clone())
+        let mut result: HashMap<ObjectInfo, String> = HashMap::new();
+        
+        for (key, sha256) in &storage.refs {
+            if let Some((name, version_str)) = key.split_once(':') {
+                if let Ok(version) = version_str.parse::<u64>() {
+                    let object_info = ObjectInfo {
+                        name: name.to_string(),
+                        version,
+                    };
+                    result.insert(object_info, sha256.clone());
+                }
+            }
+        }
+        
+        Ok(result)
     }
     
     fn clear(&self) -> ProviderResult<()> {
