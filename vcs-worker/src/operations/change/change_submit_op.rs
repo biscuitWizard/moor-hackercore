@@ -22,7 +22,7 @@ impl ChangeSubmitOperation {
     }
 
     /// Process the change submit request
-    fn process_change_submit(&self, _request: ChangeSubmitRequest, user: &User) -> Result<ObjectDiffModel, ObjectsTreeError> {
+    fn process_change_submit(&self, request: ChangeSubmitRequest, user: &User) -> Result<ObjectDiffModel, ObjectsTreeError> {
         // Check if user has permission to submit changes
         if !user.has_permission(&Permission::SubmitChanges) {
             error!("User '{}' does not have permission to submit changes", user.id);
@@ -42,6 +42,36 @@ impl ChangeSubmitOperation {
             .ok_or_else(|| ObjectsTreeError::SerializationError(format!("Change '{}' not found", top_change_id)))?;
 
         info!("User '{}' attempting to submit change: {} ({})", user.id, change.name, change.id);
+
+        // Validate that author is set
+        if change.author.is_empty() {
+            error!("Cannot submit change '{}' - author is not set", change.name);
+            return Err(ObjectsTreeError::SerializationError(
+                "Cannot submit change - author is not set".to_string()
+            ));
+        }
+
+        // Use provided message or existing description, both are optional
+        let final_message = if let Some(request_message) = request.message {
+            if request_message.trim().is_empty() {
+                None
+            } else {
+                Some(request_message)
+            }
+        } else if let Some(existing_description) = &change.description {
+            if existing_description.trim().is_empty() {
+                None
+            } else {
+                Some(existing_description.clone())
+            }
+        } else {
+            None
+        };
+
+        // Update the change description if a new message was provided
+        if let Some(message) = &final_message {
+            change.description = Some(message.clone());
+        }
 
         // Check if the change is local
         if change.status != ChangeStatus::Local {
@@ -153,7 +183,7 @@ impl Operation for ChangeSubmitOperation {
     }
     
     fn description(&self) -> &'static str {
-        "Submits the top local change for review. Moves it to workspace with Review status, removes from index, and optionally submits to remote if source URL is configured. Returns an ObjectDiffModel showing what changes need to be undone."
+        "Submits the top local change for review. Requires author to be set. Moves it to workspace with Review status, removes from index, and optionally submits to remote if source URL is configured. Returns an ObjectDiffModel showing what changes need to be undone. Optional message argument can be provided to set/override the commit message."
     }
     
     fn routes(&self) -> Vec<OperationRoute> {
@@ -174,7 +204,20 @@ impl Operation for ChangeSubmitOperation {
     fn execute(&self, args: Vec<String>, user: &User) -> moor_var::Var {
         info!("Change submit operation received {} arguments for user: {}", args.len(), user.id);
         
-        let request = ChangeSubmitRequest {};
+        // Parse optional message argument
+        let message = if args.is_empty() {
+            None
+        } else {
+            // Join all arguments as the message
+            let message_text = args.join(" ").trim().to_string();
+            if message_text.is_empty() {
+                None
+            } else {
+                Some(message_text)
+            }
+        };
+        
+        let request = ChangeSubmitRequest { message };
 
         match self.process_change_submit(request, user) {
             Ok(undo_diff) => {

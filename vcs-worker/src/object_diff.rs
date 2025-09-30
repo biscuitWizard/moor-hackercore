@@ -270,7 +270,9 @@ pub fn compare_object_versions(database: &DatabaseRef, obj_name: &str, local_ver
         .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
     
     // Get the baseline version (previous version)
-    let baseline_version = if local_version > 1 { local_version - 1 } else { 1 };
+    // For version 1 (new object), there is no baseline (version 0 doesn't exist)
+    // For version 2+, the baseline is the previous version
+    let baseline_version = if local_version > 1 { local_version - 1 } else { 0 };
     let baseline_sha256 = database.refs().get_ref(obj_name, Some(baseline_version))
         .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
     
@@ -289,14 +291,14 @@ pub fn compare_object_versions(database: &DatabaseRef, obj_name: &str, local_ver
         // No baseline version - this is a new object, mark all as added
         for verb in &local_def.verbs {
             for verb_name in &verb.names {
-                object_change.verbs_added.insert(verb_name.to_string());
+                object_change.verbs_added.insert(verb_name.as_string());
             }
         }
         for prop_def in &local_def.property_definitions {
-            object_change.props_added.insert(prop_def.name.to_string());
+            object_change.props_added.insert(prop_def.name.as_string());
         }
         for prop_override in &local_def.property_overrides {
-            object_change.props_added.insert(prop_override.name.to_string());
+            object_change.props_added.insert(prop_override.name.as_string());
         }
     }
     
@@ -307,11 +309,11 @@ pub fn compare_object_versions(database: &DatabaseRef, obj_name: &str, local_ver
 pub fn compare_object_definitions(baseline: &ObjectDefinition, local: &ObjectDefinition, object_change: &mut ObjectChange) {
     // Compare verbs
     let baseline_verbs: HashMap<String, &moor_compiler::ObjVerbDef> = baseline.verbs.iter()
-        .flat_map(|v| v.names.iter().map(move |name| (name.to_string(), v)))
+        .flat_map(|v| v.names.iter().map(move |name| (name.as_string(), v)))
         .collect();
     
     let local_verbs: HashMap<String, &moor_compiler::ObjVerbDef> = local.verbs.iter()
-        .flat_map(|v| v.names.iter().map(move |name| (name.to_string(), v)))
+        .flat_map(|v| v.names.iter().map(move |name| (name.as_string(), v)))
         .collect();
     
     // Find added, modified, and deleted verbs
@@ -336,11 +338,11 @@ pub fn compare_object_definitions(baseline: &ObjectDefinition, local: &ObjectDef
     
     // Compare property definitions
     let baseline_props: HashMap<String, &moor_compiler::ObjPropDef> = baseline.property_definitions.iter()
-        .map(|p| (p.name.to_string(), p))
+        .map(|p| (p.name.as_string(), p))
         .collect();
     
     let local_props: HashMap<String, &moor_compiler::ObjPropDef> = local.property_definitions.iter()
-        .map(|p| (p.name.to_string(), p))
+        .map(|p| (p.name.as_string(), p))
         .collect();
     
     // Find added, modified, and deleted property definitions
@@ -365,11 +367,11 @@ pub fn compare_object_definitions(baseline: &ObjectDefinition, local: &ObjectDef
     
     // Compare property overrides
     let baseline_overrides: HashMap<String, &moor_compiler::ObjPropOverride> = baseline.property_overrides.iter()
-        .map(|p| (p.name.to_string(), p))
+        .map(|p| (p.name.as_string(), p))
         .collect();
     
     let local_overrides: HashMap<String, &moor_compiler::ObjPropOverride> = local.property_overrides.iter()
-        .map(|p| (p.name.to_string(), p))
+        .map(|p| (p.name.as_string(), p))
         .collect();
     
     // Find added, modified, and deleted property overrides
@@ -437,7 +439,11 @@ pub fn process_change_for_diff(database: &DatabaseRef, diff_model: &mut ObjectDi
     // Process added objects
     for obj_info in &change.added_objects {
         let obj_name = obj_id_to_object_name(&obj_info.name, Some(&obj_info.name));
-        diff_model.add_object_added(obj_name);
+        diff_model.add_object_added(obj_name.clone());
+        
+        // Get detailed object changes by comparing local vs baseline (which will be empty for new objects)
+        let object_change = compare_object_versions(database, &obj_name, obj_info.version)?;
+        diff_model.add_object_change(object_change);
     }
     
     // Process deleted objects

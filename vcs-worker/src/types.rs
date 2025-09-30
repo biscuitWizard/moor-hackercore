@@ -126,7 +126,8 @@ pub struct ChangeApproveRequest {
 /// Request structure for change submit operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChangeSubmitRequest {
-    // No fields needed - submits the current top change
+    /// Optional commit message to set for the change
+    pub message: Option<String>,
 }
 
 /// Request structure for change switch operations

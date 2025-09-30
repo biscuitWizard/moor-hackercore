@@ -68,6 +68,12 @@ impl ObjectUpdateOperation {
         self.database.objects().store(&sha256_key, &object_dump)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         
+        // Check if this object exists in refs to determine adding vs modifying
+        // Do this BEFORE updating the refs to avoid race condition
+        let is_existing_object = self.database.refs().get_ref(&request.object_name, None)
+            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
+            .is_some();
+        
         // Get the next version number for this object
         let version = self.database.refs().get_next_version(&request.object_name)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
@@ -84,10 +90,6 @@ impl ObjectUpdateOperation {
         if is_renamed_object {
             info!("Object '{}' has been renamed in this change, skipping change tracking", request.object_name);
         } else {
-            // Check if this object exists in refs to determine adding vs modifying
-            let is_existing_object = self.database.refs().get_ref(&request.object_name, None)
-                .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
-                .is_some();
             
             if is_existing_object {
                 // Update the modified_objects list if not already present
