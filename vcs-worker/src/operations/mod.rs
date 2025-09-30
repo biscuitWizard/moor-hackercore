@@ -4,6 +4,7 @@ mod change;
 mod object;
 mod index;
 mod clone_op;
+mod user;
 
 pub use registry::OperationRegistry;
 pub use hello_op::HelloOperation;
@@ -11,6 +12,7 @@ pub use change::{ChangeCreateOperation, ChangeAbandonOperation, ChangeStatusOper
 pub use object::{ObjectGetOperation, ObjectUpdateOperation, ObjectRenameOperation, ObjectDeleteOperation, ObjectListOperation};
 pub use index::IndexListOperation;
 pub use clone_op::CloneOperation;
+pub use user::StatOperation;
 
 // Re-export common types from crate::types
 pub use crate::types::OperationRequest;
@@ -78,6 +80,7 @@ pub fn create_default_registry() -> Result<(OperationRegistry, DatabaseRef), Obj
     registry.register(ChangeApproveOperation::new(database.clone()));
     registry.register(IndexListOperation::new(database.clone()));
     registry.register(CloneOperation::new(database.clone()));
+    registry.register(StatOperation);
     
     Ok((registry, database))
 }
