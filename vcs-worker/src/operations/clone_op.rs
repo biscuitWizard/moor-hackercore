@@ -67,7 +67,7 @@ impl CloneOperation {
     }
     
     /// Import repository state from a URL
-    async fn import_from_url(&self, url: &str) -> Result<String, ObjectsTreeError> {
+    pub async fn import_from_url(&self, url: &str) -> Result<String, ObjectsTreeError> {
         info!("Importing repository state from URL: {}", url);
         
         // Make GET request to the URL

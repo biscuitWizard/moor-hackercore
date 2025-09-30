@@ -11,7 +11,7 @@ pub use registry::OperationRegistry;
 pub use hello_op::HelloOperation;
 pub use change::{ChangeCreateOperation, ChangeAbandonOperation, ChangeStatusOperation, ChangeApproveOperation, ChangeSubmitOperation, ChangeSwitchOperation};
 pub use object::{ObjectGetOperation, ObjectUpdateOperation, ObjectRenameOperation, ObjectDeleteOperation, ObjectListOperation};
-pub use index::IndexListOperation;
+pub use index::{IndexListOperation, IndexCalcDeltaOperation, IndexUpdateOperation};
 pub use clone_op::CloneOperation;
 pub use user::StatOperation;
 pub use workspace::{WorkspaceSubmitOperation, WorkspaceListOperation};
@@ -77,6 +77,8 @@ pub fn create_default_registry() -> Result<(OperationRegistry, DatabaseRef), Obj
     registry.register(ChangeApproveOperation::new(database.clone()));
     registry.register(ChangeSubmitOperation::new(database.clone()));
     registry.register(IndexListOperation::new(database.clone()));
+    registry.register(IndexCalcDeltaOperation::new(database.clone()));
+    registry.register(IndexUpdateOperation::new(database.clone()));
     registry.register(CloneOperation::new(database.clone()));
     registry.register(StatOperation);
     registry.register(WorkspaceSubmitOperation::new(database.clone()));
