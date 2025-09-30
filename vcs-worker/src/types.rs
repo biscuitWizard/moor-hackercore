@@ -117,6 +117,18 @@ pub struct ChangeApproveRequest {
     pub change_id: String,
 }
 
+/// Request structure for change submit operations
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChangeSubmitRequest {
+    // No fields needed - submits the current top change
+}
+
+/// Request structure for change switch operations
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChangeSwitchRequest {
+    pub change_id: String,
+}
+
 /// Request structure for object get operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ObjectGetRequest {

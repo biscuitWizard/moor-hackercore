@@ -31,7 +31,7 @@ color-eyre = "0.6"
 eyre = "0.6"
 
 ## Asynchronous transaction processing & networking
-reqwest = "0.12"
+reqwest = { version = "0.12", features = ["blocking", "json"] }
 tokio = { version = "1.44", features = ["full"] }
 
 ## Logging & tracing

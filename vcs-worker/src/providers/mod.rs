@@ -19,3 +19,4 @@ pub use objects::{ObjectsProvider, ObjectsProviderImpl};
 pub use refs::RefsProviderImpl;
 pub use index::IndexProviderImpl;
 pub use user::UserProviderImpl;
+pub use workspace::WorkspaceProviderImpl;
