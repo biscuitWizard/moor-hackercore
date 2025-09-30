@@ -5,7 +5,7 @@ use tracing::{error, info};
 use crate::database::{DatabaseRef, ObjectsTreeError};
 use crate::providers::index::IndexProvider;
 use crate::types::{ChangeApproveRequest, ChangeStatus};
-use crate::object_diff::{ObjectDiffModel, obj_id_to_object_name, compare_object_versions};
+use crate::object_diff::{ObjectDiffModel, build_object_diff_from_change};
 use moor_var::{v_error, E_INVARG};
 
 /// Change approve operation that approves a local change and marks it as merged
@@ -62,7 +62,7 @@ impl ChangeApproveOperation {
         }
         
         // Build the ObjectDiffModel before changing the status
-        let diff_model = self.build_object_diff(&change)?;
+        let diff_model = build_object_diff_from_change(&self.database, &change)?;
         
         // Update the change status to Merged
         change.status = ChangeStatus::Merged;
@@ -81,56 +81,6 @@ impl ChangeApproveOperation {
         Ok(diff_model)
     }
     
-    /// Build an ObjectDiffModel by comparing the local change against the compiled state below it
-    fn build_object_diff(&self, local_change: &crate::types::Change) -> Result<ObjectDiffModel, ObjectsTreeError> {
-        let mut diff_model = ObjectDiffModel::new();
-        
-        // Get the complete object list from the index state (excluding the local change)
-        let complete_object_list = self.database.index().compute_complete_object_list()
-            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
-        
-        info!("Using complete object list with {} objects as baseline for change '{}'", 
-              complete_object_list.len(), local_change.name);
-        
-        // Process the local change to build the diff
-        self.process_change_for_diff(&mut diff_model, local_change)?;
-        
-        Ok(diff_model)
-    }
-    
-    /// Process a single change and add its modifications to the diff model
-    fn process_change_for_diff(&self, diff_model: &mut ObjectDiffModel, change: &crate::types::Change) -> Result<(), ObjectsTreeError> {
-        // Process added objects
-        for obj_info in &change.added_objects {
-            let obj_name = obj_id_to_object_name(&obj_info.name, Some(&obj_info.name));
-            diff_model.add_object_added(obj_name);
-        }
-        
-        // Process deleted objects
-        for obj_info in &change.deleted_objects {
-            let obj_name = obj_id_to_object_name(&obj_info.name, Some(&obj_info.name));
-            diff_model.add_object_deleted(obj_name);
-        }
-        
-        // Process renamed objects
-        for renamed in &change.renamed_objects {
-            let from_name = obj_id_to_object_name(&renamed.from.name, Some(&renamed.from.name));
-            let to_name = obj_id_to_object_name(&renamed.to.name, Some(&renamed.to.name));
-            diff_model.add_object_renamed(from_name, to_name);
-        }
-        
-        // Process modified objects with detailed comparison
-        for obj_info in &change.modified_objects {
-            let obj_name = obj_id_to_object_name(&obj_info.name, Some(&obj_info.name));
-            diff_model.add_object_modified(obj_name.clone());
-            
-            // Get detailed object changes by comparing local vs baseline
-            let object_change = compare_object_versions(&self.database, &obj_name, obj_info.version)?;
-            diff_model.add_object_change(object_change);
-        }
-        
-        Ok(())
-    }
 }
 
 impl Operation for ChangeApproveOperation {
