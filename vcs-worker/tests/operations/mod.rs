@@ -7,6 +7,7 @@
 //! - workspace: Workspace operations
 
 mod object;
+mod object_lifecycle;
 
 // Future test modules:
 // mod change;
