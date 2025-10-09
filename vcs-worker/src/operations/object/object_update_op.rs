@@ -74,9 +74,45 @@ impl ObjectUpdateOperation {
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
             .is_some();
         
-        // Get the next version number for this object
-        let version = self.database.refs().get_next_version(&request.object_name)
-            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+        // Check if this object is already modified/added in the current change
+        let is_already_in_change = current_change.added_objects.iter()
+            .any(|obj| obj.name == request.object_name) ||
+            current_change.modified_objects.iter()
+            .any(|obj| obj.name == request.object_name);
+        
+        let version;
+        if is_already_in_change {
+            // Object was already modified in this change, use the current version
+            // instead of incrementing it
+            version = self.database.refs().get_current_version(&request.object_name)
+                .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
+                .unwrap_or(1); // Default to 1 if no version exists yet
+            
+            // Get the old SHA256 for this version
+            if let Some(old_sha256) = self.database.refs().get_ref(&request.object_name, Some(version))
+                .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))? {
+                
+                // Check if the old SHA256 is referenced by any other ref (excluding this object:version)
+                let is_referenced = self.database.refs().is_sha256_referenced_excluding(&old_sha256, &request.object_name, version)
+                    .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+                
+                if !is_referenced {
+                    // The old SHA256 is orphaned, delete it
+                    info!("Deleting orphaned SHA256 '{}' for object '{}' version {} (replaced in same change)", 
+                          old_sha256, request.object_name, version);
+                    self.database.objects().delete(&old_sha256)
+                        .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+                } else {
+                    info!("Old SHA256 '{}' is still referenced by other refs, keeping it", old_sha256);
+                }
+            }
+            
+            info!("Updating object '{}' again in same change (keeping version {})", request.object_name, version);
+        } else {
+            // First time modifying this object in this change, increment version
+            version = self.database.refs().get_next_version(&request.object_name)
+                .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+        }
         
         // Update or create the object reference (latest version tracking)
         self.database.refs().update_ref(&request.object_name, version, &sha256_key)
@@ -89,35 +125,23 @@ impl ObjectUpdateOperation {
         
         if is_renamed_object {
             info!("Object '{}' has been renamed in this change, skipping change tracking", request.object_name);
-        } else {
+        } else if !is_already_in_change {
+            // Only add to tracking lists if this is the first time we're modifying this object in this change
+            // If it's already in the change (added_objects or modified_objects), leave it where it is
             
             if is_existing_object {
-                // Update the modified_objects list if not already present
+                // Object existed before this change started, add to modified_objects
                 let obj_info = crate::types::ObjectInfo { name: request.object_name.clone(), version };
-                if !current_change.modified_objects.iter().any(|obj| obj.name == request.object_name) {
-                    current_change.modified_objects.push(obj_info.clone());
-                    info!("Added object '{}' to modified_objects in change '{}'", request.object_name, current_change.name);
-                }
-                
-                // Remove from added_objects if it was previously added but now we know it's modified
-                if let Some(pos) = current_change.added_objects.iter().position(|obj| obj.name == request.object_name) {
-                    current_change.added_objects.remove(pos);
-                    info!("Moved object '{}' from added_objects to modified_objects in change '{}'", request.object_name, current_change.name);
-                }
+                current_change.modified_objects.push(obj_info.clone());
+                info!("Added object '{}' to modified_objects in change '{}'", request.object_name, current_change.name);
             } else {
-                // Update the added_objects list if not already present
+                // Object is new in this change, add to added_objects
                 let obj_info = crate::types::ObjectInfo { name: request.object_name.clone(), version };
-                if !current_change.added_objects.iter().any(|obj| obj.name == request.object_name) {
-                    current_change.added_objects.push(obj_info.clone());
-                    info!("Added object '{}' to added_objects in change '{}'", request.object_name, current_change.name);
-                }
-                
-                // Remove from modified_objects if it was previously modified but now we know it's new
-                if let Some(pos) = current_change.modified_objects.iter().position(|obj| obj.name == request.object_name) {
-                    current_change.modified_objects.remove(pos);
-                    info!("Moved object '{}' from modified_objects to added_objects in change '{}'", request.object_name, current_change.name);
-                }
+                current_change.added_objects.push(obj_info.clone());
+                info!("Added object '{}' to added_objects in change '{}'", request.object_name, current_change.name);
             }
+        } else {
+            info!("Object '{}' is already tracked in change '{}', not updating tracking lists", request.object_name, current_change.name);
         }
         
         // Update the change in the database

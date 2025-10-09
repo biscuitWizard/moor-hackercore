@@ -25,6 +25,16 @@ pub trait RefsProvider: Send + Sync {
     /// Get the next version number for an object
     fn get_next_version(&self, object_name: &str) -> ProviderResult<u64>;
     
+    /// Get the current version number for an object (returns None if object doesn't exist)
+    fn get_current_version(&self, object_name: &str) -> ProviderResult<Option<u64>>;
+    
+    /// Check if a SHA256 is referenced by any ref
+    #[allow(dead_code)]
+    fn is_sha256_referenced(&self, sha256: &str) -> ProviderResult<bool>;
+    
+    /// Check if a SHA256 is referenced by any ref excluding a specific object:version
+    fn is_sha256_referenced_excluding(&self, sha256: &str, exclude_object: &str, exclude_version: u64) -> ProviderResult<bool>;
+    
     /// Get all refs as a HashMap (for export/cloning)
     fn get_all_refs(&self) -> ProviderResult<HashMap<ObjectInfo, String>>;
     
@@ -137,6 +147,51 @@ impl RefsProvider for RefsProviderImpl {
             Some(version) => Ok(version + 1),
             None => Ok(1), // First version
         }
+    }
+
+    fn get_current_version(&self, object_name: &str) -> ProviderResult<Option<u64>> {
+        let storage = self.load_refs_storage()?;
+        
+        let latest_version = storage.refs.keys()
+            .filter(|key| key.starts_with(&format!("{}:", object_name)))
+            .filter_map(|key| {
+                if let Some(version_str) = key.split(':').nth(1) {
+                    version_str.parse::<u64>().ok()
+                } else {
+                    None
+                }
+            })
+            .max();
+            
+        Ok(latest_version)
+    }
+
+    fn is_sha256_referenced(&self, sha256: &str) -> ProviderResult<bool> {
+        let storage = self.load_refs_storage()?;
+        
+        // Check if any ref points to this SHA256
+        for ref_sha256 in storage.refs.values() {
+            if ref_sha256 == sha256 {
+                return Ok(true);
+            }
+        }
+        
+        Ok(false)
+    }
+
+    fn is_sha256_referenced_excluding(&self, sha256: &str, exclude_object: &str, exclude_version: u64) -> ProviderResult<bool> {
+        let storage = self.load_refs_storage()?;
+        
+        let exclude_key = format!("{}:{}", exclude_object, exclude_version);
+        
+        // Check if any ref (except the excluded one) points to this SHA256
+        for (key, ref_sha256) in &storage.refs {
+            if key != &exclude_key && ref_sha256 == sha256 {
+                return Ok(true);
+            }
+        }
+        
+        Ok(false)
     }
     
     fn get_all_refs(&self) -> ProviderResult<HashMap<ObjectInfo, String>> {

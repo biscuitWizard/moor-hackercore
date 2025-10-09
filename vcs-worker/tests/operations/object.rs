@@ -408,3 +408,200 @@ async fn test_multiple_objects_persistence() {
     println!("\n✅ Test completed successfully!");
 }
 
+#[tokio::test]
+async fn test_object_update_twice_in_same_change_trims_unused_sha256() {
+    let server = TestServer::start().await.expect("Failed to start test server");
+    let base_url = server.base_url();
+    
+    println!("Test server started at: {}", base_url);
+    
+    // Step 1: Create an object update
+    println!("\nStep 1: Creating initial object update...");
+    let object_name = "test_object_trimming";
+    let object_dump_v1 = load_moo_file("test_object.moo");
+    let object_content_v1 = moo_to_lines(&object_dump_v1);
+    
+    let update_request_v1 = json!({
+        "operation": "object/update",
+        "args": [
+            object_name,
+            serde_json::to_string(&object_content_v1).unwrap()
+        ]
+    });
+    
+    let update_response_v1 = make_request(
+        "POST",
+        &format!("{}/rpc", base_url),
+        Some(update_request_v1),
+    )
+    .await
+    .expect("Failed to update object v1");
+    
+    assert!(
+        update_response_v1["success"].as_bool().unwrap_or(false),
+        "Object update v1 should succeed"
+    );
+    
+    // Calculate SHA256 for the first version
+    let object_dump_v1 = object_content_v1.join("\n");
+    let sha256_v1 = TestServer::calculate_sha256(&object_dump_v1);
+    
+    println!("First update SHA256: {}", sha256_v1);
+    
+    // Verify the first version exists in objects provider
+    let stored_v1 = server.database().objects().get(&sha256_v1)
+        .expect("Failed to get object v1");
+    assert!(
+        stored_v1.is_some(),
+        "First version should exist in objects provider"
+    );
+    
+    // Verify ref points to first version
+    let ref_sha_v1 = server.database().refs().get_ref(object_name, None)
+        .expect("Failed to get ref v1")
+        .expect("Ref should exist");
+    assert_eq!(ref_sha_v1, sha256_v1, "Ref should point to first version");
+    
+    // Get the version number
+    let version_v1 = server.database().refs().get_current_version(object_name)
+        .expect("Failed to get current version")
+        .expect("Version should exist");
+    
+    println!("Initial version: {}", version_v1);
+    
+    // Verify object is in the change
+    let top_change_id = server.database().index().get_top_change()
+        .expect("Failed to get top change")
+        .expect("Should have a top change");
+    
+    let change_v1 = server.database().index().get_change(&top_change_id)
+        .expect("Failed to get change")
+        .expect("Change should exist");
+    
+    assert!(
+        change_v1.added_objects.iter().any(|obj| obj.name == object_name),
+        "Object should be in added_objects"
+    );
+    
+    println!("✅ First update completed successfully");
+    
+    // Step 2: Update the same object again in the same change with different content
+    println!("\nStep 2: Updating the same object again in the same change...");
+    let object_dump_v2 = load_moo_file("detailed_test_object.moo");
+    let object_content_v2 = moo_to_lines(&object_dump_v2);
+    
+    let update_request_v2 = json!({
+        "operation": "object/update",
+        "args": [
+            object_name,
+            serde_json::to_string(&object_content_v2).unwrap()
+        ]
+    });
+    
+    let update_response_v2 = make_request(
+        "POST",
+        &format!("{}/rpc", base_url),
+        Some(update_request_v2),
+    )
+    .await
+    .expect("Failed to update object v2");
+    
+    assert!(
+        update_response_v2["success"].as_bool().unwrap_or(false),
+        "Object update v2 should succeed"
+    );
+    
+    // Calculate SHA256 for the second version
+    let object_dump_v2 = object_content_v2.join("\n");
+    let sha256_v2 = TestServer::calculate_sha256(&object_dump_v2);
+    
+    println!("Second update SHA256: {}", sha256_v2);
+    
+    // Verify the SHA256s are different
+    assert_ne!(
+        sha256_v1,
+        sha256_v2,
+        "The two versions should have different SHA256s"
+    );
+    
+    // Step 3: Verify the old SHA256 was deleted from objects provider
+    println!("\nStep 3: Verifying old SHA256 was cleaned up...");
+    
+    let stored_v1_after = server.database().objects().get(&sha256_v1)
+        .expect("Failed to check for old SHA256");
+    
+    assert!(
+        stored_v1_after.is_none(),
+        "Old SHA256 '{}' should have been deleted from objects provider",
+        sha256_v1
+    );
+    
+    println!("✅ Old SHA256 was successfully deleted");
+    
+    // Step 4: Verify the new SHA256 exists in objects provider
+    println!("\nStep 4: Verifying new SHA256 exists...");
+    
+    let stored_v2 = server.database().objects().get(&sha256_v2)
+        .expect("Failed to get object v2");
+    
+    assert!(
+        stored_v2.is_some(),
+        "New SHA256 '{}' should exist in objects provider",
+        sha256_v2
+    );
+    
+    println!("✅ New SHA256 exists in objects provider");
+    
+    // Step 5: Verify ref points to new SHA256
+    println!("\nStep 5: Verifying ref points to new SHA256...");
+    
+    let ref_sha_v2 = server.database().refs().get_ref(object_name, None)
+        .expect("Failed to get ref v2")
+        .expect("Ref should exist");
+    
+    assert_eq!(
+        ref_sha_v2,
+        sha256_v2,
+        "Ref should point to new SHA256"
+    );
+    
+    println!("✅ Ref points to new SHA256");
+    
+    // Step 6: Verify version number did NOT increment
+    println!("\nStep 6: Verifying version number did not increment...");
+    
+    let version_v2 = server.database().refs().get_current_version(object_name)
+        .expect("Failed to get current version")
+        .expect("Version should exist");
+    
+    assert_eq!(
+        version_v1,
+        version_v2,
+        "Version should not have incremented (stayed at {})",
+        version_v1
+    );
+    
+    println!("✅ Version number remained the same: {}", version_v2);
+    
+    // Step 7: Verify the change still only tracks the object once (not duplicated)
+    println!("\nStep 7: Verifying change tracking...");
+    
+    let change_v2 = server.database().index().get_change(&top_change_id)
+        .expect("Failed to get change")
+        .expect("Change should exist");
+    
+    let object_count = change_v2.added_objects.iter()
+        .filter(|obj| obj.name == object_name)
+        .count();
+    
+    assert_eq!(
+        object_count,
+        1,
+        "Object should only appear once in added_objects"
+    );
+    
+    println!("✅ Object appears exactly once in change");
+    
+    println!("\n✅ Test completed successfully! Old SHA256 was trimmed, version stayed the same, and ref points to new content.");
+}
+
