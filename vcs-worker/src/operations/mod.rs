@@ -50,10 +50,15 @@ pub trait Operation: Send + Sync {
 
 /// Create the default registry with built-in operations
 pub fn create_default_registry() -> Result<(OperationRegistry, DatabaseRef), ObjectsTreeError> {
+    let config = Config::new();
+    create_registry_with_config(config)
+}
+
+/// Create the default registry with a specific config (useful for testing)
+pub fn create_registry_with_config(config: Config) -> Result<(OperationRegistry, DatabaseRef), ObjectsTreeError> {
     let mut registry = OperationRegistry::new();
     
-    // Initialize config and database
-    let config = Config::new();
+    // Initialize database with provided config
     let database = Arc::new(Database::new(&config)?);
     
     // Set the user provider in the registry

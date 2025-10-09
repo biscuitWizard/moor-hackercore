@@ -86,3 +86,4 @@ sha2 = "0.10"
 
 [dev-dependencies]
 tempfile = "3.8"
+tokio-test = "0.4"

@@ -15,6 +15,13 @@ impl Config {
         tracing::info!("VCS database path: {:?}", db_path);
         Self { db_path }
     }
+    
+    /// Create a new config with an explicit database path (useful for testing)
+    #[allow(dead_code)]
+    pub fn with_db_path(db_path: PathBuf) -> Self {
+        tracing::info!("VCS database path (explicit): {:?}", db_path);
+        Self { db_path }
+    }
 
     /// Get the database path from environment or use default
     fn get_db_path() -> PathBuf {
