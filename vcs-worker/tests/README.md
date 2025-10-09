@@ -1,126 +1,104 @@
 # VCS Worker Integration Tests
 
-This directory contains integration tests for the vcs-worker service.
-
-## Test Suite Overview
-
-The integration test suite validates the complete workflow of the VCS worker using **direct database state inspection** rather than parsing API responses. This provides:
-
-- **Direct verification** of internal state (SHA256 hashes, refs, changes)
-- **Faster execution** without JSON parsing overhead
-- **More reliable** assertions on actual database state
-- **Better debugging** with clear state inspection
-
-Tests validate:
-
-1. **Database persistence** - Verifying objects are stored with correct SHA256 hashes
-2. **Reference tracking** - Ensuring refs point to correct object hashes
-3. **Change tracking** - Confirming changes contain expected objects
-4. **Content integrity** - Validating exact content matches submissions
-
-## Tests Included
-
-### 1. `test_object_update_workflow`
-
-This test validates the core workflow by checking database state directly:
-- **Step 1**: Verifies `get_top_change()` returns None initially
-- **Step 2**: Creates object, calculates SHA256, verifies it exists in objects provider
-- **Step 3**: Checks refs provider points to correct hash
-- **Step 4**: Verifies change contains the object in `added_objects` list
-- **Step 5**: Confirms stored content matches submission exactly
-
-### 2. `test_database_persistence_and_change_tracking`
-
-This test verifies database and change tracking with direct state inspection:
-- **Step 1**: Creates 3 objects, verifies each SHA256 hash exists in objects provider
-- **Step 2**: Confirms refs provider has entries for all 3 objects
-- **Step 3**: Verifies objects provider count is at least 3
-- **Step 4**: Checks top change contains all 3 objects in `added_objects`
-- **Step 5**: Validates change is at top of change order
-- **Step 6**: Retrieves each object by ref and verifies content
-
-### 3. `test_object_update_and_retrieval`
-
-This test validates content integrity with direct hash verification:
-- Creates object with detailed content
-- Calculates expected SHA256 hash
-- Verifies object exists in objects provider with exact hash
-- Confirms ref points to correct hash
-- Validates stored content is byte-for-byte identical
-- Checks object is tracked in change
-
-## Running the Tests
-
-### Run all integration tests:
-```bash
-cargo test --test integration_test
-```
-
-### Run with output:
-```bash
-cargo test --test integration_test -- --nocapture
-```
-
-### Run a specific test:
-```bash
-cargo test --test integration_test test_object_update_workflow
-```
-
-### Run with verbose output:
-```bash
-cargo test --test integration_test -- --nocapture --test-threads=1
-```
+This directory contains integration tests for the vcs-worker service, organized to mirror the project structure.
 
 ## Test Architecture
 
-### Test Server Setup
-Each test creates a temporary database and starts an HTTP server on a random available port. This ensures:
-- Tests run in isolation
-- No conflicts between concurrent tests
-- Automatic cleanup after test completion
-- **Direct database access** for state verification
+### Directory Structure
 
-### Temporary Database
-Tests use `tempfile::TempDir` to create isolated database instances that are automatically cleaned up when the test completes.
+```
+tests/
+├── common/
+│   └── mod.rs              # Reusable test harness and utilities
+├── operations/
+│   ├── mod.rs              # Operations test module
+│   └── object.rs           # Object operation tests
+├── resources/
+│   ├── test_object.moo     # Test fixtures
+│   ├── detailed_test_object.moo
+│   └── test_object_{1,2,3}.moo
+├── test_suite.rs           # Main test entry point
+└── README.md               # This file
+```
 
-### Direct State Inspection
-Tests access database providers directly:
-- **Objects Provider**: `server.database().objects().get(sha256_hash)`
-- **Refs Provider**: `server.database().refs().get_ref(name, version)`
-- **Index Provider**: `server.database().index().get_top_change()`
-- **SHA256 Verification**: `TestServer::calculate_sha256(content)`
+### Design Principles
 
-This "white box" approach validates actual internal state rather than parsing API response strings.
+1. **Mirror Project Structure**: Tests are organized to match `src/` layout
+2. **Reusable Harness**: Common test utilities in `common/` module
+3. **Direct State Verification**: Tests access database providers directly
+4. **Resource-Based Fixtures**: Test data stored in `.moo` files
 
-## Test Data
+## Test Harness (`common` module)
 
-### Test Resources
+The `common` module provides reusable test infrastructure:
 
-Test fixtures are stored in the `tests/resources/` directory as `.moo` files:
+### TestServer
 
-- **test_object.moo** - Basic test object used in workflow tests
-- **detailed_test_object.moo** - Object with additional fields for content verification
-- **test_object_1.moo**, **test_object_2.moo**, **test_object_3.moo** - Multiple objects for persistence tests
-
-### Loading Test Resources
-
-Tests use helper functions to load .moo files:
+Manages the complete lifecycle of a test server with temporary database:
 
 ```rust
-// Load a .moo file from resources
-let object_dump = load_moo_file("test_object.moo");
+let server = TestServer::start().await?;
 
-// Convert to lines for API compatibility
-let object_content = moo_to_lines(&object_dump);
+// Access the database directly
+let objects = server.database().objects();
+let refs = server.database().refs();
+let index = server.database().index();
 
-// Calculate hash (API joins lines with "\n")
-let object_dump = object_content.join("\n");
-let sha256_hash = TestServer::calculate_sha256(&object_dump);
+// Make API requests
+let response = make_request("POST", &server.base_url(), payload).await?;
 ```
+
+### Helper Functions
+
+```rust
+// Load test fixtures
+let content = load_moo_file("test_object.moo");
+let lines = moo_to_lines(&content);
+
+// Calculate SHA256 hashes
+let hash = TestServer::calculate_sha256(&content);
+
+// Make HTTP requests
+let response = make_request("POST", url, Some(json_body)).await?;
+```
+
+### Provider Trait Re-exports
+
+The `common` module re-exports provider traits so they're available to all tests:
+
+```rust
+use crate::common::*;  // Brings in ObjectsProvider, RefsProvider, IndexProvider traits
+```
+
+## Test Organization
+
+### Operations Tests (`operations/`)
+
+Tests for VCS operations, organized by operation type:
+
+#### `object.rs` - Object Operations
+
+- **test_object_create_and_verify**: Full workflow from creation to verification
+- **test_object_content_integrity**: Content preservation and field validation
+- **test_multiple_objects_persistence**: Multi-object creation and persistence
+
+**Future modules:**
+- `change.rs` - Change management operations
+- `index.rs` - Index operations  
+- `workspace.rs` - Workspace operations
+
+## Test Data and Resources
+
+### Test Resources (`resources/`)
+
+Test fixtures stored as `.moo` files:
+
+- **test_object.moo** - Basic test object
+- **detailed_test_object.moo** - Object with additional fields
+- **test_object_{1,2,3}.moo** - Multiple objects for batch tests
 
 ### MOO Object Format
 
-MOO objects follow this format:
 ```
 object #9999
   name: "Test Object"
@@ -130,96 +108,194 @@ object #9999
 endobject
 ```
 
-### Adding New Test Fixtures
+### Loading Resources
 
-1. Create a new `.moo` file in `tests/resources/`
-2. Use `load_moo_file("your_file.moo")` in your test
-3. The file will be automatically loaded and parsed
+```rust
+// Load .moo file
+let object_dump = load_moo_file("test_object.moo");
+
+// Convert to lines for API
+let object_content = moo_to_lines(&object_dump);
+
+// Calculate hash (API joins lines with "\n")
+let object_dump = object_content.join("\n");
+let sha256_hash = TestServer::calculate_sha256(&object_dump);
+```
+
+## Running Tests
+
+### Run all tests
+```bash
+cargo test
+```
+
+### Run specific test suite
+```bash
+cargo test --test test_suite
+```
+
+### Run tests in a specific module
+```bash
+cargo test --test test_suite operations::object
+```
+
+### Run a specific test
+```bash
+cargo test --test test_suite test_object_create_and_verify
+```
+
+### Run with output
+```bash
+cargo test --test test_suite -- --nocapture
+```
+
+### Run sequentially
+```bash
+cargo test --test test_suite -- --test-threads=1
+```
+
+## Test Strategy
+
+### Direct Database Verification
+
+Tests verify internal state directly rather than parsing API responses:
+
+```rust
+// Calculate expected hash
+let sha256_hash = TestServer::calculate_sha256(&object_dump);
+
+// Verify object exists in objects provider
+let stored = server.database().objects().get(&sha256_hash)?;
+assert!(stored.is_some());
+
+// Verify ref points to correct hash
+let ref_hash = server.database().refs().get_ref("object_name", None)?;
+assert_eq!(ref_hash, Some(sha256_hash));
+
+// Verify change tracking
+let change = server.database().index().get_change(&change_id)?;
+assert!(change.added_objects.iter().any(|obj| obj.name == "object_name"));
+```
+
+### Benefits
+
+1. **More Reliable**: Direct access to actual state vs parsing strings
+2. **Faster**: No JSON serialization/deserialization overhead
+3. **Better Errors**: Clear assertion failures on actual values
+4. **Type-Safe**: Compiler-checked access to database state
+5. **Easier Debug**: Can inspect actual database structures
+
+## Adding New Tests
+
+### 1. Add Test to Existing Module
+
+Edit an existing test file (e.g., `operations/object.rs`):
+
+```rust
+#[tokio::test]
+async fn test_new_feature() {
+    let server = TestServer::start().await.expect("Failed to start");
+    
+    // Your test code here
+    
+    // Direct verification
+    assert!(server.database().objects().get(&hash)?.is_some());
+}
+```
+
+### 2. Create New Test Module
+
+Create new file `operations/change.rs`:
+
+```rust
+//! Integration tests for change operations
+
+use crate::common::*;
+use moor_vcs_worker::types::ChangeStatus;
+
+#[tokio::test]
+async fn test_change_create() {
+    let server = TestServer::start().await.expect("Failed to start");
+    // Test implementation
+}
+```
+
+Add to `operations/mod.rs`:
+
+```rust
+mod object;
+mod change;  // Add this line
+```
+
+### 3. Add New Test Fixture
+
+Create new `.moo` file in `resources/`:
+
+```bash
+cat > tests/resources/my_fixture.moo << 'EOF'
+object #5678
+  name: "My Test Object"
+  parent: #1
+endobject
+EOF
+```
+
+Use in tests:
+
+```rust
+let content = load_moo_file("my_fixture.moo");
+```
+
+## Test Isolation
+
+Each test:
+- Uses a unique temporary database (`TempDir`)
+- Starts its own HTTP server on a random port
+- Cleans up automatically when dropped
+- Can run in parallel with other tests
 
 ## Expected Behavior
 
 ### Success Criteria
-- All three tests should pass
-- Each test should complete in under 2 seconds
-- Temporary databases should be cleaned up automatically
+
+- All tests should pass
+- Each test completes in under 2 seconds
+- Temporary databases are cleaned up automatically
 - No errors or panics during execution
 - SHA256 hashes match calculated values
 - All refs point to correct hashes
 - Changes track objects correctly
 
-### Direct State Verification Examples
+### Troubleshooting
 
-```rust
-// Calculate SHA256 hash for content
-let sha256_hash = TestServer::calculate_sha256(&object_dump);
+**Tests fail to start server:**
+- Ensure ports are available for binding
+- Check temporary directory is writable
 
-// Verify object exists in objects provider
-let stored = server.database().objects().get(&sha256_hash)
-    .expect("Failed to query")
-    .expect("Object should exist");
-
-// Verify ref points to correct hash
-let ref_hash = server.database().refs().get_ref("object_name", None)
-    .expect("Failed to query");
-assert_eq!(ref_hash, Some(sha256_hash));
-
-// Verify change contains object
-let change = server.database().index().get_change(&change_id)
-    .expect("Failed to get change");
-assert!(change.added_objects.iter().any(|obj| obj.name == "object_name"));
-```
-
-## Troubleshooting
-
-### Tests Fail to Start Server
-- Ensure ports 0-65535 are available for binding
-- Check that the temporary directory is writable
-
-### Database Errors
+**Database errors:**
 - Verify `fjall` dependencies are installed
 - Check disk space for temporary files
 
-### API Timeout
-- Increase wait time in `TestServer::start()` if needed
-- Check for port conflicts
-
-## Adding New Tests
-
-To add a new integration test:
-
-1. Create a new async test function:
-```rust
-#[tokio::test]
-async fn test_new_feature() {
-    let server = TestServer::start().await.expect("Failed to start test server");
-    // Your test code here
-}
-```
-
-2. Use the `make_request` helper for API calls:
-```rust
-let response = make_request(
-    "POST",
-    &format!("{}/api/endpoint", server.base_url()),
-    Some(json!({"key": "value"})),
-).await.expect("Request failed");
-```
-
-3. Add appropriate assertions to verify behavior
+**Hash mismatches:**
+- Verify .moo files don't have trailing whitespace
+- Remember API joins lines with `\n`
 
 ## Continuous Integration
 
-These tests are designed to run in CI/CD environments:
-- No external dependencies required
+These tests are designed for CI/CD:
+- No external dependencies
 - Self-contained with temporary resources
 - Fast execution time
 - Clear pass/fail indicators
+- Parallel execution safe
 
-## Cleanup
+## Future Enhancements
 
-Test cleanup is automatic:
-- `TestServer` implements Drop semantics via `TempDir`
-- Database files are removed when tests complete
-- HTTP servers are shut down via oneshot channels
-- No manual cleanup required
-
+Planned test additions:
+- Change operation tests (create, submit, approve)
+- Index operation tests (list, calc delta, update)
+- Workspace operation tests (submit, list)
+- Router/API endpoint tests
+- Provider-level unit tests
+- Performance/load tests
+- Concurrent modification tests
