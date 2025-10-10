@@ -17,10 +17,10 @@ async fn test_object_list_shows_added_objects() {
     
     // Step 1: Verify empty list initially
     println!("\nStep 1: Verifying empty list initially...");
-    let response = client.object_list(None)
+    let binding = client.object_list(None)
         .await
-        .expect("Failed to list objects")
-        .assert_success("List objects");
+        .expect("Failed to list objects");
+    let response = binding.assert_success("List objects");
     
     let result_str = response.require_result_str("List result");
     let list_response: serde_json::Value = serde_json::from_str(result_str)
@@ -53,10 +53,10 @@ async fn test_object_list_shows_added_objects() {
     // Step 3: Verify objects appear in list
     println!("\nStep 3: Verifying objects appear in list...");
     
-    let response = client.object_list(None)
+    let binding = client.object_list(None)
         .await
-        .expect("Failed to list objects")
-        .assert_success("List objects");
+        .expect("Failed to list objects");
+    let response = binding.assert_success("List objects");
     
     let result_str = response.require_result_str("List result");
     let list_response: serde_json::Value = serde_json::from_str(result_str)
@@ -111,10 +111,10 @@ async fn test_object_list_excludes_deleted_objects() {
     
     // Step 3: Verify deleted object doesn't appear in list
     println!("\nStep 3: Verifying deleted object is excluded...");
-    let response = client.object_list(None)
+    let binding = client.object_list(None)
         .await
-        .expect("Failed to list objects")
-        .assert_success("List objects");
+        .expect("Failed to list objects");
+    let response = binding.assert_success("List objects");
     
     let result_str = response.require_result_str("List result");
     let list_response: serde_json::Value = serde_json::from_str(result_str)
@@ -166,10 +166,10 @@ async fn test_object_list_shows_renamed_objects_with_new_name() {
     
     // Step 2: Verify object appears with new name only
     println!("\nStep 2: Verifying object appears with new name...");
-    let response = client.object_list(None)
+    let binding = client.object_list(None)
         .await
-        .expect("Failed to list objects")
-        .assert_success("List objects");
+        .expect("Failed to list objects");
+    let response = binding.assert_success("List objects");
     
     let result_str = response.require_result_str("List result");
     let list_response: serde_json::Value = serde_json::from_str(result_str)
@@ -240,10 +240,10 @@ async fn test_object_list_tracks_object_state_in_change() {
     
     // Step 4: Verify object appears in list with version 1
     println!("\nStep 4: Verifying object appears in list...");
-    let response = client.object_list(None)
+    let binding = client.object_list(None)
         .await
-        .expect("Failed to list objects")
-        .assert_success("List objects");
+        .expect("Failed to list objects");
+    let response = binding.assert_success("List objects");
     
     let result_str = response.require_result_str("List result");
     let list_response: serde_json::Value = serde_json::from_str(result_str)
@@ -384,10 +384,10 @@ async fn test_object_list_complex_scenario() {
     
     // Step 4: Verify final object list
     println!("\nStep 4: Verifying final object list...");
-    let response = client.object_list(None)
+    let binding = client.object_list(None)
         .await
-        .expect("Failed to list objects")
-        .assert_success("List objects");
+        .expect("Failed to list objects");
+    let response = binding.assert_success("List objects");
     
     let result_str = response.require_result_str("List result");
     let list_response: serde_json::Value = serde_json::from_str(result_str)

@@ -11,7 +11,8 @@ use moor_vcs_worker::types::{ChangeStatus, VcsObjectType};
 #[tokio::test]
 async fn test_rename_and_rename_back_deletes_rename_operation() {
     let server = TestServer::start().await.expect("Failed to start test server");
-    let base_url = server.base_url();
+    let client = server.client();
+    let db = server.db_assertions();
     
     println!("Test: Rename an object, then rename it back to original name");
     println!("Expected: Rename operation should be deleted from change\n");
@@ -19,95 +20,52 @@ async fn test_rename_and_rename_back_deletes_rename_operation() {
     // Step 1: Create an object
     println!("Step 1: Creating object 'test_object'...");
     let object_name = "test_object";
-    let object_dump = load_moo_file("test_object.moo");
-    let object_content = moo_to_lines(&object_dump);
     
-    let update_request = json!({
-        "operation": "object/update",
-        "args": [object_name, serde_json::to_string(&object_content).unwrap()]
-    });
-    
-    let response = make_request("POST", &format!("{}/rpc", base_url), Some(update_request))
+    client.object_update_from_file(object_name, "test_object.moo")
         .await
-        .expect("Failed to create object");
+        .expect("Failed to create object")
+        .assert_success("Object creation");
     
-    assert!(response["success"].as_bool().unwrap_or(false), "Object creation should succeed");
     println!("✅ Object created: {}", object_name);
     
-    // Verify object exists in refs
-    let ref_exists = server.database().refs().get_ref(VcsObjectType::MooObject, object_name, None)
-        .expect("Failed to get ref")
-        .is_some();
-    assert!(ref_exists, "Object ref should exist");
+    db.assert_ref_exists(VcsObjectType::MooObject, object_name);
     
-    // Get the change and verify object is in added_objects
-    let top_change_id = server.database().index().get_top_change()
-        .expect("Failed to get top change")
-        .expect("Should have a top change");
-    
-    let change = server.database().index().get_change(&top_change_id)
-        .expect("Failed to get change")
-        .expect("Change should exist");
-    
-    assert!(
-        change.added_objects.iter().any(|obj| obj.name == object_name),
-        "Object should be in added_objects"
-    );
+    let (top_change_id, change) = db.require_top_change();
+    assert!(change.added_objects.iter().any(|obj| obj.name == object_name), "Object should be in added_objects");
     println!("✅ Object is in added_objects list");
     
     // Step 2: Rename the object
     println!("\nStep 2: Renaming '{}' to 'renamed_object'...", object_name);
     let new_name = "renamed_object";
     
-    let rename_request = json!({
-        "operation": "object/rename",
-        "args": [object_name, new_name]
-    });
-    
-    let response = make_request("POST", &format!("{}/rpc", base_url), Some(rename_request))
+    client.object_rename(object_name, new_name)
         .await
-        .expect("Failed to rename object");
+        .expect("Failed to rename object")
+        .assert_success("Object rename");
     
-    assert!(response["success"].as_bool().unwrap_or(false), "Rename should succeed");
     println!("✅ Object renamed to: {}", new_name);
     
     // Verify that NO rename operation was added (since object is in added_objects)
-    // When an added object is renamed, we just update its name - no rename tracking needed
     let change = server.database().index().get_change(&top_change_id)
         .expect("Failed to get change")
         .expect("Change should exist");
     
-    assert_eq!(
-        change.renamed_objects.len(),
-        0,
-        "Should have NO rename operation for newly added object"
-    );
+    assert_eq!(change.renamed_objects.len(), 0, "Should have NO rename operation for newly added object");
     println!("✅ No rename operation (name just updated in added_objects)");
     
     // Verify the object is in added_objects with the NEW name
-    assert!(
-        change.added_objects.iter().any(|obj| obj.name == new_name),
-        "Object should be in added_objects with new name"
-    );
-    assert!(
-        !change.added_objects.iter().any(|obj| obj.name == object_name),
-        "Object should NOT be in added_objects with old name"
-    );
+    assert!(change.added_objects.iter().any(|obj| obj.name == new_name), "Object should be in added_objects with new name");
+    assert!(!change.added_objects.iter().any(|obj| obj.name == object_name), "Object should NOT be in added_objects with old name");
     println!("✅ Object in added_objects updated to new name: {}", new_name);
     
     // Step 3: Rename the object back to its original name
     println!("\nStep 3: Renaming '{}' back to '{}'...", new_name, object_name);
     
-    let rename_back_request = json!({
-        "operation": "object/rename",
-        "args": [new_name, object_name]
-    });
-    
-    let response = make_request("POST", &format!("{}/rpc", base_url), Some(rename_back_request))
+    client.object_rename(new_name, object_name)
         .await
-        .expect("Failed to rename object back");
+        .expect("Failed to rename object back")
+        .assert_success("Rename back");
     
-    assert!(response["success"].as_bool().unwrap_or(false), "Rename back should succeed");
     println!("✅ Object renamed back to: {}", object_name);
     
     // Step 4: Verify the object is back to its original name in added_objects
@@ -117,23 +75,12 @@ async fn test_rename_and_rename_back_deletes_rename_operation() {
         .expect("Failed to get change")
         .expect("Change should exist");
     
-    // Should still have no rename operations (never created one)
-    assert_eq!(
-        change.renamed_objects.len(),
-        0,
-        "Should still have no rename operations"
-    );
+    assert_eq!(change.renamed_objects.len(), 0, "Should still have no rename operations");
     println!("✅ No rename operations (as expected)");
     
     // Verify object is back in added_objects with original name
-    assert!(
-        change.added_objects.iter().any(|obj| obj.name == object_name),
-        "Object should be in added_objects with original name"
-    );
-    assert!(
-        !change.added_objects.iter().any(|obj| obj.name == new_name),
-        "Object should NOT be in added_objects with renamed name"
-    );
+    assert!(change.added_objects.iter().any(|obj| obj.name == object_name), "Object should be in added_objects with original name");
+    assert!(!change.added_objects.iter().any(|obj| obj.name == new_name), "Object should NOT be in added_objects with renamed name");
     println!("✅ Object restored to original name in added_objects: {}", object_name);
     
     println!("\n✅ Test passed: Rename + rename back of added object results in no net change");
@@ -142,7 +89,7 @@ async fn test_rename_and_rename_back_deletes_rename_operation() {
 #[tokio::test]
 async fn test_update_commit_rename_update_shows_renamed_and_added() {
     let server = TestServer::start().await.expect("Failed to start test server");
-    let base_url = server.base_url();
+    let client = server.client();
     
     println!("Test: Update object, commit, rename it, then update with new object using old name");
     println!("Expected: Old object shown as renamed, new object shown as added\n");
@@ -150,19 +97,12 @@ async fn test_update_commit_rename_update_shows_renamed_and_added() {
     // Step 1: Create an object
     println!("Step 1: Creating object 'original_object'...");
     let original_name = "original_object";
-    let object_dump = load_moo_file("test_object.moo");
-    let object_content = moo_to_lines(&object_dump);
     
-    let update_request = json!({
-        "operation": "object/update",
-        "args": [original_name, serde_json::to_string(&object_content).unwrap()]
-    });
-    
-    let response = make_request("POST", &format!("{}/rpc", base_url), Some(update_request))
+    client.object_update_from_file(original_name, "test_object.moo")
         .await
-        .expect("Failed to create object");
+        .expect("Failed to create object")
+        .assert_success("Object creation");
     
-    assert!(response["success"].as_bool().unwrap_or(false), "Object creation should succeed");
     println!("✅ Object created: {}", original_name);
     
     // Get the change ID before committing
@@ -183,16 +123,10 @@ async fn test_update_commit_rename_update_shows_renamed_and_added() {
     // Step 2: Approve/commit the change to move it to Merged status
     println!("\nStep 2: Committing the change (marking as Merged)...");
     
-    let approve_request = json!({
-        "operation": "change/approve",
-        "args": [change_id.clone()]
-    });
-    
-    let approve_response = make_request("POST", &format!("{}/rpc", base_url), Some(approve_request))
+    client.change_approve(&change_id)
         .await
-        .expect("Failed to approve change");
-    
-    assert!(approve_response["success"].as_bool().unwrap_or(false), "Approve should succeed");
+        .expect("Failed to approve change")
+        .assert_success("Approve change");
     
     println!("✅ Change committed (status: Merged) using change/approve API");
     
@@ -206,16 +140,10 @@ async fn test_update_commit_rename_update_shows_renamed_and_added() {
     println!("\nStep 3: Renaming '{}' to 'renamed_object'...", original_name);
     let renamed_name = "renamed_object";
     
-    let rename_request = json!({
-        "operation": "object/rename",
-        "args": [original_name, renamed_name]
-    });
-    
-    let response = make_request("POST", &format!("{}/rpc", base_url), Some(rename_request))
+    client.object_rename(original_name, renamed_name)
         .await
-        .expect("Failed to rename object");
-    
-    assert!(response["success"].as_bool().unwrap_or(false), "Rename should succeed");
+        .expect("Failed to rename object")
+        .assert_success("Object rename");
     println!("✅ Object renamed to: {}", renamed_name);
     
     // Verify a new local change was created
@@ -233,19 +161,11 @@ async fn test_update_commit_rename_update_shows_renamed_and_added() {
     
     // Step 4: Update with a new object using the old object's name
     println!("\nStep 4: Creating new object with original name '{}'...", original_name);
-    let new_object_dump = load_moo_file("detailed_test_object.moo");
-    let new_object_content = moo_to_lines(&new_object_dump);
     
-    let update_request = json!({
-        "operation": "object/update",
-        "args": [original_name, serde_json::to_string(&new_object_content).unwrap()]
-    });
-    
-    let response = make_request("POST", &format!("{}/rpc", base_url), Some(update_request))
+    client.object_update_from_file(original_name, "detailed_test_object.moo")
         .await
-        .expect("Failed to create new object");
-    
-    assert!(response["success"].as_bool().unwrap_or(false), "New object creation should succeed");
+        .expect("Failed to create new object")
+        .assert_success("New object creation");
     println!("✅ New object created with name: {}", original_name);
     
     // Step 5: Verify the internal program state
@@ -301,7 +221,7 @@ async fn test_update_commit_rename_update_shows_renamed_and_added() {
 #[tokio::test]
 async fn test_rename_back_after_rename_and_add_deletes_added_object_with_cleanup() {
     let server = TestServer::start().await.expect("Failed to start test server");
-    let base_url = server.base_url();
+    let client = server.client();
     
     println!("Test: Update, commit, rename, update with old name, then rename back");
     println!("Expected: Added object should be deleted with SHA256 and ref cleanup\n");
@@ -309,19 +229,14 @@ async fn test_rename_back_after_rename_and_add_deletes_added_object_with_cleanup
     // Step 1-4: Same as previous test - create, commit, rename, create new with old name
     println!("Step 1: Creating object 'original_object'...");
     let original_name = "original_object";
-    let object_dump = load_moo_file("test_object.moo");
-    let object_content = moo_to_lines(&object_dump);
-    let original_content_str = object_content.join("\n");
+    let original_content = moo_to_lines(&load_moo_file("test_object.moo"));
+    let original_content_str = original_content.join("\n");
     let original_sha256 = TestServer::calculate_sha256(&original_content_str);
     
-    let update_request = json!({
-        "operation": "object/update",
-        "args": [original_name, serde_json::to_string(&object_content).unwrap()]
-    });
-    
-    make_request("POST", &format!("{}/rpc", base_url), Some(update_request))
+    client.object_update(original_name, original_content)
         .await
-        .expect("Failed to create object");
+        .expect("Failed to create object")
+        .assert_success("Create object");
     
     println!("✅ Object created: {} (SHA256: {})", original_name, original_sha256);
     
@@ -331,16 +246,10 @@ async fn test_rename_back_after_rename_and_add_deletes_added_object_with_cleanup
         .expect("Failed to get top change")
         .expect("Should have a top change");
     
-    let approve_request = json!({
-        "operation": "change/approve",
-        "args": [change_id.clone()]
-    });
-    
-    let approve_response = make_request("POST", &format!("{}/rpc", base_url), Some(approve_request))
+    client.change_approve(&change_id)
         .await
-        .expect("Failed to approve change");
-    
-    assert!(approve_response["success"].as_bool().unwrap_or(false), "Approve should succeed");
+        .expect("Failed to approve change")
+        .assert_success("Approve change");
     
     println!("✅ Change committed using change/approve API");
     
@@ -348,32 +257,23 @@ async fn test_rename_back_after_rename_and_add_deletes_added_object_with_cleanup
     println!("\nStep 3: Renaming '{}' to 'renamed_object'...", original_name);
     let renamed_name = "renamed_object";
     
-    let rename_request = json!({
-        "operation": "object/rename",
-        "args": [original_name, renamed_name]
-    });
-    
-    make_request("POST", &format!("{}/rpc", base_url), Some(rename_request))
+    client.object_rename(original_name, renamed_name)
         .await
-        .expect("Failed to rename object");
+        .expect("Failed to rename object")
+        .assert_success("Rename object");
     
     println!("✅ Object renamed to: {}", renamed_name);
     
     // Create new object with old name
     println!("\nStep 4: Creating new object with original name '{}'...", original_name);
-    let new_object_dump = load_moo_file("detailed_test_object.moo");
-    let new_object_content = moo_to_lines(&new_object_dump);
-    let new_content_str = new_object_content.join("\n");
+    let new_content = moo_to_lines(&load_moo_file("detailed_test_object.moo"));
+    let new_content_str = new_content.join("\n");
     let new_sha256 = TestServer::calculate_sha256(&new_content_str);
     
-    let update_request = json!({
-        "operation": "object/update",
-        "args": [original_name, serde_json::to_string(&new_object_content).unwrap()]
-    });
-    
-    make_request("POST", &format!("{}/rpc", base_url), Some(update_request))
+    client.object_update(original_name, new_content)
         .await
-        .expect("Failed to create new object");
+        .expect("Failed to create new object")
+        .assert_success("Create new object");
     
     println!("✅ New object created: {} (SHA256: {})", original_name, new_sha256);
     
@@ -406,16 +306,10 @@ async fn test_rename_back_after_rename_and_add_deletes_added_object_with_cleanup
     // Step 5: Rename the new object back to the old object's name
     println!("\nStep 5: Renaming new object '{}' back to '{}'...", original_name, renamed_name);
     
-    let rename_back_request = json!({
-        "operation": "object/rename",
-        "args": [original_name, renamed_name]
-    });
-    
-    let response = make_request("POST", &format!("{}/rpc", base_url), Some(rename_back_request))
+    client.object_rename(original_name, renamed_name)
         .await
-        .expect("Failed to rename back");
-    
-    assert!(response["success"].as_bool().unwrap_or(false), "Rename back should succeed");
+        .expect("Failed to rename back")
+        .assert_success("Rename back");
     println!("✅ Rename back executed");
     
     // Step 6: Verify the "added" object is deleted
