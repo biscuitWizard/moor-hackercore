@@ -6,6 +6,7 @@ use sha2::{Sha256, Digest};
 use std::collections::HashMap;
 
 use super::{ProviderError, ProviderResult};
+use crate::types::MooMetaObject;
 
 /// Provider trait for object CRUD operations
 pub trait ObjectsProvider: Send + Sync {
@@ -33,6 +34,12 @@ pub trait ObjectsProvider: Send + Sync {
     
     /// Clear all objects from storage
     fn clear(&self) -> ProviderResult<()>;
+    
+    /// Parse a YAML meta dump string into a MooMetaObject
+    fn parse_meta_dump(&self, dump: &str) -> ProviderResult<MooMetaObject>;
+    
+    /// Generate YAML dump from a MooMetaObject
+    fn generate_meta_dump(&self, meta: &MooMetaObject) -> ProviderResult<String>;
 }
 
 /// Implementation of ObjectsProvider using Fjall
@@ -132,5 +139,17 @@ impl ObjectsProvider for ObjectsProviderImpl {
         
         info!("Cleared all objects from storage");
         Ok(())
+    }
+    
+    fn parse_meta_dump(&self, dump: &str) -> ProviderResult<MooMetaObject> {
+        let meta: MooMetaObject = serde_yaml::from_str(dump)
+            .map_err(|e| ProviderError::SerializationError(format!("YAML parse error: {e}")))?;
+        Ok(meta)
+    }
+    
+    fn generate_meta_dump(&self, meta: &MooMetaObject) -> ProviderResult<String> {
+        let yaml = serde_yaml::to_string(meta)
+            .map_err(|e| ProviderError::SerializationError(format!("YAML serialization error: {e}")))?;
+        Ok(yaml)
     }
 }

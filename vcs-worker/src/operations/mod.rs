@@ -6,6 +6,7 @@ mod index;
 mod clone_op;
 mod user;
 mod workspace;
+mod meta;
 
 pub use registry::OperationRegistry;
 pub use hello_op::HelloOperation;
@@ -15,6 +16,7 @@ pub use index::{IndexListOperation, IndexCalcDeltaOperation, IndexUpdateOperatio
 pub use clone_op::CloneOperation;
 pub use user::StatOperation;
 pub use workspace::{WorkspaceSubmitOperation, WorkspaceListOperation};
+pub use meta::{MetaAddIgnoredPropertyOperation, MetaAddIgnoredVerbOperation, MetaRemoveIgnoredPropertyOperation, MetaRemoveIgnoredVerbOperation, MetaClearIgnoredPropertiesOperation, MetaClearIgnoredVerbsOperation};
 
 // Re-export common types from crate::types
 pub use crate::types::OperationRequest;
@@ -94,6 +96,12 @@ pub fn create_registry_with_config(config: Config) -> Result<(OperationRegistry,
     registry.register(WorkspaceSubmitOperation::new(database.clone()));
     registry.register(WorkspaceListOperation::new(database.clone()));
     registry.register(ChangeSwitchOperation::new(database.clone()));
+    registry.register(MetaAddIgnoredPropertyOperation::new(database.clone()));
+    registry.register(MetaAddIgnoredVerbOperation::new(database.clone()));
+    registry.register(MetaRemoveIgnoredPropertyOperation::new(database.clone()));
+    registry.register(MetaRemoveIgnoredVerbOperation::new(database.clone()));
+    registry.register(MetaClearIgnoredPropertiesOperation::new(database.clone()));
+    registry.register(MetaClearIgnoredVerbsOperation::new(database.clone()));
     
     Ok((registry, database))
 }

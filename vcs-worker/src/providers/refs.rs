@@ -1,5 +1,5 @@
 use fjall::Partition;
-use serde::{Serialize, Deserialize};
+use serde::{Serialize, Deserialize, Serializer, Deserializer};
 use tracing::{info, warn};
 use tokio::sync::mpsc;
 use std::collections::HashMap;
@@ -9,9 +9,33 @@ use crate::types::{ObjectInfo, VcsObjectType};
 
 
 /// Represents the refs storage as a HashMap where key is ObjectInfo and value is sha256
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Custom serialization converts HashMap to Vec for JSON compatibility
+#[derive(Debug, Clone)]
 pub struct RefsStorage {
     pub refs: HashMap<ObjectInfo, String>, // ObjectInfo -> sha256
+}
+
+impl Serialize for RefsStorage {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        // Convert HashMap to Vec of tuples for JSON serialization
+        let refs_vec: Vec<(&ObjectInfo, &String)> = self.refs.iter().collect();
+        refs_vec.serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for RefsStorage {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        // Deserialize as Vec of tuples and convert back to HashMap
+        let refs_vec: Vec<(ObjectInfo, String)> = Vec::deserialize(deserializer)?;
+        let refs: HashMap<ObjectInfo, String> = refs_vec.into_iter().collect();
+        Ok(RefsStorage { refs })
+    }
 }
 
 /// Provider trait for reference management

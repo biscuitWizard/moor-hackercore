@@ -85,6 +85,42 @@ impl ObjectDeleteOperation {
               renamed.to.object_type == VcsObjectType::MooObject && 
               (renamed.from.name == request.object_name || renamed.to.name == request.object_name)));
         
+        // Also handle deleting the corresponding MooMetaObject if it exists
+        if let Some(_meta_sha256) = self.database.refs().get_ref(VcsObjectType::MooMetaObject, &request.object_name, None)
+            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))? {
+            info!("Found meta for '{}', deleting it as well", request.object_name);
+            
+            // Get the current version of the meta
+            let meta_version = self.database.refs().get_current_version(VcsObjectType::MooMetaObject, &request.object_name)
+                .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
+                .unwrap_or(1);
+            
+            // Remove meta from added/modified lists if present
+            current_change.added_objects.retain(|obj| !(obj.object_type == VcsObjectType::MooMetaObject && obj.name == request.object_name));
+            current_change.modified_objects.retain(|obj| !(obj.object_type == VcsObjectType::MooMetaObject && obj.name == request.object_name));
+            
+            // Add to deleted_objects list if not already present
+            let meta_obj_info = crate::types::ObjectInfo {
+                object_type: VcsObjectType::MooMetaObject,
+                name: request.object_name.clone(),
+                version: meta_version,
+            };
+            if !current_change.deleted_objects.iter()
+                .filter(|obj| obj.object_type == VcsObjectType::MooMetaObject)
+                .any(|obj| obj.name == request.object_name) {
+                current_change.deleted_objects.push(meta_obj_info);
+                info!("Added meta '{}' to deleted_objects in change '{}'", request.object_name, current_change.name);
+            }
+            
+            // Remove any rename entries for the meta
+            current_change.renamed_objects.retain(|renamed| 
+                !(renamed.from.object_type == VcsObjectType::MooMetaObject && 
+                  renamed.to.object_type == VcsObjectType::MooMetaObject && 
+                  (renamed.from.name == request.object_name || renamed.to.name == request.object_name)));
+            
+            info!("Successfully queued deletion of meta for '{}'", request.object_name);
+        }
+        
         // Update the change in the database
         self.database.index().update_change(&current_change)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;

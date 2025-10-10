@@ -286,6 +286,53 @@ impl User {
     
 }
 
+/// Meta information for a MOO object
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct MooMetaObject {
+    pub ignored_properties: HashSet<String>,
+    pub ignored_verbs: HashSet<String>,
+}
+
+/// Request structure for adding an ignored property
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MetaAddIgnoredPropertyRequest {
+    pub object_name: String,
+    pub property_name: String,
+}
+
+/// Request structure for adding an ignored verb
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MetaAddIgnoredVerbRequest {
+    pub object_name: String,
+    pub verb_name: String,
+}
+
+/// Request structure for removing an ignored property
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MetaRemoveIgnoredPropertyRequest {
+    pub object_name: String,
+    pub property_name: String,
+}
+
+/// Request structure for removing an ignored verb
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MetaRemoveIgnoredVerbRequest {
+    pub object_name: String,
+    pub verb_name: String,
+}
+
+/// Request structure for clearing ignored properties
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MetaClearIgnoredPropertiesRequest {
+    pub object_name: String,
+}
+
+/// Request structure for clearing ignored verbs
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MetaClearIgnoredVerbsRequest {
+    pub object_name: String,
+}
+
 /// General error types for the VCS worker
 #[derive(Error, Debug)]
 pub enum ObjectsTreeError {

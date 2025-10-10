@@ -118,14 +118,43 @@ impl OperationRegistry {
 
 /// Convert a moor Var to a JSON Value for HTTP responses
 pub fn var_to_json_value(var: moor_var::Var) -> serde_json::Value {
-    // Handle different Var types
+    use serde_json::{json, Value};
+    
+    // Handle different Var types properly
     if let Some(str_val) = var.as_string() {
-        serde_json::Value::String(str_val.to_string())
+        Value::String(str_val.to_string())
+    } else if let Some(int_val) = var.as_integer() {
+        json!(int_val)
+    } else if let Some(float_val) = var.as_float() {
+        json!(float_val)
+    } else if let Some(bool_val) = var.as_bool() {
+        Value::Bool(bool_val)
     } else if let Some(obj_val) = var.as_object() {
-        // For objects, try to serialize their description or properties
-        serde_json::Value::String(format!("Object #{}", obj_val.id()))
+        Value::String(format!("#{}", obj_val.id()))
+    } else if let Some(list) = var.as_list() {
+        // Recursively convert list elements
+        let items: Vec<Value> = list.iter().map(|v| var_to_json_value(v.clone())).collect();
+        Value::Array(items)
+    } else if let Some(map) = var.as_map() {
+        // Convert map to JSON object with string keys
+        // If keys are not strings, convert them to strings
+        let mut obj = serde_json::Map::new();
+        for (k, v) in map.iter() {
+            let key_str = if let Some(s) = k.as_string() {
+                s.to_string()
+            } else {
+                // Convert non-string keys to their debug representation
+                format!("{:?}", k)
+            };
+            obj.insert(key_str, var_to_json_value(v.clone()));
+        }
+        Value::Object(obj)
+    } else if let Some(err) = var.as_error() {
+        Value::String(format!("Error: {}", err.message()))
+    } else if var.is_none() {
+        Value::Null
     } else {
-        // For other types, convert to debug string representation
-        serde_json::Value::String(format!("{var:?}"))
+        // For other types (Symbol, Binary, Lambda, etc.), convert to debug string
+        Value::String(format!("{:?}", var))
     }
 }

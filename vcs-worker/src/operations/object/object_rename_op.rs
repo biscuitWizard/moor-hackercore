@@ -240,6 +240,54 @@ impl ObjectRenameOperation {
             }
         }
         
+        // Also handle renaming the corresponding MooMetaObject if it exists
+        if let Some(meta_sha256) = self.database.refs().get_ref(VcsObjectType::MooMetaObject, &request.from_name, None)
+            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))? {
+            info!("Found meta for '{}', renaming it to '{}'", request.from_name, request.to_name);
+            
+            // Get the current version of the meta
+            let meta_version = self.database.refs().get_current_version(VcsObjectType::MooMetaObject, &request.from_name)
+                .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
+                .unwrap_or(1);
+            
+            // Create a new ref for the meta with the new name
+            self.database.refs().update_ref(VcsObjectType::MooMetaObject, &request.to_name, 1, &meta_sha256)
+                .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+            
+            // Delete the old meta ref
+            self.database.refs().delete_ref(VcsObjectType::MooMetaObject, &request.from_name, meta_version)
+                .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+            
+            // Update meta in the change tracking lists
+            // Update added_objects
+            for obj in current_change.added_objects.iter_mut() {
+                if obj.object_type == VcsObjectType::MooMetaObject && obj.name == request.from_name {
+                    obj.name = request.to_name.clone();
+                    obj.version = 1;
+                }
+            }
+            
+            // Update modified_objects
+            for obj in current_change.modified_objects.iter_mut() {
+                if obj.object_type == VcsObjectType::MooMetaObject && obj.name == request.from_name {
+                    obj.name = request.to_name.clone();
+                    obj.version = 1;
+                }
+            }
+            
+            // Update renamed_objects
+            for renamed in current_change.renamed_objects.iter_mut() {
+                if renamed.from.object_type == VcsObjectType::MooMetaObject && renamed.from.name == request.from_name {
+                    renamed.from.name = request.to_name.clone();
+                }
+                if renamed.to.object_type == VcsObjectType::MooMetaObject && renamed.to.name == request.from_name {
+                    renamed.to.name = request.to_name.clone();
+                }
+            }
+            
+            info!("Successfully renamed meta from '{}' to '{}'", request.from_name, request.to_name);
+        }
+        
         // Update the change in the database
         self.database.index().update_change(&current_change)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
