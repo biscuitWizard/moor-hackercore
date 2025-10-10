@@ -285,8 +285,8 @@ pub fn compare_object_versions(database: &DatabaseRef, obj_name: &str, local_ver
         let baseline_def = database.objects().parse_object_dump(&baseline_content)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         
-        // Compare the two object definitions
-        compare_object_definitions(&baseline_def, &local_def, &mut object_change);
+        // Compare the two object definitions with meta filtering
+        compare_object_definitions_with_meta(&baseline_def, &local_def, &mut object_change, Some(database), Some(obj_name));
     } else {
         // No baseline version - this is a new object, mark all as added
         for verb in &local_def.verbs {
@@ -306,7 +306,36 @@ pub fn compare_object_versions(database: &DatabaseRef, obj_name: &str, local_ver
 }
 
 /// Compare two ObjectDefinitions and populate the ObjectChange with detailed differences
+/// If database and obj_name are provided, ignored properties/verbs from meta are excluded from deleted lists
+#[allow(dead_code)]
 pub fn compare_object_definitions(baseline: &ObjectDefinition, local: &ObjectDefinition, object_change: &mut ObjectChange) {
+    compare_object_definitions_with_meta(baseline, local, object_change, None, None);
+}
+
+/// Compare two ObjectDefinitions with optional meta filtering
+pub fn compare_object_definitions_with_meta(
+    baseline: &ObjectDefinition, 
+    local: &ObjectDefinition, 
+    object_change: &mut ObjectChange,
+    database: Option<&DatabaseRef>,
+    obj_name: Option<&str>,
+) {
+    // Load meta if database and obj_name are provided
+    let meta = if let (Some(db), Some(name)) = (database, obj_name) {
+        match db.refs().get_ref(VcsObjectType::MooMetaObject, name, None) {
+            Ok(Some(meta_sha256)) => {
+                match db.objects().get(&meta_sha256) {
+                    Ok(Some(yaml)) => {
+                        db.objects().parse_meta_dump(&yaml).ok()
+                    }
+                    _ => None,
+                }
+            }
+            _ => None,
+        }
+    } else {
+        None
+    };
     // Compare verbs
     let baseline_verbs: HashMap<String, &moor_compiler::ObjVerbDef> = baseline.verbs.iter()
         .flat_map(|v| v.names.iter().map(move |name| (name.as_string(), v)))
@@ -331,8 +360,17 @@ pub fn compare_object_definitions(baseline: &ObjectDefinition, local: &ObjectDef
     
     for verb_name in baseline_verbs.keys() {
         if !local_verbs.contains_key(verb_name) {
-            // Verb was deleted
-            object_change.verbs_deleted.insert(verb_name.clone());
+            // Verb is missing - check if it's ignored before marking as deleted
+            let is_ignored = meta.as_ref()
+                .map(|m| m.ignored_verbs.contains(verb_name))
+                .unwrap_or(false);
+            
+            if !is_ignored {
+                // Verb was actually deleted (not just ignored)
+                object_change.verbs_deleted.insert(verb_name.clone());
+            } else {
+                tracing::debug!("Verb '{}' is missing but ignored in meta, not marking as deleted", verb_name);
+            }
         }
     }
     
@@ -360,8 +398,17 @@ pub fn compare_object_definitions(baseline: &ObjectDefinition, local: &ObjectDef
     
     for prop_name in baseline_props.keys() {
         if !local_props.contains_key(prop_name) {
-            // Property was deleted
-            object_change.props_deleted.insert(prop_name.clone());
+            // Property is missing - check if it's ignored before marking as deleted
+            let is_ignored = meta.as_ref()
+                .map(|m| m.ignored_properties.contains(prop_name))
+                .unwrap_or(false);
+            
+            if !is_ignored {
+                // Property was actually deleted (not just ignored)
+                object_change.props_deleted.insert(prop_name.clone());
+            } else {
+                tracing::debug!("Property '{}' is missing but ignored in meta, not marking as deleted", prop_name);
+            }
         }
     }
     
@@ -389,8 +436,17 @@ pub fn compare_object_definitions(baseline: &ObjectDefinition, local: &ObjectDef
     
     for prop_name in baseline_overrides.keys() {
         if !local_overrides.contains_key(prop_name) {
-            // Override was deleted
-            object_change.props_deleted.insert(prop_name.clone());
+            // Override is missing - check if it's ignored before marking as deleted
+            let is_ignored = meta.as_ref()
+                .map(|m| m.ignored_properties.contains(prop_name))
+                .unwrap_or(false);
+            
+            if !is_ignored {
+                // Override was actually deleted (not just ignored)
+                object_change.props_deleted.insert(prop_name.clone());
+            } else {
+                tracing::debug!("Property override '{}' is missing but ignored in meta, not marking as deleted", prop_name);
+            }
         }
     }
 }
