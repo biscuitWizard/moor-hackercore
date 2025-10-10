@@ -11,24 +11,18 @@ use crate::common::*;
 #[tokio::test]
 async fn test_object_list_shows_added_objects() {
     let server = TestServer::start().await.expect("Failed to start test server");
-    let base_url = server.base_url();
+    let client = server.client();
     
     println!("Test: object/list shows added objects");
     
     // Step 1: Verify empty list initially
     println!("\nStep 1: Verifying empty list initially...");
-    let list_request = json!({
-        "operation": "object/list",
-        "args": []
-    });
-    
-    let response = make_request("POST", &format!("{}/rpc", base_url), Some(list_request.clone()))
+    let response = client.object_list(None)
         .await
-        .expect("Failed to list objects");
+        .expect("Failed to list objects")
+        .assert_success("List objects");
     
-    assert!(response["success"].as_bool().unwrap_or(false), "List should succeed");
-    
-    let result_str = response["result"].as_str().unwrap();
+    let result_str = response.require_result_str("List result");
     let list_response: serde_json::Value = serde_json::from_str(result_str)
         .expect("Failed to parse list response");
     
@@ -40,37 +34,17 @@ async fn test_object_list_shows_added_objects() {
     println!("\nStep 2: Adding objects...");
     
     // Create a change first
-    let create_request = json!({
-        "operation": "change/create",
-        "args": ["test_change", "test_author"]
-    });
-    make_request("POST", &format!("{}/rpc", base_url), Some(create_request))
+    client.change_create("test_change", "test_author", None)
         .await
         .expect("Failed to create change");
     
     // Add first object
-    let object_name_1 = "object_one";
-    let object_dump_1 = load_moo_file("test_object.moo");
-    let object_content_1 = moo_to_lines(&object_dump_1);
-    
-    let update_request_1 = json!({
-        "operation": "object/update",
-        "args": [object_name_1, serde_json::to_string(&object_content_1).unwrap()]
-    });
-    make_request("POST", &format!("{}/rpc", base_url), Some(update_request_1))
+    client.object_update_from_file("object_one", "test_object.moo")
         .await
         .expect("Failed to add object 1");
     
     // Add second object
-    let object_name_2 = "object_two";
-    let object_dump_2 = load_moo_file("detailed_test_object.moo");
-    let object_content_2 = moo_to_lines(&object_dump_2);
-    
-    let update_request_2 = json!({
-        "operation": "object/update",
-        "args": [object_name_2, serde_json::to_string(&object_content_2).unwrap()]
-    });
-    make_request("POST", &format!("{}/rpc", base_url), Some(update_request_2))
+    client.object_update_from_file("object_two", "detailed_test_object.moo")
         .await
         .expect("Failed to add object 2");
     
@@ -79,13 +53,12 @@ async fn test_object_list_shows_added_objects() {
     // Step 3: Verify objects appear in list
     println!("\nStep 3: Verifying objects appear in list...");
     
-    let response = make_request("POST", &format!("{}/rpc", base_url), Some(list_request))
+    let response = client.object_list(None)
         .await
-        .expect("Failed to list objects");
+        .expect("Failed to list objects")
+        .assert_success("List objects");
     
-    assert!(response["success"].as_bool().unwrap_or(false), "List should succeed");
-    
-    let result_str = response["result"].as_str().unwrap();
+    let result_str = response.require_result_str("List result");
     let list_response: serde_json::Value = serde_json::from_str(result_str)
         .expect("Failed to parse list response");
     
@@ -96,8 +69,8 @@ async fn test_object_list_shows_added_objects() {
         .map(|obj| obj["name"].as_str().unwrap().to_string())
         .collect();
     
-    assert!(object_names.contains(&object_name_1.to_string()), "Should contain object_one");
-    assert!(object_names.contains(&object_name_2.to_string()), "Should contain object_two");
+    assert!(object_names.contains(&"object_one".to_string()), "Should contain object_one");
+    assert!(object_names.contains(&"object_two".to_string()), "Should contain object_two");
     
     println!("✅ Both objects appear in list: {:?}", object_names);
     
@@ -107,41 +80,21 @@ async fn test_object_list_shows_added_objects() {
 #[tokio::test]
 async fn test_object_list_excludes_deleted_objects() {
     let server = TestServer::start().await.expect("Failed to start test server");
-    let base_url = server.base_url();
+    let client = server.client();
     
     println!("Test: object/list excludes deleted objects");
     
     // Step 1: Add objects and delete one within the same change
     println!("\nStep 1: Creating change and adding objects...");
-    let create_request = json!({
-        "operation": "change/create",
-        "args": ["test_change", "test_author"]
-    });
-    make_request("POST", &format!("{}/rpc", base_url), Some(create_request))
+    client.change_create("test_change", "test_author", None)
         .await
         .expect("Failed to create change");
     
-    let object_name_1 = "object_to_keep";
-    let object_dump_1 = load_moo_file("test_object.moo");
-    let object_content_1 = moo_to_lines(&object_dump_1);
-    
-    let update_request_1 = json!({
-        "operation": "object/update",
-        "args": [object_name_1, serde_json::to_string(&object_content_1).unwrap()]
-    });
-    make_request("POST", &format!("{}/rpc", base_url), Some(update_request_1))
+    client.object_update_from_file("object_to_keep", "test_object.moo")
         .await
         .expect("Failed to add object 1");
     
-    let object_name_2 = "object_to_delete";
-    let object_dump_2 = load_moo_file("detailed_test_object.moo");
-    let object_content_2 = moo_to_lines(&object_dump_2);
-    
-    let update_request_2 = json!({
-        "operation": "object/update",
-        "args": [object_name_2, serde_json::to_string(&object_content_2).unwrap()]
-    });
-    make_request("POST", &format!("{}/rpc", base_url), Some(update_request_2))
+    client.object_update_from_file("object_to_delete", "detailed_test_object.moo")
         .await
         .expect("Failed to add object 2");
     
@@ -150,12 +103,7 @@ async fn test_object_list_excludes_deleted_objects() {
     // Step 2: Delete the second object in the same change
     println!("\nStep 2: Deleting an object...");
     
-    // Delete the second object
-    let delete_request = json!({
-        "operation": "object/delete",
-        "args": [object_name_2]
-    });
-    make_request("POST", &format!("{}/rpc", base_url), Some(delete_request))
+    client.object_delete("object_to_delete")
         .await
         .expect("Failed to delete object");
     
@@ -163,18 +111,12 @@ async fn test_object_list_excludes_deleted_objects() {
     
     // Step 3: Verify deleted object doesn't appear in list
     println!("\nStep 3: Verifying deleted object is excluded...");
-    let list_request = json!({
-        "operation": "object/list",
-        "args": []
-    });
-    
-    let response = make_request("POST", &format!("{}/rpc", base_url), Some(list_request))
+    let response = client.object_list(None)
         .await
-        .expect("Failed to list objects");
+        .expect("Failed to list objects")
+        .assert_success("List objects");
     
-    assert!(response["success"].as_bool().unwrap_or(false), "List should succeed");
-    
-    let result_str = response["result"].as_str().unwrap();
+    let result_str = response.require_result_str("List result");
     let list_response: serde_json::Value = serde_json::from_str(result_str)
         .expect("Failed to parse list response");
     
@@ -188,8 +130,8 @@ async fn test_object_list_excludes_deleted_objects() {
         .map(|obj| obj["name"].as_str().unwrap().to_string())
         .collect();
     
-    assert!(object_names.contains(&object_name_1.to_string()), "Should contain object_to_keep");
-    assert!(!object_names.contains(&object_name_2.to_string()), "Should NOT contain object_to_delete");
+    assert!(object_names.contains(&"object_to_keep".to_string()), "Should contain object_to_keep");
+    assert!(!object_names.contains(&"object_to_delete".to_string()), "Should NOT contain object_to_delete");
     
     println!("✅ Only remaining object appears in list: {:?}", object_names);
     
@@ -199,60 +141,37 @@ async fn test_object_list_excludes_deleted_objects() {
 #[tokio::test]
 async fn test_object_list_shows_renamed_objects_with_new_name() {
     let server = TestServer::start().await.expect("Failed to start test server");
-    let base_url = server.base_url();
+    let client = server.client();
     
     println!("Test: object/list shows renamed objects with new name");
     
     // Test rename within a single change (added objects can be renamed)
     println!("\nStep 1: Creating change, adding object, and renaming it...");
-    let create_request = json!({
-        "operation": "change/create",
-        "args": ["test_change", "test_author"]
-    });
-    make_request("POST", &format!("{}/rpc", base_url), Some(create_request))
+    client.change_create("test_change", "test_author", None)
         .await
         .expect("Failed to create change");
     
-    let original_name = "original_name";
-    let object_dump = load_moo_file("test_object.moo");
-    let object_content = moo_to_lines(&object_dump);
-    
-    let update_request = json!({
-        "operation": "object/update",
-        "args": [original_name, serde_json::to_string(&object_content).unwrap()]
-    });
-    make_request("POST", &format!("{}/rpc", base_url), Some(update_request))
+    client.object_update_from_file("original_name", "test_object.moo")
         .await
         .expect("Failed to add object");
     
     println!("✅ Added object with original name");
     
     // Rename the object (within the same change, it just updates the name in added_objects)
-    let new_name = "renamed_object";
-    let rename_request = json!({
-        "operation": "object/rename",
-        "args": [original_name, new_name]
-    });
-    make_request("POST", &format!("{}/rpc", base_url), Some(rename_request))
+    client.object_rename("original_name", "renamed_object")
         .await
         .expect("Failed to rename object");
     
-    println!("✅ Renamed object from '{}' to '{}'", original_name, new_name);
+    println!("✅ Renamed object from 'original_name' to 'renamed_object'");
     
     // Step 2: Verify object appears with new name only
     println!("\nStep 2: Verifying object appears with new name...");
-    let list_request = json!({
-        "operation": "object/list",
-        "args": []
-    });
-    
-    let response = make_request("POST", &format!("{}/rpc", base_url), Some(list_request))
+    let response = client.object_list(None)
         .await
-        .expect("Failed to list objects");
+        .expect("Failed to list objects")
+        .assert_success("List objects");
     
-    assert!(response["success"].as_bool().unwrap_or(false), "List should succeed");
-    
-    let result_str = response["result"].as_str().unwrap();
+    let result_str = response.require_result_str("List result");
     let list_response: serde_json::Value = serde_json::from_str(result_str)
         .expect("Failed to parse list response");
     
@@ -263,8 +182,8 @@ async fn test_object_list_shows_renamed_objects_with_new_name() {
         .map(|obj| obj["name"].as_str().unwrap().to_string())
         .collect();
     
-    assert!(object_names.contains(&new_name.to_string()), "Should contain renamed_object");
-    assert!(!object_names.contains(&original_name.to_string()), "Should NOT contain original_name");
+    assert!(object_names.contains(&"renamed_object".to_string()), "Should contain renamed_object");
+    assert!(!object_names.contains(&"original_name".to_string()), "Should NOT contain original_name");
     
     println!("✅ Object appears with new name: {:?}", object_names);
     
@@ -274,42 +193,25 @@ async fn test_object_list_shows_renamed_objects_with_new_name() {
 #[tokio::test]
 async fn test_object_list_tracks_object_state_in_change() {
     let server = TestServer::start().await.expect("Failed to start test server");
-    let base_url = server.base_url();
+    let client = server.client();
+    let db = server.db_assertions();
     
     println!("Test: object/list correctly tracks object state (added vs modified)");
     
     // Step 1: Create a change and add an object
     println!("\nStep 1: Creating change and adding object...");
-    let create_request = json!({
-        "operation": "change/create",
-        "args": ["test_change", "test_author"]
-    });
-    make_request("POST", &format!("{}/rpc", base_url), Some(create_request))
+    client.change_create("test_change", "test_author", None)
         .await
         .expect("Failed to create change");
     
-    let object_name = "test_object";
-    let object_dump = load_moo_file("test_object.moo");
-    let object_content = moo_to_lines(&object_dump);
-    
-    let update_request = json!({
-        "operation": "object/update",
-        "args": [object_name, serde_json::to_string(&object_content).unwrap()]
-    });
-    make_request("POST", &format!("{}/rpc", base_url), Some(update_request))
+    client.object_update_from_file("test_object", "test_object.moo")
         .await
         .expect("Failed to add object");
     
     println!("✅ Added object");
     
     // Verify object is in added_objects (not modified_objects)
-    let change_id = server.database().index().get_top_change()
-        .expect("Failed to get top change")
-        .expect("Should have a top change");
-    
-    let change = server.database().index().get_change(&change_id)
-        .expect("Failed to get change")
-        .expect("Change should exist");
+    let (change_id, change) = db.require_top_change();
     
     assert_eq!(change.added_objects.len(), 1, "Should have 1 added object");
     assert_eq!(change.modified_objects.len(), 0, "Should have 0 modified objects");
@@ -317,14 +219,7 @@ async fn test_object_list_tracks_object_state_in_change() {
     
     // Step 2: Modify the object (in the same change)
     println!("\nStep 2: Modifying object in same change...");
-    let object_dump_2 = load_moo_file("detailed_test_object.moo");
-    let object_content_2 = moo_to_lines(&object_dump_2);
-    
-    let update_request_2 = json!({
-        "operation": "object/update",
-        "args": [object_name, serde_json::to_string(&object_content_2).unwrap()]
-    });
-    make_request("POST", &format!("{}/rpc", base_url), Some(update_request_2))
+    client.object_update_from_file("test_object", "detailed_test_object.moo")
         .await
         .expect("Failed to modify object");
     
@@ -339,24 +234,18 @@ async fn test_object_list_tracks_object_state_in_change() {
     
     assert_eq!(change.added_objects.len(), 1, "Should still have 1 added object");
     assert_eq!(change.modified_objects.len(), 0, "Should still have 0 modified objects");
-    assert_eq!(change.added_objects[0].name, object_name, "Object should still be in added_objects");
+    assert_eq!(change.added_objects[0].name, "test_object", "Object should still be in added_objects");
     
     println!("✅ Object stays in added_objects (not moved to modified_objects)");
     
     // Step 4: Verify object appears in list with version 1
     println!("\nStep 4: Verifying object appears in list...");
-    let list_request = json!({
-        "operation": "object/list",
-        "args": []
-    });
-    
-    let response = make_request("POST", &format!("{}/rpc", base_url), Some(list_request))
+    let response = client.object_list(None)
         .await
-        .expect("Failed to list objects");
+        .expect("Failed to list objects")
+        .assert_success("List objects");
     
-    assert!(response["success"].as_bool().unwrap_or(false), "List should succeed");
-    
-    let result_str = response["result"].as_str().unwrap();
+    let result_str = response.require_result_str("List result");
     let list_response: serde_json::Value = serde_json::from_str(result_str)
         .expect("Failed to parse list response");
     
@@ -364,7 +253,7 @@ async fn test_object_list_tracks_object_state_in_change() {
     assert_eq!(objects.len(), 1, "Should have 1 object");
     
     let obj = &objects[0];
-    assert_eq!(obj["name"].as_str().unwrap(), object_name, "Should be the same object");
+    assert_eq!(obj["name"].as_str().unwrap(), "test_object", "Should be the same object");
     assert_eq!(obj["version"].as_u64().unwrap(), 1, "Version should be 1 (added object)");
     
     println!("✅ Object appears in list with version 1 (added, not modified)");
@@ -375,61 +264,40 @@ async fn test_object_list_tracks_object_state_in_change() {
 #[tokio::test]
 async fn test_object_list_complex_scenario() {
     let server = TestServer::start().await.expect("Failed to start test server");
-    let base_url = server.base_url();
+    let client = server.client();
+    let db = server.db_assertions();
     
     println!("Test: object/list complex scenario with add, modify, rename, delete");
     println!("This test creates committed objects, then performs operations to test all states\n");
     
     // Step 1: Create initial change and add objects
     println!("Step 1: Creating initial change and adding objects...");
-    let create_request = json!({
-        "operation": "change/create",
-        "args": ["initial_change", "test_author"]
-    });
-    make_request("POST", &format!("{}/rpc", base_url), Some(create_request))
+    client.change_create("initial_change", "test_author", None)
         .await
         .expect("Failed to create change");
     
     // Add four objects
-    let object_dump = load_moo_file("test_object.moo");
-    let object_content = moo_to_lines(&object_dump);
-    
     for name in ["obj_A", "obj_B", "obj_C", "obj_E"] {
-        let update_request = json!({
-            "operation": "object/update",
-            "args": [name, serde_json::to_string(&object_content).unwrap()]
-        });
-        make_request("POST", &format!("{}/rpc", base_url), Some(update_request))
+        client.object_update_from_file(name, "test_object.moo")
             .await
             .expect("Failed to add object");
     }
     
     println!("✅ Added 4 objects: obj_A, obj_B, obj_C, obj_E");
     
-    // Step 2: Approve the commit using the actual approve operation
+    // Step 2: Approve the commit
     println!("\nStep 2: Approving initial commit...");
-    let initial_change_id = server.database().index().get_top_change()
-        .expect("Failed to get top change")
-        .expect("Should have a top change");
-    
-    let initial_change = server.database().index().get_change(&initial_change_id)
-        .expect("Failed to get change")
-        .expect("Change should exist");
+    let (initial_change_id, initial_change) = db.require_top_change();
     
     assert_eq!(initial_change.status, moor_vcs_worker::types::ChangeStatus::Local, "Should be Local");
     assert_eq!(initial_change.added_objects.len(), 4, "Should have 4 added objects");
     
     // Use the actual approve_change operation via HTTP
-    let approve_request = json!({
-        "operation": "change/approve",
-        "args": [initial_change_id.clone()]
-    });
-    
-    let approve_response = make_request("POST", &format!("{}/rpc", base_url), Some(approve_request))
+    client.change_approve(&initial_change_id)
         .await
-        .expect("Failed to approve change");
+        .expect("Failed to approve change")
+        .assert_success("Approve change");
     
-    assert!(approve_response["success"].as_bool().unwrap_or(false), "Approve should succeed");
     println!("✅ Approved initial change using approve operation");
     
     // Verify it's marked as Merged
@@ -441,28 +309,18 @@ async fn test_object_list_complex_scenario() {
     
     // Step 3: Create new change and perform operations
     println!("\nStep 3: Creating new change and performing operations...");
-    let create_request_2 = json!({
-        "operation": "change/create",
-        "args": ["complex_change", "test_author"]
-    });
-    make_request("POST", &format!("{}/rpc", base_url), Some(create_request_2))
+    client.change_create("complex_change", "test_author", None)
         .await
         .expect("Failed to create second change");
     
-    let new_change_id = server.database().index().get_top_change()
-        .expect("Failed to get top change")
-        .expect("Should have a top change");
+    let (new_change_id, _) = db.require_top_change();
     
     // Verify it's a different change
     assert_ne!(new_change_id, initial_change_id, "Should be a new change");
     println!("✅ Created new local change");
     
     // Rename obj_A to obj_A_renamed (should go in renamed_objects)
-    let rename_request = json!({
-        "operation": "object/rename",
-        "args": ["obj_A", "obj_A_renamed"]
-    });
-    make_request("POST", &format!("{}/rpc", base_url), Some(rename_request))
+    client.object_rename("obj_A", "obj_A_renamed")
         .await
         .expect("Failed to rename obj_A");
     println!("  • Renamed obj_A -> obj_A_renamed");
@@ -477,13 +335,7 @@ async fn test_object_list_complex_scenario() {
     println!("    ✓ obj_A in renamed_objects");
     
     // Modify obj_B (should go in modified_objects since it's from committed change)
-    let object_dump_2 = load_moo_file("detailed_test_object.moo");
-    let object_content_2 = moo_to_lines(&object_dump_2);
-    let update_request = json!({
-        "operation": "object/update",
-        "args": ["obj_B", serde_json::to_string(&object_content_2).unwrap()]
-    });
-    make_request("POST", &format!("{}/rpc", base_url), Some(update_request))
+    client.object_update_from_file("obj_B", "detailed_test_object.moo")
         .await
         .expect("Failed to modify obj_B");
     println!("  • Modified obj_B");
@@ -497,11 +349,7 @@ async fn test_object_list_complex_scenario() {
     println!("    ✓ obj_B in modified_objects");
     
     // Delete obj_C (should go in deleted_objects)
-    let delete_request = json!({
-        "operation": "object/delete",
-        "args": ["obj_C"]
-    });
-    make_request("POST", &format!("{}/rpc", base_url), Some(delete_request))
+    client.object_delete("obj_C")
         .await
         .expect("Failed to delete obj_C");
     println!("  • Deleted obj_C");
@@ -515,11 +363,7 @@ async fn test_object_list_complex_scenario() {
     println!("    ✓ obj_C in deleted_objects");
     
     // Add new obj_D (should go in added_objects)
-    let update_request_d = json!({
-        "operation": "object/update",
-        "args": ["obj_D", serde_json::to_string(&object_content).unwrap()]
-    });
-    make_request("POST", &format!("{}/rpc", base_url), Some(update_request_d))
+    client.object_update_from_file("obj_D", "test_object.moo")
         .await
         .expect("Failed to add obj_D");
     println!("  • Added obj_D");
@@ -540,18 +384,12 @@ async fn test_object_list_complex_scenario() {
     
     // Step 4: Verify final object list
     println!("\nStep 4: Verifying final object list...");
-    let list_request = json!({
-        "operation": "object/list",
-        "args": []
-    });
-    
-    let response = make_request("POST", &format!("{}/rpc", base_url), Some(list_request))
+    let response = client.object_list(None)
         .await
-        .expect("Failed to list objects");
+        .expect("Failed to list objects")
+        .assert_success("List objects");
     
-    assert!(response["success"].as_bool().unwrap_or(false), "List should succeed");
-    
-    let result_str = response["result"].as_str().unwrap();
+    let result_str = response.require_result_str("List result");
     let list_response: serde_json::Value = serde_json::from_str(result_str)
         .expect("Failed to parse list response");
     
@@ -576,4 +414,3 @@ async fn test_object_list_complex_scenario() {
     
     println!("\n✅ Test passed: object/list handles complex scenarios with proper state tracking");
 }
-

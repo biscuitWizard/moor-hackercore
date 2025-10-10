@@ -11,24 +11,18 @@ use moor_vcs_worker::providers::workspace::WorkspaceProvider;
 #[tokio::test]
 async fn test_workspace_list_empty() {
     let server = TestServer::start().await.expect("Failed to start test server");
-    let base_url = server.base_url();
+    let client = server.client();
     
     println!("Test: List workspace changes when empty");
     
     // Step 1: List workspace changes (should be empty)
     println!("\nStep 1: Listing workspace changes...");
-    let list_request = json!({
-        "operation": "workspace/list",
-        "args": []
-    });
-    
-    let response = make_request("POST", &format!("{}/rpc", base_url), Some(list_request))
+    let response = client.workspace_list(None)
         .await
         .expect("Failed to list workspace changes");
     
-    assert!(response["success"].as_bool().unwrap_or(false), "List should succeed");
-    
-    let result = response["result"].as_str().unwrap_or("");
+    response.assert_success("List workspace");
+    let result = response.require_result_str("List result");
     assert!(result.contains("No workspace changes found"), "Should indicate no changes found");
     println!("✅ Empty workspace list: {}", result);
     
@@ -43,7 +37,7 @@ async fn test_workspace_list_empty() {
 #[tokio::test]
 async fn test_workspace_submit_and_list() {
     let server = TestServer::start().await.expect("Failed to start test server");
-    let base_url = server.base_url();
+    let client = server.client();
     
     println!("Test: Submit a change to workspace and list it");
     
@@ -75,17 +69,12 @@ async fn test_workspace_submit_and_list() {
     
     // Step 2: Submit the change to workspace
     println!("\nStep 2: Submitting change to workspace...");
-    let submit_request = json!({
-        "operation": "workspace/submit",
-        "args": [change_json]
-    });
-    
-    let submit_response = make_request("POST", &format!("{}/rpc", base_url), Some(submit_request))
+    let submit_response = client.workspace_submit(&change_json)
         .await
         .expect("Failed to submit change");
     
-    assert!(submit_response["success"].as_bool().unwrap_or(false), "Submit should succeed");
-    let result = submit_response["result"].as_str().unwrap_or("");
+    submit_response.assert_success("Submit to workspace");
+    let result = submit_response.require_result_str("Submit result");
     assert!(result.contains("successfully submitted"), "Should confirm submission");
     println!("✅ Submit response: {}", result);
     
@@ -102,17 +91,12 @@ async fn test_workspace_submit_and_list() {
     
     // Step 4: List workspace changes
     println!("\nStep 4: Listing workspace changes...");
-    let list_request = json!({
-        "operation": "workspace/list",
-        "args": []
-    });
-    
-    let list_response = make_request("POST", &format!("{}/rpc", base_url), Some(list_request))
+    let list_response = client.workspace_list(None)
         .await
         .expect("Failed to list workspace changes");
     
-    assert!(list_response["success"].as_bool().unwrap_or(false), "List should succeed");
-    let list_result = list_response["result"].as_str().unwrap_or("");
+    list_response.assert_success("List workspace");
+    let list_result = list_response.require_result_str("List result");
     
     assert!(list_result.contains(&change.id), "Should contain change ID");
     assert!(list_result.contains(&change.name), "Should contain change name");
@@ -126,7 +110,7 @@ async fn test_workspace_submit_and_list() {
 #[tokio::test]
 async fn test_workspace_list_filter_by_status() {
     let server = TestServer::start().await.expect("Failed to start test server");
-    let base_url = server.base_url();
+    let client = server.client();
     
     println!("Test: Filter workspace changes by status");
     
@@ -170,21 +154,11 @@ async fn test_workspace_list_filter_by_status() {
     };
     
     // Submit both changes
-    let review_json = serde_json::to_string(&review_change).unwrap();
-    let submit_review = json!({
-        "operation": "workspace/submit",
-        "args": [review_json]
-    });
-    make_request("POST", &format!("{}/rpc", base_url), Some(submit_review))
+    client.workspace_submit(&serde_json::to_string(&review_change).unwrap())
         .await
         .expect("Failed to submit review change");
     
-    let idle_json = serde_json::to_string(&idle_change).unwrap();
-    let submit_idle = json!({
-        "operation": "workspace/submit",
-        "args": [idle_json]
-    });
-    make_request("POST", &format!("{}/rpc", base_url), Some(submit_idle))
+    client.workspace_submit(&serde_json::to_string(&idle_change).unwrap())
         .await
         .expect("Failed to submit idle change");
     
@@ -192,16 +166,11 @@ async fn test_workspace_list_filter_by_status() {
     
     // Step 2: List all changes (no filter)
     println!("\nStep 2: Listing all workspace changes...");
-    let list_all = json!({
-        "operation": "workspace/list",
-        "args": []
-    });
-    
-    let all_response = make_request("POST", &format!("{}/rpc", base_url), Some(list_all))
+    let all_response = client.workspace_list(None)
         .await
         .expect("Failed to list all changes");
     
-    let all_result = all_response["result"].as_str().unwrap_or("");
+    let all_result = all_response.require_result_str("List all");
     assert!(all_result.contains(&review_change.name), "Should contain review change");
     assert!(all_result.contains(&idle_change.name), "Should contain idle change");
     assert!(all_result.contains("Total: 2 changes"), "Should show 2 total changes");
@@ -209,16 +178,11 @@ async fn test_workspace_list_filter_by_status() {
     
     // Step 3: Filter by Review status
     println!("\nStep 3: Filtering by Review status...");
-    let list_review = json!({
-        "operation": "workspace/list",
-        "args": ["review"]
-    });
-    
-    let review_response = make_request("POST", &format!("{}/rpc", base_url), Some(list_review))
+    let review_response = client.workspace_list(Some("review"))
         .await
         .expect("Failed to list review changes");
     
-    let review_result = review_response["result"].as_str().unwrap_or("");
+    let review_result = review_response.require_result_str("List review");
     assert!(review_result.contains(&review_change.name), "Should contain review change");
     assert!(!review_result.contains(&idle_change.name), "Should NOT contain idle change");
     assert!(review_result.contains("status: Review") || review_result.contains("Review"), "Should indicate Review filter");
@@ -226,16 +190,11 @@ async fn test_workspace_list_filter_by_status() {
     
     // Step 4: Filter by Idle status
     println!("\nStep 4: Filtering by Idle status...");
-    let list_idle = json!({
-        "operation": "workspace/list",
-        "args": ["idle"]
-    });
-    
-    let idle_response = make_request("POST", &format!("{}/rpc", base_url), Some(list_idle))
+    let idle_response = client.workspace_list(Some("idle"))
         .await
         .expect("Failed to list idle changes");
     
-    let idle_result = idle_response["result"].as_str().unwrap_or("");
+    let idle_result = idle_response.require_result_str("List idle");
     assert!(!idle_result.contains(&review_change.name), "Should NOT contain review change");
     assert!(idle_result.contains(&idle_change.name), "Should contain idle change");
     assert!(idle_result.contains("status: Idle"), "Should indicate Idle filter");
@@ -247,23 +206,18 @@ async fn test_workspace_list_filter_by_status() {
 #[tokio::test]
 async fn test_workspace_list_invalid_status_filter() {
     let server = TestServer::start().await.expect("Failed to start test server");
-    let base_url = server.base_url();
+    let client = server.client();
     
     println!("Test: Invalid status filter should return error");
     
     println!("\nTesting invalid status filter...");
-    let list_request = json!({
-        "operation": "workspace/list",
-        "args": ["invalid_status"]
-    });
-    
-    let response = make_request("POST", &format!("{}/rpc", base_url), Some(list_request))
+    let response = client.workspace_list(Some("invalid_status"))
         .await
         .expect("Request should complete");
     
     // Check if it's an error response
-    let success = response["success"].as_bool().unwrap_or(true);
-    let result = response["result"].as_str().unwrap_or("");
+    let success = response.is_success();
+    let result = response.get_result_str().unwrap_or("");
     
     assert!(!success || result.contains("Invalid status filter") || result.contains("Error"), 
             "Should indicate invalid status, got: {}", result);
@@ -275,22 +229,17 @@ async fn test_workspace_list_invalid_status_filter() {
 #[tokio::test]
 async fn test_workspace_submit_invalid_json() {
     let server = TestServer::start().await.expect("Failed to start test server");
-    let base_url = server.base_url();
+    let client = server.client();
     
     println!("Test: Submit with invalid JSON should fail");
     
     println!("\nSubmitting invalid JSON...");
-    let submit_request = json!({
-        "operation": "workspace/submit",
-        "args": ["this is not valid json"]
-    });
-    
-    let response = make_request("POST", &format!("{}/rpc", base_url), Some(submit_request))
+    let response = client.workspace_submit("this is not valid json")
         .await
         .expect("Request should complete");
     
-    let success = response["success"].as_bool().unwrap_or(true);
-    let result = response["result"].as_str().unwrap_or("");
+    let success = response.is_success();
+    let result = response.get_result_str().unwrap_or("");
     
     assert!(!success || result.contains("Error") || result.contains("Failed to deserialize"), 
             "Should indicate deserialization error");
@@ -302,22 +251,17 @@ async fn test_workspace_submit_invalid_json() {
 #[tokio::test]
 async fn test_workspace_submit_missing_args() {
     let server = TestServer::start().await.expect("Failed to start test server");
-    let base_url = server.base_url();
+    let client = server.client();
     
     println!("Test: Submit without arguments should fail");
     
     println!("\nSubmitting without arguments...");
-    let submit_request = json!({
-        "operation": "workspace/submit",
-        "args": []
-    });
-    
-    let response = make_request("POST", &format!("{}/rpc", base_url), Some(submit_request))
+    let response = client.rpc_call("workspace/submit", vec![])
         .await
         .expect("Request should complete");
     
-    let success = response["success"].as_bool().unwrap_or(true);
-    let result = response["result"].as_str().unwrap_or("");
+    let success = response.is_success();
+    let result = response.get_result_str().unwrap_or("");
     
     assert!(!success || result.contains("Error") || result.contains("requires"), 
             "Should indicate missing argument");
@@ -329,7 +273,7 @@ async fn test_workspace_submit_missing_args() {
 #[tokio::test]
 async fn test_workspace_submit_multiple_changes() {
     let server = TestServer::start().await.expect("Failed to start test server");
-    let base_url = server.base_url();
+    let client = server.client();
     
     println!("Test: Submit multiple changes and verify all are listed");
     
@@ -358,12 +302,7 @@ async fn test_workspace_submit_multiple_changes() {
         change_ids.push(change.id.clone());
         
         let change_json = serde_json::to_string(&change).unwrap();
-        let submit_request = json!({
-            "operation": "workspace/submit",
-            "args": [change_json]
-        });
-        
-        make_request("POST", &format!("{}/rpc", base_url), Some(submit_request))
+        client.workspace_submit(&change_json)
             .await
             .expect(&format!("Failed to submit change {}", i));
     }
@@ -372,16 +311,11 @@ async fn test_workspace_submit_multiple_changes() {
     
     // List all changes
     println!("\nListing all workspace changes...");
-    let list_request = json!({
-        "operation": "workspace/list",
-        "args": []
-    });
-    
-    let response = make_request("POST", &format!("{}/rpc", base_url), Some(list_request))
+    let response = client.workspace_list(None)
         .await
         .expect("Failed to list changes");
     
-    let result = response["result"].as_str().unwrap_or("");
+    let result = response.require_result_str("List result");
     
     // Verify all 3 changes are present
     for (i, change_id) in change_ids.iter().enumerate() {
@@ -404,7 +338,7 @@ async fn test_workspace_submit_multiple_changes() {
 #[tokio::test]
 async fn test_workspace_change_with_objects() {
     let server = TestServer::start().await.expect("Failed to start test server");
-    let base_url = server.base_url();
+    let client = server.client();
     
     println!("Test: Submit change with objects and verify details in list");
     
@@ -435,12 +369,7 @@ async fn test_workspace_change_with_objects() {
     
     // Submit the change
     let change_json = serde_json::to_string(&change).unwrap();
-    let submit_request = json!({
-        "operation": "workspace/submit",
-        "args": [change_json]
-    });
-    
-    make_request("POST", &format!("{}/rpc", base_url), Some(submit_request))
+    client.workspace_submit(&change_json)
         .await
         .expect("Failed to submit change");
     
@@ -448,16 +377,11 @@ async fn test_workspace_change_with_objects() {
     
     // List and verify details
     println!("\nListing workspace changes...");
-    let list_request = json!({
-        "operation": "workspace/list",
-        "args": []
-    });
-    
-    let response = make_request("POST", &format!("{}/rpc", base_url), Some(list_request))
+    let response = client.workspace_list(None)
         .await
         .expect("Failed to list changes");
     
-    let result = response["result"].as_str().unwrap_or("");
+    let result = response.require_result_str("List result");
     
     // Verify change details
     assert!(result.contains("complex_change"), "Should contain change name");
@@ -477,7 +401,7 @@ async fn test_workspace_change_with_objects() {
 #[tokio::test]
 async fn test_workspace_list_formatting() {
     let server = TestServer::start().await.expect("Failed to start test server");
-    let base_url = server.base_url();
+    let client = server.client();
     
     println!("Test: Verify workspace list output formatting");
     
@@ -514,11 +438,7 @@ async fn test_workspace_list_formatting() {
     
     for change in [review_change, idle_change] {
         let change_json = serde_json::to_string(&change).unwrap();
-        let submit_request = json!({
-            "operation": "workspace/submit",
-            "args": [change_json]
-        });
-        make_request("POST", &format!("{}/rpc", base_url), Some(submit_request))
+        client.workspace_submit(&change_json)
             .await
             .expect("Failed to submit change");
     }
@@ -527,16 +447,11 @@ async fn test_workspace_list_formatting() {
     
     // List and verify formatting
     println!("\nListing and checking format...");
-    let list_request = json!({
-        "operation": "workspace/list",
-        "args": []
-    });
-    
-    let response = make_request("POST", &format!("{}/rpc", base_url), Some(list_request))
+    let response = client.workspace_list(None)
         .await
         .expect("Failed to list changes");
     
-    let result = response["result"].as_str().unwrap_or("");
+    let result = response.require_result_str("List result");
     
     // Check for expected formatting elements
     assert!(result.contains("Workspace Changes"), "Should have header");
@@ -559,7 +474,7 @@ async fn test_workspace_list_formatting() {
 #[tokio::test]
 async fn test_workspace_operations_persistence() {
     let server = TestServer::start().await.expect("Failed to start test server");
-    let base_url = server.base_url();
+    let client = server.client();
     
     println!("Test: Verify workspace changes persist across operations");
     
@@ -585,12 +500,7 @@ async fn test_workspace_operations_persistence() {
     let change_id = change.id.clone();
     let change_json = serde_json::to_string(&change).unwrap();
     
-    let submit_request = json!({
-        "operation": "workspace/submit",
-        "args": [change_json]
-    });
-    
-    make_request("POST", &format!("{}/rpc", base_url), Some(submit_request))
+    client.workspace_submit(&change_json)
         .await
         .expect("Failed to submit change");
     
@@ -610,20 +520,14 @@ async fn test_workspace_operations_persistence() {
     // List via API multiple times
     println!("\nListing multiple times...");
     for i in 1..=3 {
-        let list_request = json!({
-            "operation": "workspace/list",
-            "args": []
-        });
-        
-        let response = make_request("POST", &format!("{}/rpc", base_url), Some(list_request))
+        let response = client.workspace_list(None)
             .await
             .expect(&format!("Failed to list changes (iteration {})", i));
         
-        let result = response["result"].as_str().unwrap_or("");
+        let result = response.require_result_str("List result");
         assert!(result.contains(&change_id), "Should contain change ID (iteration {})", i);
         println!("✅ List iteration {} successful", i);
     }
     
     println!("\n✅ Test passed: Workspace changes persist correctly");
 }
-

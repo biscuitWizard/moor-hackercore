@@ -5,76 +5,30 @@ use crate::common::*;
 #[tokio::test]
 async fn test_object_update_filters_ignored_properties() {
     let server = TestServer::start().await.expect("Failed to start test server");
-    let base_url = server.base_url();
+    let client = server.client();
     
     // Create an object
-    let object_name = "test_object_with_meta";
-    let object_dump = load_moo_file("test_object_with_meta.moo");
-    let object_content = moo_to_lines(&object_dump);
-    
-    let update_request = json!({
-        "operation": "object/update",
-        "args": [
-            object_name,
-            serde_json::to_string(&object_content).unwrap()
-        ]
-    });
-    
-    make_request("POST", &format!("{}/rpc", base_url), Some(update_request))
+    client.object_update_from_file("test_object_with_meta", "test_object_with_meta.moo")
         .await
         .expect("Failed to update object");
     
     // Add test_property to ignored properties
-    let add_property_request = json!({
-        "operation": "meta/add_ignored_property",
-        "args": [
-            object_name,
-            "test_property"
-        ]
-    });
-    
-    make_request("POST", &format!("{}/rpc", base_url), Some(add_property_request))
+    client.meta_add_ignored_property("test_object_with_meta", "test_property")
         .await
         .expect("Failed to add ignored property");
     
     // Try to update the object again with test_property included
-    let update_request_2 = json!({
-        "operation": "object/update",
-        "args": [
-            object_name,
-            serde_json::to_string(&object_content).unwrap()
-        ]
-    });
-    
-    let update_response = make_request(
-        "POST",
-        &format!("{}/rpc", base_url),
-        Some(update_request_2),
-    )
-    .await
-    .expect("Failed to update object");
-    
-    assert!(
-        update_response["success"].as_bool().unwrap_or(false),
-        "Update should succeed, got: {}",
-        update_response
-    );
+    client.object_update_from_file("test_object_with_meta", "test_object_with_meta.moo")
+        .await
+        .expect("Failed to update object")
+        .assert_success("Update object");
     
     // Get the object and verify test_property is not in it
-    let get_request = json!({
-        "operation": "object/get",
-        "args": [object_name]
-    });
+    let get_response = client.object_get("test_object_with_meta")
+        .await
+        .expect("Failed to get object");
     
-    let get_response = make_request(
-        "POST",
-        &format!("{}/rpc", base_url),
-        Some(get_request),
-    )
-    .await
-    .expect("Failed to get object");
-    
-    let content = get_response["result"].as_str().unwrap();
+    let content = get_response.require_result_str("Get object");
     
     // Verify test_property was filtered out during update
     assert!(
@@ -92,76 +46,30 @@ async fn test_object_update_filters_ignored_properties() {
 #[tokio::test]
 async fn test_object_update_filters_ignored_verbs() {
     let server = TestServer::start().await.expect("Failed to start test server");
-    let base_url = server.base_url();
+    let client = server.client();
     
     // Create an object
-    let object_name = "test_object_with_meta";
-    let object_dump = load_moo_file("test_object_with_meta.moo");
-    let object_content = moo_to_lines(&object_dump);
-    
-    let update_request = json!({
-        "operation": "object/update",
-        "args": [
-            object_name,
-            serde_json::to_string(&object_content).unwrap()
-        ]
-    });
-    
-    make_request("POST", &format!("{}/rpc", base_url), Some(update_request))
+    client.object_update_from_file("test_object_with_meta", "test_object_with_meta.moo")
         .await
         .expect("Failed to update object");
     
     // Add test_verb to ignored verbs
-    let add_verb_request = json!({
-        "operation": "meta/add_ignored_verb",
-        "args": [
-            object_name,
-            "test_verb"
-        ]
-    });
-    
-    make_request("POST", &format!("{}/rpc", base_url), Some(add_verb_request))
+    client.meta_add_ignored_verb("test_object_with_meta", "test_verb")
         .await
         .expect("Failed to add ignored verb");
     
     // Try to update the object again with test_verb included
-    let update_request_2 = json!({
-        "operation": "object/update",
-        "args": [
-            object_name,
-            serde_json::to_string(&object_content).unwrap()
-        ]
-    });
-    
-    let update_response = make_request(
-        "POST",
-        &format!("{}/rpc", base_url),
-        Some(update_request_2),
-    )
-    .await
-    .expect("Failed to update object");
-    
-    assert!(
-        update_response["success"].as_bool().unwrap_or(false),
-        "Update should succeed, got: {}",
-        update_response
-    );
+    client.object_update_from_file("test_object_with_meta", "test_object_with_meta.moo")
+        .await
+        .expect("Failed to update object")
+        .assert_success("Update object");
     
     // Get the object and verify test_verb is not in it
-    let get_request = json!({
-        "operation": "object/get",
-        "args": [object_name]
-    });
+    let get_response = client.object_get("test_object_with_meta")
+        .await
+        .expect("Failed to get object");
     
-    let get_response = make_request(
-        "POST",
-        &format!("{}/rpc", base_url),
-        Some(get_request),
-    )
-    .await
-    .expect("Failed to get object");
-    
-    let content = get_response["result"].as_str().unwrap();
+    let content = get_response.require_result_str("Get object");
     
     // Verify test_verb was filtered out during update
     assert!(
@@ -179,70 +87,33 @@ async fn test_object_update_filters_ignored_verbs() {
 #[tokio::test]
 async fn test_object_update_preserves_non_ignored_items() {
     let server = TestServer::start().await.expect("Failed to start test server");
-    let base_url = server.base_url();
+    let client = server.client();
     
     // Create an object
-    let object_name = "test_object_with_meta";
-    let object_dump = load_moo_file("test_object_with_meta.moo");
-    let object_content = moo_to_lines(&object_dump);
-    
-    let update_request = json!({
-        "operation": "object/update",
-        "args": [
-            object_name,
-            serde_json::to_string(&object_content).unwrap()
-        ]
-    });
-    
-    make_request("POST", &format!("{}/rpc", base_url), Some(update_request))
+    client.object_update_from_file("test_object_with_meta", "test_object_with_meta.moo")
         .await
         .expect("Failed to update object");
     
     // Add ignored property and verb
-    let add_property_request = json!({
-        "operation": "meta/add_ignored_property",
-        "args": [object_name, "test_property"]
-    });
-    make_request("POST", &format!("{}/rpc", base_url), Some(add_property_request))
+    client.meta_add_ignored_property("test_object_with_meta", "test_property")
         .await
         .expect("Failed to add ignored property");
     
-    let add_verb_request = json!({
-        "operation": "meta/add_ignored_verb",
-        "args": [object_name, "test_verb"]
-    });
-    make_request("POST", &format!("{}/rpc", base_url), Some(add_verb_request))
+    client.meta_add_ignored_verb("test_object_with_meta", "test_verb")
         .await
         .expect("Failed to add ignored verb");
     
     // Update with the same content (should filter during update)
-    let update_request_2 = json!({
-        "operation": "object/update",
-        "args": [
-            object_name,
-            serde_json::to_string(&object_content).unwrap()
-        ]
-    });
-    
-    make_request("POST", &format!("{}/rpc", base_url), Some(update_request_2))
+    client.object_update_from_file("test_object_with_meta", "test_object_with_meta.moo")
         .await
         .expect("Failed to update object");
     
     // Get the object
-    let get_request = json!({
-        "operation": "object/get",
-        "args": [object_name]
-    });
+    let get_response = client.object_get("test_object_with_meta")
+        .await
+        .expect("Failed to get object");
     
-    let get_response = make_request(
-        "POST",
-        &format!("{}/rpc", base_url),
-        Some(get_request),
-    )
-    .await
-    .expect("Failed to get object");
-    
-    let content = get_response["result"].as_str().unwrap();
+    let content = get_response.require_result_str("Get object");
     
     // Verify ignored items are not present
     assert!(
@@ -274,4 +145,3 @@ async fn test_object_update_preserves_non_ignored_items() {
         "Object should have endobject marker"
     );
 }
-

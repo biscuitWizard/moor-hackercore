@@ -6,84 +6,34 @@ use moor_vcs_worker::types::VcsObjectType;
 #[tokio::test]
 async fn test_meta_rename_with_object() {
     let server = TestServer::start().await.expect("Failed to start test server");
-    let base_url = server.base_url();
+    let client = server.client();
+    let db = server.db_assertions();
     
     // Create an object
-    let object_name = "test_object";
-    let object_dump = load_moo_file("test_object.moo");
-    let object_content = moo_to_lines(&object_dump);
-    
-    let update_request = json!({
-        "operation": "object/update",
-        "args": [
-            object_name,
-            serde_json::to_string(&object_content).unwrap()
-        ]
-    });
-    
-    make_request("POST", &format!("{}/rpc", base_url), Some(update_request))
+    client.object_update_from_file("test_object", "test_object.moo")
         .await
         .expect("Failed to update object");
     
     // Add some metadata
-    let add_property_request = json!({
-        "operation": "meta/add_ignored_property",
-        "args": [
-            object_name,
-            "test_property"
-        ]
-    });
-    
-    make_request("POST", &format!("{}/rpc", base_url), Some(add_property_request))
+    client.meta_add_ignored_property("test_object", "test_property")
         .await
         .expect("Failed to add ignored property");
     
     // Rename the object
-    let new_name = "renamed_object";
-    let rename_request = json!({
-        "operation": "object/rename",
-        "args": [
-            object_name,
-            new_name
-        ]
-    });
-    
-    let rename_response = make_request(
-        "POST",
-        &format!("{}/rpc", base_url),
-        Some(rename_request),
-    )
-    .await
-    .expect("Failed to rename object");
-    
-    assert!(
-        rename_response["success"].as_bool().unwrap_or(false),
-        "Renaming object should succeed, got: {}",
-        rename_response
-    );
+    client.object_rename("test_object", "renamed_object")
+        .await
+        .expect("Failed to rename object")
+        .assert_success("Rename object");
     
     // Verify the meta was also renamed
-    let meta_ref = server.database().refs().get_ref(VcsObjectType::MooMetaObject, new_name, None)
-        .expect("Failed to get meta ref");
-    
-    assert!(
-        meta_ref.is_some(),
-        "Meta ref should exist for renamed object '{}'",
-        new_name
-    );
+    db.assert_ref_exists(VcsObjectType::MooMetaObject, "renamed_object");
     
     // Verify old meta ref no longer exists
-    let old_meta_ref = server.database().refs().get_ref(VcsObjectType::MooMetaObject, object_name, None)
-        .expect("Failed to check old meta ref");
-    
-    assert!(
-        old_meta_ref.is_none(),
-        "Meta ref should not exist for old object name '{}'",
-        object_name
-    );
+    db.assert_ref_not_exists(VcsObjectType::MooMetaObject, "test_object");
     
     // Verify the meta content is preserved
-    let meta_yaml = server.database().objects().get(&meta_ref.unwrap())
+    let meta_ref = db.assert_ref_exists(VcsObjectType::MooMetaObject, "renamed_object");
+    let meta_yaml = server.database().objects().get(&meta_ref)
         .expect("Failed to get meta YAML")
         .expect("Meta YAML should exist");
     
@@ -99,75 +49,33 @@ async fn test_meta_rename_with_object() {
 #[tokio::test]
 async fn test_meta_delete_with_object() {
     let server = TestServer::start().await.expect("Failed to start test server");
-    let base_url = server.base_url();
+    let client = server.client();
+    let db = server.db_assertions();
     
     // Create an object
-    let object_name = "test_object";
-    let object_dump = load_moo_file("test_object.moo");
-    let object_content = moo_to_lines(&object_dump);
-    
-    let update_request = json!({
-        "operation": "object/update",
-        "args": [
-            object_name,
-            serde_json::to_string(&object_content).unwrap()
-        ]
-    });
-    
-    make_request("POST", &format!("{}/rpc", base_url), Some(update_request))
+    client.object_update_from_file("test_object", "test_object.moo")
         .await
         .expect("Failed to update object");
     
     // Add some metadata
-    let add_property_request = json!({
-        "operation": "meta/add_ignored_property",
-        "args": [
-            object_name,
-            "test_property"
-        ]
-    });
-    
-    make_request("POST", &format!("{}/rpc", base_url), Some(add_property_request))
+    client.meta_add_ignored_property("test_object", "test_property")
         .await
         .expect("Failed to add ignored property");
     
     // Delete the object
-    let delete_request = json!({
-        "operation": "object/delete",
-        "args": [
-            object_name
-        ]
-    });
-    
-    let delete_response = make_request(
-        "POST",
-        &format!("{}/rpc", base_url),
-        Some(delete_request),
-    )
-    .await
-    .expect("Failed to delete object");
-    
-    assert!(
-        delete_response["success"].as_bool().unwrap_or(false),
-        "Deleting object should succeed, got: {}",
-        delete_response
-    );
+    client.object_delete("test_object")
+        .await
+        .expect("Failed to delete object")
+        .assert_success("Delete object");
     
     // Verify the meta was also marked for deletion in the change
-    let top_change_id = server.database().index().get_top_change()
-        .expect("Failed to get top change")
-        .expect("Top change should exist");
-    
-    let change = server.database().index().get_change(&top_change_id)
-        .expect("Failed to get change")
-        .expect("Change should exist");
+    let (_, change) = db.require_top_change();
     
     let meta_in_deleted = change.deleted_objects.iter()
-        .any(|obj| obj.object_type == VcsObjectType::MooMetaObject && obj.name == object_name);
+        .any(|obj| obj.object_type == VcsObjectType::MooMetaObject && obj.name == "test_object");
     
     assert!(
         meta_in_deleted,
         "Change should track the meta object as deleted"
     );
 }
-

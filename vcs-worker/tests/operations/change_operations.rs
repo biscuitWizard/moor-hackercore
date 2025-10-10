@@ -6,51 +6,35 @@
 //! 3. Approving a change moves it to Merged status and canonizes refs/SHA256s
 
 use crate::common::*;
-use moor_vcs_worker::types::{ChangeStatus, VcsObjectType};
+use moor_vcs_worker::types::ChangeStatus;
 
 #[tokio::test]
 async fn test_change_create_empty_local() {
     let server = TestServer::start().await.expect("Failed to start test server");
-    let base_url = server.base_url();
+    let client = server.client();
+    let db = server.db_assertions();
     
     println!("Test: Create change should create an empty local change");
     
     // Step 1: Verify no change initially
     println!("\nStep 1: Verifying no change initially...");
-    let top_change = server.database().index().get_top_change()
-        .expect("Failed to get top change");
-    assert!(top_change.is_none(), "Should have no change initially");
+    db.assert_no_top_change();
     println!("✅ No change initially");
     
     // Step 2: Create a change
     println!("\nStep 2: Creating a new change...");
-    let change_name = "test_change";
-    let author = "test_author";
-    
-    let create_request = json!({
-        "operation": "change/create",
-        "args": [change_name, author, "Test description"]
-    });
-    
-    let response = make_request("POST", &format!("{}/rpc", base_url), Some(create_request))
+    client.change_create("test_change", "test_author", Some("Test description"))
         .await
-        .expect("Failed to create change");
-    
-    assert!(response["success"].as_bool().unwrap_or(false), "Change creation should succeed");
+        .expect("Failed to create change")
+        .assert_success("Change creation");
     println!("✅ Change created");
     
     // Step 3: Verify the change exists and is empty
     println!("\nStep 3: Verifying change exists and is empty...");
-    let top_change_id = server.database().index().get_top_change()
-        .expect("Failed to get top change")
-        .expect("Should have a top change");
+    let (_, change) = db.require_top_change();
     
-    let change = server.database().index().get_change(&top_change_id)
-        .expect("Failed to get change")
-        .expect("Change should exist");
-    
-    assert_eq!(change.name, change_name, "Change name should match");
-    assert_eq!(change.author, author, "Author should match");
+    assert_eq!(change.name, "test_change", "Change name should match");
+    assert_eq!(change.author, "test_author", "Author should match");
     assert_eq!(change.status, ChangeStatus::Local, "Status should be Local");
     assert_eq!(change.added_objects.len(), 0, "Should have no added objects");
     assert_eq!(change.modified_objects.len(), 0, "Should have no modified objects");
@@ -64,52 +48,31 @@ async fn test_change_create_empty_local() {
 #[tokio::test]
 async fn test_abandon_local_change_clears_top_and_cleans_up() {
     let server = TestServer::start().await.expect("Failed to start test server");
-    let base_url = server.base_url();
+    let client = server.client();
+    let db = server.db_assertions();
     
     println!("Test: Abandon local change should clear top change and cleanup unused resources");
     
     // Step 1: Create a change and add some objects
     println!("\nStep 1: Creating change and adding objects...");
-    let change_name = "test_abandon_change";
-    let author = "test_author";
-    
-    let create_request = json!({
-        "operation": "change/create",
-        "args": [change_name, author]
-    });
-    
-    make_request("POST", &format!("{}/rpc", base_url), Some(create_request))
+    client.change_create("test_abandon_change", "test_author", None)
         .await
         .expect("Failed to create change");
     
     // Add some objects to the change
-    let object_name_1 = "test_object_1";
-    let object_dump_1 = load_moo_file("test_object.moo");
-    let object_content_1 = moo_to_lines(&object_dump_1);
+    let object_content_1 = moo_to_lines(&load_moo_file("test_object.moo"));
     let content_str_1 = object_content_1.join("\n");
     let sha256_1 = TestServer::calculate_sha256(&content_str_1);
     
-    let update_request_1 = json!({
-        "operation": "object/update",
-        "args": [object_name_1, serde_json::to_string(&object_content_1).unwrap()]
-    });
-    
-    make_request("POST", &format!("{}/rpc", base_url), Some(update_request_1))
+    client.object_update("test_object_1", object_content_1)
         .await
         .expect("Failed to update object 1");
     
-    let object_name_2 = "test_object_2";
-    let object_dump_2 = load_moo_file("detailed_test_object.moo");
-    let object_content_2 = moo_to_lines(&object_dump_2);
+    let object_content_2 = moo_to_lines(&load_moo_file("detailed_test_object.moo"));
     let content_str_2 = object_content_2.join("\n");
     let sha256_2 = TestServer::calculate_sha256(&content_str_2);
     
-    let update_request_2 = json!({
-        "operation": "object/update",
-        "args": [object_name_2, serde_json::to_string(&object_content_2).unwrap()]
-    });
-    
-    make_request("POST", &format!("{}/rpc", base_url), Some(update_request_2))
+    client.object_update("test_object_2", object_content_2)
         .await
         .expect("Failed to update object 2");
     
@@ -129,24 +92,15 @@ async fn test_abandon_local_change_clears_top_and_cleans_up() {
     
     // Step 2: Abandon the change
     println!("\nStep 2: Abandoning the change...");
-    let abandon_request = json!({
-        "operation": "change/abandon",
-        "args": []
-    });
-    
-    let response = make_request("POST", &format!("{}/rpc", base_url), Some(abandon_request))
+    client.change_abandon()
         .await
-        .expect("Failed to abandon change");
-    
-    assert!(response["success"].as_bool().unwrap_or(false), "Abandon should succeed");
+        .expect("Failed to abandon change")
+        .assert_success("Abandon change");
     println!("✅ Change abandoned");
     
     // Step 3: Verify top change is None
     println!("\nStep 3: Verifying top change is cleared...");
-    let top_change = server.database().index().get_top_change()
-        .expect("Failed to get top change");
-    
-    assert!(top_change.is_none(), "Top change should be None after abandon");
+    db.assert_no_top_change();
     println!("✅ Top change cleared");
     
     // Step 4: Verify SHA256s were cleaned up (not referenced elsewhere)
@@ -158,23 +112,19 @@ async fn test_abandon_local_change_clears_top_and_cleans_up() {
         .expect("Failed to check SHA256 2")
         .is_some();
     
-    // Note: This test expects cleanup to happen. If it doesn't, we need to implement it.
-    // For now, let's check if they're cleaned up (they should be after implementing cleanup)
     println!("SHA256 1 after abandon: {}", sha256_1_after);
     println!("SHA256 2 after abandon: {}", sha256_2_after);
     
     // Step 5: Verify refs were cleaned up
     println!("\nStep 5: Verifying ref cleanup...");
-    let ref_1_after = server.database().refs().get_ref(VcsObjectType::MooObject, object_name_1, None)
+    let ref_1_after = server.database().refs().get_ref(moor_vcs_worker::types::VcsObjectType::MooObject, "test_object_1", None)
         .expect("Failed to check ref 1");
-    let ref_2_after = server.database().refs().get_ref(VcsObjectType::MooObject, object_name_2, None)
+    let ref_2_after = server.database().refs().get_ref(moor_vcs_worker::types::VcsObjectType::MooObject, "test_object_2", None)
         .expect("Failed to check ref 2");
     
     println!("Ref 1 after abandon: {:?}", ref_1_after);
     println!("Ref 2 after abandon: {:?}", ref_2_after);
     
-    // Currently the abandon operation doesn't clean up refs/SHA256s automatically
-    // This is something that should be implemented
     println!("\n⚠️  Note: Cleanup of SHA256s and refs during abandon needs to be implemented");
     println!("✅ Test completed (cleanup verification pending implementation)");
 }
@@ -182,100 +132,55 @@ async fn test_abandon_local_change_clears_top_and_cleans_up() {
 #[tokio::test]
 async fn test_abandon_with_last_merged_returns_to_merged() {
     let server = TestServer::start().await.expect("Failed to start test server");
-    let base_url = server.base_url();
+    let client = server.client();
+    let db = server.db_assertions();
     
     println!("Test: Abandoning local change when there's a merged change should return to merged state");
     
     // Step 1: Create and commit a change
     println!("\nStep 1: Creating and committing first change...");
-    let create_request = json!({
-        "operation": "change/create",
-        "args": ["first_change", "test_author"]
-    });
-    
-    make_request("POST", &format!("{}/rpc", base_url), Some(create_request))
+    client.change_create("first_change", "test_author", None)
         .await
         .expect("Failed to create first change");
     
-    let object_name = "first_object";
-    let object_dump = load_moo_file("test_object.moo");
-    let object_content = moo_to_lines(&object_dump);
-    
-    let update_request = json!({
-        "operation": "object/update",
-        "args": [object_name, serde_json::to_string(&object_content).unwrap()]
-    });
-    
-    make_request("POST", &format!("{}/rpc", base_url), Some(update_request))
+    client.object_update_from_file("first_object", "test_object.moo")
         .await
         .expect("Failed to update object");
     
     // Approve the change using HTTP API
-    let change_id = server.database().index().get_top_change()
-        .expect("Failed to get top change")
-        .expect("Should have a top change");
+    let (change_id, _) = db.require_top_change();
     
-    let approve_request = json!({
-        "operation": "change/approve",
-        "args": [change_id]
-    });
-    
-    let approve_response = make_request("POST", &format!("{}/rpc", base_url), Some(approve_request))
+    client.change_approve(&change_id)
         .await
-        .expect("Failed to approve change");
-    
-    assert!(approve_response["success"].as_bool().unwrap_or(false), "Approve should succeed");
+        .expect("Failed to approve change")
+        .assert_success("Approve change");
     
     println!("✅ First change committed using change/approve API");
     
     // Verify no local change
-    let top_change = server.database().index().get_top_change()
-        .expect("Failed to get top change");
-    assert!(top_change.is_none(), "Should have no local change after commit");
+    db.assert_no_top_change();
     
     // Step 2: Create a second local change
     println!("\nStep 2: Creating second local change...");
-    let create_request_2 = json!({
-        "operation": "change/create",
-        "args": ["second_change", "test_author"]
-    });
-    
-    make_request("POST", &format!("{}/rpc", base_url), Some(create_request_2))
+    client.change_create("second_change", "test_author", None)
         .await
         .expect("Failed to create second change");
     
-    let object_name_2 = "second_object";
-    let object_dump_2 = load_moo_file("detailed_test_object.moo");
-    let object_content_2 = moo_to_lines(&object_dump_2);
-    
-    let update_request_2 = json!({
-        "operation": "object/update",
-        "args": [object_name_2, serde_json::to_string(&object_content_2).unwrap()]
-    });
-    
-    make_request("POST", &format!("{}/rpc", base_url), Some(update_request_2))
+    client.object_update_from_file("second_object", "detailed_test_object.moo")
         .await
         .expect("Failed to update object 2");
     
     println!("✅ Second change created");
     
     // Verify we have a local change
-    let top_change_before = server.database().index().get_top_change()
-        .expect("Failed to get top change");
-    assert!(top_change_before.is_some(), "Should have a local change");
+    db.require_top_change();
     
     // Step 3: Abandon the second change
     println!("\nStep 3: Abandoning second change...");
-    let abandon_request = json!({
-        "operation": "change/abandon",
-        "args": []
-    });
-    
-    let abandon_response = make_request("POST", &format!("{}/rpc", base_url), Some(abandon_request))
+    client.change_abandon()
         .await
-        .expect("Failed to abandon change");
-    
-    assert!(abandon_response["success"].as_bool().unwrap_or(false), "Abandon should succeed");
+        .expect("Failed to abandon change")
+        .assert_success("Abandon change");
     println!("✅ Second change abandoned");
     
     // Give the system a moment to fully process the abandon
@@ -283,10 +188,7 @@ async fn test_abandon_with_last_merged_returns_to_merged() {
     
     // Step 4: Verify top change is None (but merged change still exists in database)
     println!("\nStep 4: Verifying state after abandon...");
-    let top_change_after = server.database().index().get_top_change()
-        .expect("Failed to get top change");
-    
-    assert!(top_change_after.is_none(), "Should have no top change after abandoning");
+    db.assert_no_top_change();
     println!("✅ Top change is None");
     
     // Verify the first (merged) change still exists
@@ -298,9 +200,7 @@ async fn test_abandon_with_last_merged_returns_to_merged() {
     println!("✅ First change still exists as Merged");
     
     // Verify first object still exists (from merged change)
-    let ref_1 = server.database().refs().get_ref(VcsObjectType::MooObject, object_name, None)
-        .expect("Failed to get ref 1");
-    assert!(ref_1.is_some(), "First object should still exist");
+    db.assert_ref_exists(moor_vcs_worker::types::VcsObjectType::MooObject, "first_object");
     println!("✅ First object still exists");
     
     println!("\n✅ Test passed: Abandoning local change returns to merged state");
@@ -309,46 +209,29 @@ async fn test_abandon_with_last_merged_returns_to_merged() {
 #[tokio::test]
 async fn test_approve_change_moves_to_merged() {
     let server = TestServer::start().await.expect("Failed to start test server");
-    let base_url = server.base_url();
+    let client = server.client();
+    let db = server.db_assertions();
     
     println!("Test: Approve change should move to Merged status and canonize refs/SHA256s");
     
     // Step 1: Create a change with objects
     println!("\nStep 1: Creating change with objects...");
-    let create_request = json!({
-        "operation": "change/create",
-        "args": ["test_approve_change", "test_author"]
-    });
-    
-    make_request("POST", &format!("{}/rpc", base_url), Some(create_request))
+    client.change_create("test_approve_change", "test_author", None)
         .await
         .expect("Failed to create change");
     
-    let object_name = "approved_object";
-    let object_dump = load_moo_file("test_object.moo");
-    let object_content = moo_to_lines(&object_dump);
+    let object_content = moo_to_lines(&load_moo_file("test_object.moo"));
     let content_str = object_content.join("\n");
     let sha256 = TestServer::calculate_sha256(&content_str);
     
-    let update_request = json!({
-        "operation": "object/update",
-        "args": [object_name, serde_json::to_string(&object_content).unwrap()]
-    });
-    
-    make_request("POST", &format!("{}/rpc", base_url), Some(update_request))
+    client.object_update("approved_object", object_content)
         .await
         .expect("Failed to update object");
     
     println!("✅ Change created with object");
     
     // Get change ID
-    let change_id = server.database().index().get_top_change()
-        .expect("Failed to get top change")
-        .expect("Should have a top change");
-    
-    let change_before = server.database().index().get_change(&change_id)
-        .expect("Failed to get change")
-        .expect("Change should exist");
+    let (change_id, change_before) = db.require_top_change();
     
     assert_eq!(change_before.status, ChangeStatus::Local, "Should be Local before approve");
     println!("✅ Change status is Local");
@@ -356,16 +239,10 @@ async fn test_approve_change_moves_to_merged() {
     // Step 2: Approve the change using HTTP API (Wizard user has approval permission)
     println!("\nStep 2: Approving the change...");
     
-    let approve_request = json!({
-        "operation": "change/approve",
-        "args": [change_id.clone()]
-    });
-    
-    let approve_response = make_request("POST", &format!("{}/rpc", base_url), Some(approve_request))
+    client.change_approve(&change_id)
         .await
-        .expect("Failed to approve change");
-    
-    assert!(approve_response["success"].as_bool().unwrap_or(false), "Approve should succeed");
+        .expect("Failed to approve change")
+        .assert_success("Approve change");
     
     println!("✅ Change approved and marked as Merged using change/approve API");
     
@@ -380,10 +257,7 @@ async fn test_approve_change_moves_to_merged() {
     
     // Step 4: Verify change is removed from top of index
     println!("\nStep 4: Verifying change removed from index top...");
-    let top_change = server.database().index().get_top_change()
-        .expect("Failed to get top change");
-    
-    assert!(top_change.is_none(), "Top change should be None after approve");
+    db.assert_no_top_change();
     println!("✅ Change removed from top of index");
     
     // Step 5: Verify SHA256 still exists (canonized)
@@ -397,11 +271,9 @@ async fn test_approve_change_moves_to_merged() {
     
     // Step 6: Verify ref still exists (canonized)
     println!("\nStep 6: Verifying ref canonization...");
-    let ref_after = server.database().refs().get_ref(VcsObjectType::MooObject, object_name, None)
-        .expect("Failed to check ref");
+    let ref_after = db.assert_ref_exists(moor_vcs_worker::types::VcsObjectType::MooObject, "approved_object");
     
-    assert!(ref_after.is_some(), "Ref should still exist after approve (canonized)");
-    assert_eq!(ref_after.unwrap(), sha256, "Ref should point to correct SHA256");
+    assert_eq!(ref_after, sha256, "Ref should point to correct SHA256");
     println!("✅ Ref canonized (still exists and points to correct SHA256)");
     
     println!("\n✅ Test passed: Approve change moves to Merged and canonizes refs/SHA256s");
@@ -410,38 +282,28 @@ async fn test_approve_change_moves_to_merged() {
 #[tokio::test]
 async fn test_cannot_create_change_when_local_exists() {
     let server = TestServer::start().await.expect("Failed to start test server");
-    let base_url = server.base_url();
+    let client = server.client();
+    let db = server.db_assertions();
     
     println!("Test: Cannot create a new change when a local change already exists");
     
     // Step 1: Create first change
     println!("\nStep 1: Creating first change...");
-    let create_request_1 = json!({
-        "operation": "change/create",
-        "args": ["first_change", "test_author"]
-    });
-    
-    let response_1 = make_request("POST", &format!("{}/rpc", base_url), Some(create_request_1))
+    client.change_create("first_change", "test_author", None)
         .await
-        .expect("Failed to create first change");
-    
-    assert!(response_1["success"].as_bool().unwrap_or(false), "First change creation should succeed");
+        .expect("Failed to create first change")
+        .assert_success("Create first change");
     println!("✅ First change created");
     
     // Step 2: Try to create second change (should fail)
     println!("\nStep 2: Trying to create second change...");
-    let create_request_2 = json!({
-        "operation": "change/create",
-        "args": ["second_change", "test_author"]
-    });
-    
-    let response_2 = make_request("POST", &format!("{}/rpc", base_url), Some(create_request_2))
+    let response = client.change_create("second_change", "test_author", None)
         .await
         .expect("Request should complete");
     
     // The operation might succeed at the RPC level but return an error message
-    let result_str = response_2["result"].as_str().unwrap_or("");
-    let failed = !response_2["success"].as_bool().unwrap_or(true) || 
+    let result_str = response.get_result_str().unwrap_or("");
+    let failed = !response.is_success() || 
                  result_str.contains("Error") || 
                  result_str.contains("Already in a local change");
     
@@ -449,17 +311,10 @@ async fn test_cannot_create_change_when_local_exists() {
     println!("✅ Second change creation failed as expected");
     
     // Verify only one change exists
-    let top_change = server.database().index().get_top_change()
-        .expect("Failed to get top change")
-        .expect("Should have a top change");
-    
-    let change = server.database().index().get_change(&top_change)
-        .expect("Failed to get change")
-        .expect("Change should exist");
+    let (_, change) = db.require_top_change();
     
     assert_eq!(change.name, "first_change", "Only first change should exist");
     println!("✅ Only first change exists");
     
     println!("\n✅ Test passed: Cannot create change when local exists");
 }
-

@@ -2,8 +2,12 @@
 //!
 //! This module provides:
 //! - TestServer: Manages test server lifecycle with temporary database
+//! - VcsTestClient: High-level API client for making test requests
 //! - Helper functions for loading test resources
 //! - Common assertions and utilities
+
+pub mod client;
+pub use client::{VcsTestClient, ResponseExt, DbAssertions};
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -92,6 +96,18 @@ impl TestServer {
     /// Get the database reference for direct state inspection
     pub fn database(&self) -> &DatabaseRef {
         &self.database
+    }
+    
+    /// Create a high-level test client for this server
+    #[allow(dead_code)]
+    pub fn client(&self) -> VcsTestClient {
+        VcsTestClient::new(self)
+    }
+    
+    /// Create database assertion helpers
+    #[allow(dead_code)]
+    pub fn db_assertions(&self) -> DbAssertions {
+        DbAssertions::new(&self.database)
     }
     
     /// Get the Wizard user (system admin with all permissions)
