@@ -7,16 +7,17 @@ use super::{ProviderError, ProviderResult};
     /// Combined Index and Changes provider - manages both change storage and ordering
 pub trait IndexProvider: Send + Sync {
     // ===== CHANGE ORDERING METHODS =====
-    /// Insert a change ID at the front of the ordered list (for current working change)
-    fn prepend_change(&self, change_id: &str) -> ProviderResult<()>;
+    /// Push a change ID to the top of the stack (end of the ordered list)
+    /// The list is ordered oldest first, newest last (like a stack)
+    fn push_change(&self, change_id: &str) -> ProviderResult<()>;
     
-    /// Get the ordered list of change IDs (most recent first)
+    /// Get the ordered list of change IDs (oldest first, newest last)
     fn get_change_order(&self) -> ProviderResult<Vec<String>>;
     
     /// Set the complete change order (for bulk operations like cloning)
     fn set_change_order(&self, order: Vec<String>) -> ProviderResult<()>;
     
-    /// Get the top (most recent/current) change ID
+    /// Get the top (most recent/current) change ID (the last element in the list)
     fn get_top_change(&self) -> ProviderResult<Option<String>>;
     
     /// Remove a change ID from the order list
@@ -182,13 +183,13 @@ impl ChangeOperationProcessor {
 
 impl IndexProvider for IndexProviderImpl {
     
-    fn prepend_change(&self, change_id: &str) -> ProviderResult<()> {
+    fn push_change(&self, change_id: &str) -> ProviderResult<()> {
         // Get current order using helper method
         let mut order = self.get_change_order_internal()?;
         
-        // Remove if already exists and add to front (newest)
+        // Remove if already exists and push to top of stack (end of list)
         order.retain(|id| id != change_id);
-        order.insert(0, change_id.to_string());
+        order.push(change_id.to_string());
         
         self.save_change_order(&order)?;
         self.tree.insert(Self::TOP_KEY, change_id.as_bytes())?;
@@ -204,8 +205,8 @@ impl IndexProvider for IndexProviderImpl {
     fn set_change_order(&self, order: Vec<String>) -> ProviderResult<()> {
         self.save_change_order(&order)?;
         
-        // Update top change to the first in the order
-        if let Some(top_change_id) = order.first() {
+        // Update top change to the last in the order (newest)
+        if let Some(top_change_id) = order.last() {
             self.tree.insert(Self::TOP_KEY, top_change_id.as_bytes())?;
             info!("Set change order with {} changes, top change: {}", order.len(), top_change_id);
         } else {
@@ -234,7 +235,7 @@ impl IndexProvider for IndexProviderImpl {
         // Update top change if we removed it
         if let Some(top_change) = self.tree.get(Self::TOP_KEY)? {
             if &top_change.to_vec() == change_id.as_bytes() {
-                let new_top = order.first().cloned();
+                let new_top = order.last().cloned();
                 if let Some(new_top_id) = new_top {
                     self.tree.insert(Self::TOP_KEY, new_top_id.as_bytes())?;
                 } else {
@@ -338,7 +339,7 @@ impl IndexProvider for IndexProviderImpl {
         
         // Create new local change and set it as top
         let new_change = self.create_blank_change()?;
-        self.prepend_change(&new_change.id)?;
+        self.push_change(&new_change.id)?;
         info!("Created and set new local change '{}' ({})", new_change.name, new_change.id);
         Ok(new_change)
     }
@@ -385,9 +386,8 @@ impl IndexProvider for IndexProviderImpl {
     fn compute_complete_object_list(&self) -> ProviderResult<Vec<crate::types::ObjectInfo>> {
         info!("Computing complete object list by walking change history");
         
-        // Get all changes in chronological order (oldest first)
-        let mut changes_order = self.get_change_order_internal()?;
-        changes_order.reverse(); // Reverse to get oldest first
+        // Get all changes in chronological order (oldest first, newest last)
+        let changes_order = self.get_change_order_internal()?;
         
         info!("Walking through {} changes chronologically", changes_order.len());
         

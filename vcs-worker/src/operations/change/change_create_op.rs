@@ -57,7 +57,7 @@ impl ChangeCreateOperation {
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         
         // Add change to the top of the index (since it's local)
-        self.database.index().prepend_change(&change.id)
+        self.database.index().push_change(&change.id)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         
         info!("Successfully created change '{}' ({})", change.name, change.id);

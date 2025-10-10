@@ -14,14 +14,14 @@ pub struct IndexListRequest {
     pub page: Option<usize>,
 }
 
-/// Index list operation that returns a paginated list of changes in chronological order (newest first)
+/// Index list operation that returns a paginated list of changes in chronological order (oldest first, newest last)
 /// 
 /// Usage:
 /// - `index/list` or `index/list "{limit}"` or `index/list "{limit}" "{page}"`
 /// - Returns a v_list of maps containing change information
 /// - Each map contains: change_id, message, name, timestamp, author, status
 /// - Default limit is 5, default page is 0
-/// - Page 0 is the first page (newest changes)
+/// - Page 0 is the first page (oldest changes)
 /// 
 /// Example: `index/list "10" "1"` returns page 1 with up to 10 changes per page
 #[derive(Clone)]
@@ -100,7 +100,7 @@ impl Operation for IndexListOperation {
     }
     
     fn description(&self) -> &'static str {
-        "Lists changes in chronological order (newest first) with optional pagination (limit/page)"
+        "Lists changes in chronological order (oldest first, newest last) with optional pagination (limit/page)"
     }
     
     fn routes(&self) -> Vec<OperationRoute> {

@@ -62,8 +62,8 @@ impl IndexCalcDeltaOperation {
         info!("Found change '{}' at position {} in chronological order", request.change_id, target_position);
         
         // Get all changes chronologically after the target change
-        // Note: change_order is newest first, so we want changes with indices < target_position
-        let subsequent_changes = &change_order[..target_position];
+        // Note: change_order is oldest first, so we want changes with indices > target_position
+        let subsequent_changes = &change_order[target_position + 1..];
         
         let mut change_ids = Vec::new();
         let mut ref_pairs = Vec::new();

@@ -101,7 +101,7 @@ impl ChangeSwitchOperation {
         info!("Stored target change '{}' in index", target_change.name);
         
         // Add to top of index
-        self.database.index().prepend_change(&target_change.id)
+        self.database.index().push_change(&target_change.id)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         
         info!("Added target change '{}' to top of index", target_change.name);

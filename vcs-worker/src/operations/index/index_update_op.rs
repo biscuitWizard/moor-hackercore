@@ -60,8 +60,8 @@ impl IndexUpdateOperation {
             return self.perform_full_clone(&source_url);
         }
         
-        // Get the most recent change ID (first in the list since it's newest first)
-        let last_change_id = &change_order[0];
+        // Get the most recent change ID (last in the list since ordering is oldest first, newest last)
+        let last_change_id = change_order.last().unwrap(); // Safe because we checked is_empty above
         info!("Last known change ID: {}", last_change_id);
         
         // Calculate delta using the index_calc_delta operation

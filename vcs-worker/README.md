@@ -115,16 +115,17 @@ changes: HashMap<String, Change> {
 The index provider manages change ordering and current working state:
 
 ```rust
-// Index Storage: Ordered list of change IDs
+// Index Storage: Ordered list of change IDs (oldest first, newest last - like a stack)
 index: ChangeOrder {
-    order: vec!["local-change", "merged-change-1", "merged-change-2", ...],
-    top_change: "local-change"  // Current LOCAL change
+    order: vec!["merged-change-2", "merged-change-1", "local-change"],
+    top_change: "local-change"  // Current LOCAL change (last element)
 }
 ```
 
 **Change Ordering:**
-- **Top Position**: Current LOCAL change (working state)
-- **Chronological Order**: MERGED changes in commit order
+- **Stack-Based**: Oldest changes first, newest changes last (like a stack where you push to the end)
+- **Top Position**: Current LOCAL change at the end of the list (working state)
+- **Chronological Order**: MERGED changes in commit order (oldest to newest)
 - **Automatic Management**: Index updates when status changes
 
 ## Provider Components
@@ -192,17 +193,16 @@ Replaces HEAD provider by managing ordered changes and current working state.
 **Core Operations:**
 ```rust
 trait IndexProvider {
-    fn append_change(&self, change_id: &str) -> ProviderResult<()>     // Add to bottom (MERGED)
-    fn prepend_change(&self, change_id: &str) -> ProviderResult<()>   // Add to top (LOCAL)
-    fn get_change_order(&self) -> ProviderResult<Vec<String>>        // Get ordered list
-    fn get_top_change(&self) -> ProviderResult<Option<String>>       // Get current LOCAL change
+    fn push_change(&self, change_id: &str) -> ProviderResult<()>     // Push to top of stack (end, newest)
+    fn get_change_order(&self) -> ProviderResult<Vec<String>>        // Get ordered list (oldest first)
+    fn get_top_change(&self) -> ProviderResult<Option<String>>       // Get current LOCAL change (last element)
     fn remove_change(&self, change_id: &str) -> ProviderResult<()>
-    fn reorder_on_status_change(&self, change_id: &str, was_local: bool, is_now_local: bool) -> ProviderResult<()>
 }
 ```
 
 **Working State Management:**
-- **Current Working**: Top change with LOCAL status represents working state
+- **Current Working**: Last change (top of stack) with LOCAL status represents working state
+- **Stack-Based Ordering**: Oldest first, newest last - new changes pushed to the end
 - **Automatic Promotion**: When LOCAL change becomes MERGED, next LOCAL change becomes top
 - **Blank Change Creation**: No valid LOCAL change at top triggers blank change creation
 
@@ -281,7 +281,7 @@ graph TD
 ```mermaid
 graph TD
     A[Change Creation] --> B[Set Status to LOCAL]
-    B --> C[Add to Index Top]
+    B --> C[Add to Index End (Stack Push)]
     C --> D[Object Updates Track Overrides]
     D --> E[Change Status Check]
     E --> F{Status = LOCAL?}
@@ -291,7 +291,7 @@ graph TD
     G --> J[Development Continues]
     J --> K[Commit Change]
     K --> L[Set Status to MERGED]
-    L --> M[Move to Bottom of Index]
+    L --> M[Remains in Index Order]
     M --> N[Promote Next LOCAL Change]
 ```
 
