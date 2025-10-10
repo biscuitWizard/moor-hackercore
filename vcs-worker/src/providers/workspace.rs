@@ -151,20 +151,18 @@ impl WorkspaceProvider for WorkspaceProviderImpl {
         let mut changes = Vec::new();
         let prefix = Self::status_to_prefix(status.clone());
         
+        // The status index stores: status:<status>:<id> -> <id>
+        // We need to extract the change ID and fetch the actual change
         for result in self.workspace_tree.prefix(prefix.as_bytes()) {
-            let (key, value) = result?;
+            let (_key, value) = result?;
             
-            // Skip the status index entries, only process actual change entries
-            let key_str = String::from_utf8_lossy(&key);
-            if key_str.starts_with("change:") {
-                if let Ok(_value_str) = String::from_utf8(value.to_vec()) {
-                    if let Ok(json) = String::from_utf8(value.to_vec()) {
-                        if let Ok(change) = serde_json::from_str::<Change>(&json) {
-                            // Verify this change has the requested status
-                            if change.status == status {
-                                changes.push(change);
-                            }
-                        }
+            // The value is the change ID
+            if let Ok(change_id) = String::from_utf8(value.to_vec()) {
+                // Fetch the actual change using the ID
+                if let Some(change) = self.get_workspace_change(&change_id)? {
+                    // Verify this change has the requested status (should always be true)
+                    if change.status == status {
+                        changes.push(change);
                     }
                 }
             }

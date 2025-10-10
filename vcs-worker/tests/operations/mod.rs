@@ -12,8 +12,8 @@ mod object_rename_update_integration;
 mod object_list;
 mod change_operations;
 mod test_wizard_user;
+mod workspace_operations;
 
 // Future test modules:
 // mod index;
-// mod workspace;
 
