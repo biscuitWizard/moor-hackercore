@@ -6,7 +6,7 @@ use crate::database::{DatabaseRef, ObjectsTreeError};
 use crate::providers::index::IndexProvider;
 use crate::providers::workspace::WorkspaceProvider;
 use crate::types::{ChangeSubmitRequest, ChangeStatus, User, Permission};
-use crate::object_diff::{ObjectDiffModel, build_abandon_diff_from_change};
+use crate::object_diff::{ObjectDiffModel, build_abandon_diff_from_change, build_object_diff_from_change};
 use moor_var::{v_error, E_INVARG};
 
 /// Change submit operation that submits a local change for review
@@ -82,50 +82,81 @@ impl ChangeSubmitOperation {
             ));
         }
 
-        // Build the undo diff (like abandon does)
-        let undo_diff = build_abandon_diff_from_change(&self.database, &change)?;
-
-        // Change the status to Review (submitted, waiting for approval)
-        change.status = ChangeStatus::Review;
-
-        // Store the change in the workspace (where changes waiting for approval live)
-        self.database.workspace().store_workspace_change(&change)
+        // Check if there's a source URL to determine the workflow
+        let source_url = self.database.index().get_source()
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
 
-        info!("Stored change '{}' in workspace with Review status", change.name);
-
-        // Remove the change from the working index
-        self.database.index().remove_from_index(&change.id)
-            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
-
-        info!("Removed change '{}' from top of index", change.name);
-
-        // Check if there's a source URL for remote submission
-        if let Some(source_url) = self.database.index().get_source()
-            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))? {
+        if let Some(url) = source_url {
+            // REMOTE INDEX: Submit for review (existing behavior)
+            info!("Source URL found: {}, submitting change for review", url);
             
-            info!("Source URL found: {}, attempting remote submission", source_url);
-            
+            // Build the undo diff (like abandon does)
+            let undo_diff = build_abandon_diff_from_change(&self.database, &change)?;
+
+            // Change the status to Review (submitted, waiting for approval)
+            change.status = ChangeStatus::Review;
+
+            // Store the change in the workspace (where changes waiting for approval live)
+            self.database.workspace().store_workspace_change(&change)
+                .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+
+            info!("Stored change '{}' in workspace with Review status", change.name);
+
+            // Remove the change from the working index
+            self.database.index().remove_from_index(&change.id)
+                .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+
+            info!("Removed change '{}' from top of index", change.name);
+
             // Make a REST call to submit the change remotely
-            match self.submit_to_remote(&source_url, &change, user) {
+            match self.submit_to_remote(&url, &change, user) {
                 Ok(_) => {
-                    info!("Successfully submitted change '{}' to remote: {}", change.name, source_url);
+                    info!("Successfully submitted change '{}' to remote: {}", change.name, url);
                 }
                 Err(e) => {
                     warn!("Failed to submit change '{}' to remote {}: {}. Change still submitted locally.", 
-                          change.name, source_url, e);
+                          change.name, url, e);
                     // Don't fail the whole operation if remote submission fails
                     // The local submission succeeded, remote is best-effort
                 }
             }
+
+            info!("Successfully submitted change '{}' ({}), moved to workspace for review", 
+                  change.name, change.id);
+
+            Ok(undo_diff)
         } else {
-            info!("No source URL configured, skipping remote submission");
+            // NON-REMOTE INDEX: Instantly approve the change
+            info!("No source URL configured, instantly approving change");
+            
+            // Build the diff model showing what was approved
+            let diff_model = build_object_diff_from_change(&self.database, &change)?;
+            
+            // Update the change status to Merged
+            change.status = ChangeStatus::Merged;
+            
+            // Update the change in the database
+            self.database.index().update_change(&change)
+                .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+            
+            // Clear the top_change pointer (change stays in history as merged)
+            self.database.index().clear_top_change_if(&change.id)
+                .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+            
+            // Remove the change from workspace if it exists there (as a pending or stashed change)
+            if self.database.workspace().get_workspace_change(&change.id)
+                .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
+                .is_some() {
+                self.database.workspace().delete_workspace_change(&change.id)
+                    .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+                info!("Removed change '{}' from workspace", change.name);
+            }
+            
+            info!("Successfully approved change '{}' ({}), marked as merged and removed from index", 
+                  change.name, change.id);
+            
+            Ok(diff_model)
         }
-
-        info!("Successfully submitted change '{}' ({}), moved to workspace for review", 
-              change.name, change.id);
-
-        Ok(undo_diff)
     }
 
     /// Submit the change to a remote server via REST API
@@ -139,12 +170,6 @@ impl ChangeSubmitOperation {
 
         info!("Submitting change '{}' to remote URL: {}", change.id, submit_url);
 
-        // Create a blocking HTTP client
-        let client = reqwest::blocking::Client::builder()
-            .timeout(std::time::Duration::from_secs(30))
-            .build()
-            .map_err(|e| ObjectsTreeError::SerializationError(format!("Failed to create HTTP client: {}", e)))?;
-
         // Serialize the change to a JSON string
         let serialized_change = serde_json::to_string(change)
             .map_err(|e| ObjectsTreeError::SerializationError(format!("Failed to serialize change: {}", e)))?;
@@ -156,23 +181,45 @@ impl ChangeSubmitOperation {
             "args": [serialized_change]
         });
 
-        // Make the PUT request to workspace/submit
-        let response = client
-            .put(&submit_url)
-            .json(&payload)
-            .send()
-            .map_err(|e| ObjectsTreeError::SerializationError(format!("HTTP request failed: {}", e)))?;
+        // Clone URL and payload for the thread
+        let url_clone = submit_url.clone();
+        let payload_clone = payload.clone();
 
-        if response.status().is_success() {
-            info!("Remote submission successful for change '{}'", change.id);
-            Ok(())
-        } else {
-            let status = response.status();
-            let error_text = response.text().unwrap_or_else(|_| "Unknown error".to_string());
-            error!("Remote submission failed with status {}: {}", status, error_text);
-            Err(ObjectsTreeError::SerializationError(
-                format!("Remote submission failed with status {}: {}", status, error_text)
-            ))
+        // Run the blocking HTTP call in a thread pool to avoid runtime conflicts
+        let result = std::thread::spawn(move || {
+            // Create a blocking HTTP client
+            let client = reqwest::blocking::Client::builder()
+                .timeout(std::time::Duration::from_secs(30))
+                .build()
+                .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+
+            // Make the PUT request to workspace/submit
+            let response = client
+                .put(&url_clone)
+                .json(&payload_clone)
+                .send()
+                .map_err(|e| format!("HTTP request failed: {}", e))?;
+
+            if response.status().is_success() {
+                Ok(())
+            } else {
+                let status = response.status();
+                let error_text = response.text().unwrap_or_else(|_| "Unknown error".to_string());
+                Err(format!("Remote submission failed with status {}: {}", status, error_text))
+            }
+        })
+        .join()
+        .map_err(|_| ObjectsTreeError::SerializationError("Thread panicked during remote submission".to_string()))?;
+
+        match result {
+            Ok(_) => {
+                info!("Remote submission successful for change '{}'", change.id);
+                Ok(())
+            }
+            Err(e) => {
+                error!("Remote submission failed: {}", e);
+                Err(ObjectsTreeError::SerializationError(e))
+            }
         }
     }
 }
@@ -183,7 +230,7 @@ impl Operation for ChangeSubmitOperation {
     }
     
     fn description(&self) -> &'static str {
-        "Submits the top local change for review. Requires author to be set. Moves it to workspace with Review status, removes from index, and optionally submits to remote if source URL is configured. Returns an ObjectDiffModel showing what changes need to be undone. Optional message argument can be provided to set/override the commit message."
+        "Submits the top local change. Requires author to be set. If a source URL is configured (remote index), moves it to workspace with Review status for remote approval. If no source URL is configured (non-remote index), instantly approves and merges the change. Returns an ObjectDiffModel. Optional message argument can be provided to set/override the commit message."
     }
     
     fn routes(&self) -> Vec<OperationRoute> {
