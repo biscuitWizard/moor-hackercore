@@ -9,9 +9,9 @@
 mod object;
 mod object_lifecycle;
 mod object_rename_update_integration;
+mod change_operations;
 
 // Future test modules:
-// mod change;
 // mod index;
 // mod workspace;
 
