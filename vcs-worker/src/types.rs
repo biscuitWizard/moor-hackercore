@@ -215,6 +215,8 @@ pub struct User {
     pub v_obj: Obj,
     pub authorized_keys: Vec<String>,
     pub permissions: HashSet<Permission>,
+    /// Indicates if this is a system user that cannot be deleted
+    pub is_system_user: bool,
 }
 
 impl User {
@@ -226,6 +228,19 @@ impl User {
             v_obj,
             authorized_keys: Vec::new(),
             permissions: HashSet::new(),
+            is_system_user: false,
+        }
+    }
+
+    /// Create a new system user (cannot be deleted)
+    pub fn new_system_user(id: String, email: String, v_obj: Obj) -> Self {
+        Self {
+            id,
+            email,
+            v_obj,
+            authorized_keys: Vec::new(),
+            permissions: HashSet::new(),
+            is_system_user: true,
         }
     }
     

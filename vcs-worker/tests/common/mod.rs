@@ -18,6 +18,8 @@ use moor_vcs_worker::router::create_http_router;
 pub use moor_vcs_worker::providers::objects::ObjectsProvider;
 pub use moor_vcs_worker::providers::refs::RefsProvider;
 pub use moor_vcs_worker::providers::index::IndexProvider;
+pub use moor_vcs_worker::providers::user::UserProvider;
+pub use moor_vcs_worker::types::User;
 
 /// Test server managing lifecycle of HTTP server and database
 pub struct TestServer {
@@ -90,6 +92,19 @@ impl TestServer {
     /// Get the database reference for direct state inspection
     pub fn database(&self) -> &DatabaseRef {
         &self.database
+    }
+    
+    /// Get the Wizard user (system admin with all permissions)
+    #[allow(dead_code)]
+    pub fn get_wizard_user(&self) -> Result<User, Box<dyn std::error::Error>> {
+        Ok(self.database.users().get_wizard_user()?)
+    }
+    
+    /// Get the configured wizard API key for authentication tests
+    #[allow(dead_code)]
+    pub fn get_wizard_api_key(&self) -> String {
+        // This matches the default key from config.rs
+        "wizard-default-key-change-in-production".to_string()
     }
     
     /// Calculate SHA256 hash for object content (matches what the system does)

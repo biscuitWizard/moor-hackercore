@@ -53,13 +53,13 @@ impl OperationRegistry {
     pub fn execute_var(&self, request: OperationRequest) -> moor_var::Var {
         let op_name = request.operation.clone();
         
-        // Get the Everyone user for unauthenticated operations
+        // Get the Wizard user for operations (has all permissions by default)
         let user = match &self.user_provider {
             Some(provider) => {
-                match provider.get_everyone_user() {
+                match provider.get_wizard_user() {
                     Ok(user) => user,
                     Err(e) => {
-                        error!("Failed to get Everyone user: {}", e);
+                        error!("Failed to get Wizard user: {}", e);
                         return moor_var::v_str("Internal error: Unable to get user context");
                     }
                 }

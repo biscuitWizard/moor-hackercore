@@ -69,6 +69,11 @@ pub fn create_registry_with_config(config: Config) -> Result<(OperationRegistry,
         tracing::warn!("Failed to ensure Everyone user exists: {}", e);
     }
     
+    // Ensure the Wizard user exists with the configured API key
+    if let Err(e) = database.users().ensure_wizard_user(config.wizard_api_key.clone()) {
+        tracing::warn!("Failed to ensure Wizard user exists: {}", e);
+    }
+    
     // Register built-in operations
     registry.register(HelloOperation);
     registry.register(ObjectUpdateOperation::new(database.clone()));

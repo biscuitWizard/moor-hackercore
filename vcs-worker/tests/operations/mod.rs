@@ -9,7 +9,9 @@
 mod object;
 mod object_lifecycle;
 mod object_rename_update_integration;
+mod object_list;
 mod change_operations;
+mod test_wizard_user;
 
 // Future test modules:
 // mod index;

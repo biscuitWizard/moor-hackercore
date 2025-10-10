@@ -64,6 +64,12 @@ pub trait UserProvider: Send + Sync {
     
     /// Ensure the default "Everyone" user exists
     fn ensure_everyone_user(&self) -> ProviderResult<()>;
+
+    /// Get the default "Wizard" user (system admin with all permissions)
+    fn get_wizard_user(&self) -> ProviderResult<User>;
+    
+    /// Ensure the default "Wizard" user exists with the given API key
+    fn ensure_wizard_user(&self, api_key: String) -> ProviderResult<()>;
 }
 
 /// Implementation of UserProvider using Fjall
@@ -107,8 +113,20 @@ impl UserProviderImpl {
     
     /// Create the default "Everyone" user
     fn create_everyone_user() -> User {
-        let user = User::new("Everyone".to_string(), "everyone@system".to_string(), Obj::mk_id(0));
+        let user = User::new_system_user("Everyone".to_string(), "everyone@system".to_string(), Obj::mk_id(0));
         // Everyone user has no permissions by default
+        user
+    }
+
+    /// Create the default "Wizard" user with all permissions
+    fn create_wizard_user(api_key: String) -> User {
+        let mut user = User::new_system_user("Wizard".to_string(), "wizard@system".to_string(), Obj::mk_id(1));
+        // Add the API key as an authorized key
+        user.add_authorized_key(api_key);
+        // Add all permissions
+        user.add_permission(Permission::ApproveChanges);
+        user.add_permission(Permission::SubmitChanges);
+        user.add_permission(Permission::Clone);
         user
     }
 }
@@ -172,6 +190,15 @@ impl UserProvider for UserProviderImpl {
     
     fn delete_user(&self, user_id: &str) -> ProviderResult<bool> {
         let mut storage = self.load_user_storage()?;
+        
+        // Check if the user is a system user before deletion
+        if let Some(user) = storage.users.get(user_id) {
+            if user.is_system_user {
+                return Err(ProviderError::InvalidOperation(
+                    format!("Cannot delete system user '{}'", user_id)
+                ));
+            }
+        }
         
         let removed = storage.users.remove(user_id).is_some();
         if removed {
@@ -270,6 +297,40 @@ impl UserProvider for UserProviderImpl {
         
         Ok(())
     }
+
+    fn get_wizard_user(&self) -> ProviderResult<User> {
+        self.get_user("Wizard")
+            .and_then(|user| user.ok_or_else(|| ProviderError::InvalidOperation("Wizard user not found".to_string())))
+    }
+    
+    fn ensure_wizard_user(&self, api_key: String) -> ProviderResult<()> {
+        let mut storage = self.load_user_storage()?;
+        
+        if !storage.users.contains_key("Wizard") {
+            let wizard_user = Self::create_wizard_user(api_key.clone());
+            storage.users.insert("Wizard".to_string(), wizard_user);
+            self.save_user_storage(&storage)?;
+            info!("Created default 'Wizard' user with all permissions");
+        } else {
+            // Update existing wizard user to ensure it has the correct API key
+            if let Some(wizard_user) = storage.users.get_mut("Wizard") {
+                // Ensure wizard has the API key if not already present
+                if !wizard_user.authorized_keys.contains(&api_key) {
+                    wizard_user.add_authorized_key(api_key);
+                    // Also ensure all permissions are present
+                    wizard_user.add_permission(Permission::ApproveChanges);
+                    wizard_user.add_permission(Permission::SubmitChanges);
+                    wizard_user.add_permission(Permission::Clone);
+                    // Ensure it's marked as a system user
+                    wizard_user.is_system_user = true;
+                    self.save_user_storage(&storage)?;
+                    info!("Updated 'Wizard' user with API key and permissions");
+                }
+            }
+        }
+        
+        Ok(())
+    }
 }
 
 // Helper trait extension for Arc wrapping
@@ -328,5 +389,13 @@ impl<T: UserProvider> UserProvider for std::sync::Arc<T> {
     
     fn ensure_everyone_user(&self) -> ProviderResult<()> {
         (**self).ensure_everyone_user()
+    }
+
+    fn get_wizard_user(&self) -> ProviderResult<User> {
+        (**self).get_wizard_user()
+    }
+    
+    fn ensure_wizard_user(&self, api_key: String) -> ProviderResult<()> {
+        (**self).ensure_wizard_user(api_key)
     }
 }
