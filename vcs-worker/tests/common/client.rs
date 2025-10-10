@@ -113,6 +113,16 @@ impl VcsTestClient {
         self.rpc_call("change/abandon", vec![]).await
     }
     
+    /// Stash the current change to workspace
+    pub async fn change_stash(&self) -> Result<Value, Box<dyn std::error::Error>> {
+        self.rpc_call("change/stash", vec![]).await
+    }
+    
+    /// Switch to a different change by ID
+    pub async fn change_switch(&self, change_id: &str) -> Result<Value, Box<dyn std::error::Error>> {
+        self.rpc_call("change/switch", vec![Value::String(change_id.to_string())]).await
+    }
+    
     /// Approve a change by ID
     pub async fn change_approve(&self, change_id: &str) -> Result<Value, Box<dyn std::error::Error>> {
         self.rpc_call("change/approve", vec![Value::String(change_id.to_string())]).await

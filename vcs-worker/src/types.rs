@@ -138,6 +138,12 @@ pub struct ChangeSubmitRequest {
     pub message: Option<String>,
 }
 
+/// Request structure for change stash operations
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChangeStashRequest {
+    // No fields needed - just stashes the current change
+}
+
 /// Request structure for change switch operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChangeSwitchRequest {

@@ -10,7 +10,7 @@ mod meta;
 
 pub use registry::OperationRegistry;
 pub use hello_op::HelloOperation;
-pub use change::{ChangeCreateOperation, ChangeAbandonOperation, ChangeStatusOperation, ChangeApproveOperation, ChangeSubmitOperation, ChangeSwitchOperation};
+pub use change::{ChangeCreateOperation, ChangeAbandonOperation, ChangeStatusOperation, ChangeApproveOperation, ChangeSubmitOperation, ChangeStashOperation, ChangeSwitchOperation};
 pub use object::{ObjectGetOperation, ObjectUpdateOperation, ObjectRenameOperation, ObjectDeleteOperation, ObjectListOperation};
 pub use index::{IndexListOperation, IndexCalcDeltaOperation, IndexUpdateOperation};
 pub use clone_op::CloneOperation;
@@ -88,6 +88,7 @@ pub fn create_registry_with_config(config: Config) -> Result<(OperationRegistry,
     registry.register(ChangeStatusOperation::new(database.clone()));
     registry.register(ChangeApproveOperation::new(database.clone()));
     registry.register(ChangeSubmitOperation::new(database.clone()));
+    registry.register(ChangeStashOperation::new(database.clone()));
     registry.register(IndexListOperation::new(database.clone()));
     registry.register(IndexCalcDeltaOperation::new(database.clone()));
     registry.register(IndexUpdateOperation::new(database.clone()));
