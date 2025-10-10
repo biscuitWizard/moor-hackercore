@@ -43,11 +43,16 @@ impl ChangeAbandonOperation {
             // Build the abandon diff using shared logic
             let undo_delta = build_abandon_diff_from_change(&self.database, &change)?;
             
-            // Remove from index if it's LOCAL
+            // Remove from working index if it's LOCAL
             if change.status == ChangeStatus::Local {
-                self.database.index().remove_change(&change.id)
+                self.database.index().remove_from_index(&change.id)
                     .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
-                info!("Removed change '{}' from index", change.name);
+                info!("Removed change '{}' from working index", change.name);
+                
+                // Delete the change from history storage (abandoned changes are not kept)
+                self.database.index().delete_change(&change.id)
+                    .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+                info!("Deleted abandoned change '{}' from history storage", change.name);
             }
             
             info!("Successfully abandoned change '{}' ({}), created undo delta", change.name, change.id);

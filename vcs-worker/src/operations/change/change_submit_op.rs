@@ -94,8 +94,8 @@ impl ChangeSubmitOperation {
 
         info!("Stored change '{}' in workspace with Review status", change.name);
 
-        // Remove the change from the top of the index
-        self.database.index().remove_change(&change.id)
+        // Remove the change from the working index
+        self.database.index().remove_from_index(&change.id)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
 
         info!("Removed change '{}' from top of index", change.name);

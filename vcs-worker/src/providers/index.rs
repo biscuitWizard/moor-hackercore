@@ -20,8 +20,16 @@ pub trait IndexProvider: Send + Sync {
     /// Get the top (most recent/current) change ID (the last element in the list)
     fn get_top_change(&self) -> ProviderResult<Option<String>>;
     
-    /// Remove a change ID from the order list
-    fn remove_change(&self, change_id: &str) -> ProviderResult<()>;
+    /// Remove a change ID from the working index (change_order list and TOP_KEY)
+    /// Note: This only removes from the index metadata, not from history_storage
+    /// The caller is responsible for deleting from history_storage if needed (e.g., for abandoned changes)
+    /// Use this for abandoning or switching away from a change
+    fn remove_from_index(&self, change_id: &str) -> ProviderResult<()>;
+    
+    /// Clear the top_change pointer if it points to the given change ID
+    /// The change remains in change_order (as part of merged history)
+    /// Use this when approving a change (converting Local -> Merged)
+    fn clear_top_change_if(&self, change_id: &str) -> ProviderResult<()>;
     
     // ===== CHANGE STORAGE METHODS =====
     /// Store a change in the database
@@ -32,6 +40,9 @@ pub trait IndexProvider: Send + Sync {
     
     /// Update an existing change
     fn update_change(&self, change: &crate::types::Change) -> ProviderResult<()>;
+    
+    /// Delete a change from permanent storage (use with caution - typically only for abandoned local changes)
+    fn delete_change(&self, change_id: &str) -> ProviderResult<()>;
     
     /// Create a blank change automatically
     fn create_blank_change(&self) -> ProviderResult<crate::types::Change>;
@@ -64,17 +75,43 @@ pub trait IndexProvider: Send + Sync {
     fn clear(&self) -> ProviderResult<()>;
 }
 
+/// Implementation of the IndexProvider trait using two separate Fjall partitions:
+/// 
+/// **Architecture:**
+/// - `working_index`: Tracks the active working set (change_order list, top_change pointer, source_url)
+/// - `history_storage`: Permanent storage for all Change objects (never deleted)
+/// 
+/// **Key Distinction:**
+/// When a change is "removed from index", it's only removed from the working set metadata
+/// (working_index), but the Change object remains permanently in history_storage.
 pub struct IndexProviderImpl {
-    tree: Partition,
-    changes_tree: Partition,
+    /// **Working Index Metadata** - Stores the change index structure:
+    /// - `change_order`: Chronological list of ALL changes (merged history + current local, if any)
+    /// - `top_change`: Pointer to the ONE active Local change (if one exists)
+    /// - `source_url`: Optional remote source for this repository
+    /// 
+    /// When a change is approved: stays in change_order (becomes part of history), top_change cleared
+    /// When a change is abandoned: removed from change_order entirely, top_change cleared
+    working_index: Partition,
+    
+    /// **Permanent History Storage** - Stores Change objects:
+    /// - Stores all committed/merged changes permanently
+    /// - Abandoned Local changes are deleted from here
+    /// - Indexed by change ID
+    /// - Contains changes in all states (Local, Merged, Review, Idle)
+    /// 
+    /// This is the authoritative source of truth for change data
+    history_storage: Partition,
+    
+    /// Channel for requesting background database flushes
     flush_sender: mpsc::UnboundedSender<()>,
 }
 
 impl IndexProviderImpl {
     pub fn new(index_tree: Partition, changes_tree: Partition, flush_sender: mpsc::UnboundedSender<()>) -> Self {
         Self { 
-            tree: index_tree,
-            changes_tree,
+            working_index: index_tree,
+            history_storage: changes_tree,
             flush_sender,
         }
     }
@@ -87,7 +124,7 @@ impl IndexProviderImpl {
     
     /// Get the current change order with error handling
     fn get_change_order_internal(&self) -> ProviderResult<Vec<String>> {
-        if let Some(data) = self.tree.get(Self::ORDER_KEY)? {
+        if let Some(data) = self.working_index.get(Self::ORDER_KEY)? {
             serde_json::from_slice::<Vec<String>>(&data)
                 .map_err(|e| ProviderError::SerializationError(e.to_string()))
         } else {
@@ -97,7 +134,7 @@ impl IndexProviderImpl {
     
     /// Save the change order to storage
     fn save_change_order(&self, order: &Vec<String>) -> ProviderResult<()> {
-        self.tree.insert(Self::ORDER_KEY, serde_json::to_vec(order)
+        self.working_index.insert(Self::ORDER_KEY, serde_json::to_vec(order)
             .map_err(|e| ProviderError::SerializationError(e.to_string()))?)?;
         Ok(())
     }
@@ -192,7 +229,7 @@ impl IndexProvider for IndexProviderImpl {
         order.push(change_id.to_string());
         
         self.save_change_order(&order)?;
-        self.tree.insert(Self::TOP_KEY, change_id.as_bytes())?;
+        self.working_index.insert(Self::TOP_KEY, change_id.as_bytes())?;
         
         info!("Set change '{}' as top/local change", change_id);
         Ok(())
@@ -207,10 +244,10 @@ impl IndexProvider for IndexProviderImpl {
         
         // Update top change to the last in the order (newest)
         if let Some(top_change_id) = order.last() {
-            self.tree.insert(Self::TOP_KEY, top_change_id.as_bytes())?;
+            self.working_index.insert(Self::TOP_KEY, top_change_id.as_bytes())?;
             info!("Set change order with {} changes, top change: {}", order.len(), top_change_id);
         } else {
-            self.tree.remove(Self::TOP_KEY)?;
+            self.working_index.remove(Self::TOP_KEY)?;
             info!("Set empty change order");
         }
         
@@ -218,7 +255,7 @@ impl IndexProvider for IndexProviderImpl {
     }
     
     fn get_top_change(&self) -> ProviderResult<Option<String>> {
-        if let Some(data) = self.tree.get(Self::TOP_KEY)? {
+        if let Some(data) = self.working_index.get(Self::TOP_KEY)? {
             Ok(Some(String::from_utf8(data.to_vec())
                 .map_err(|e| ProviderError::SerializationError(e.to_string()))?))
         } else {
@@ -226,35 +263,41 @@ impl IndexProvider for IndexProviderImpl {
         }
     }
     
-    fn remove_change(&self, change_id: &str) -> ProviderResult<()> {
+    fn remove_from_index(&self, change_id: &str) -> ProviderResult<()> {
         let mut order = self.get_change_order_internal()?;
         order.retain(|id| id != change_id);
         
         self.save_change_order(&order)?;
         
-        // Update top change if we removed it
-        if let Some(top_change) = self.tree.get(Self::TOP_KEY)? {
+        // Clear top_change if we removed it (don't automatically set to last item)
+        // top_change should only point to Local changes, not Merged ones
+        if let Some(top_change) = self.working_index.get(Self::TOP_KEY)? {
             if &top_change.to_vec() == change_id.as_bytes() {
-                let new_top = order.last().cloned();
-                if let Some(new_top_id) = new_top {
-                    self.tree.insert(Self::TOP_KEY, new_top_id.as_bytes())?;
-                } else {
-                    self.tree.remove(Self::TOP_KEY)?;
-                }
+                self.working_index.remove(Self::TOP_KEY)?;
+                info!("Cleared top_change pointer");
             }
         }
         
-        info!("Removed change '{}' from index order", change_id);
+        info!("Removed change '{}' from change_order (may still be in history_storage)", change_id);
         Ok(())
     }
     
-    
+    fn clear_top_change_if(&self, change_id: &str) -> ProviderResult<()> {
+        // Only clear top_change if it currently points to this change
+        if let Some(top_change) = self.working_index.get(Self::TOP_KEY)? {
+            if &top_change.to_vec() == change_id.as_bytes() {
+                self.working_index.remove(Self::TOP_KEY)?;
+                info!("Cleared top_change pointer (was '{}')", change_id);
+            }
+        }
+        Ok(())
+    }
     
     // ===== CHANGE STORAGE METHODS =====
     fn store_change(&self, change: &crate::types::Change) -> ProviderResult<()> {
         let json = serde_json::to_string(change)
             .map_err(|e| ProviderError::SerializationError(format!("JSON serialization error: {e}")))?;
-        self.changes_tree.insert(change.id.as_bytes(), json.as_bytes())?;
+        self.history_storage.insert(change.id.as_bytes(), json.as_bytes())?;
         
         // Request background flush
         if self.flush_sender.send(()).is_err() {
@@ -265,7 +308,7 @@ impl IndexProvider for IndexProviderImpl {
     }
     
     fn get_change(&self, change_id: &str) -> ProviderResult<Option<crate::types::Change>> {
-        match self.changes_tree.get(change_id.as_bytes())? {
+        match self.history_storage.get(change_id.as_bytes())? {
             Some(value) => {
                 let json = String::from_utf8(value.to_vec())
                     .map_err(|e| ProviderError::SerializationError(format!("UTF-8 error: {e}")))?;
@@ -279,6 +322,12 @@ impl IndexProvider for IndexProviderImpl {
     
     fn update_change(&self, change: &crate::types::Change) -> ProviderResult<()> {
         self.store_change(change)
+    }
+    
+    fn delete_change(&self, change_id: &str) -> ProviderResult<()> {
+        self.history_storage.remove(change_id.as_bytes())?;
+        info!("Deleted change '{}' from history storage", change_id);
+        Ok(())
     }
     
     fn create_blank_change(&self) -> ProviderResult<crate::types::Change> {
@@ -307,7 +356,7 @@ impl IndexProvider for IndexProviderImpl {
     fn list_changes(&self) -> ProviderResult<Vec<crate::types::Change>> {
         let mut changes = Vec::new();
         
-        for result in self.changes_tree.iter() {
+        for result in self.history_storage.iter() {
             let (_, value) = result?;
             if let Ok(json) = String::from_utf8(value.to_vec()) {
                 if let Ok(change) = serde_json::from_str::<crate::types::Change>(&json) {
@@ -424,7 +473,7 @@ impl IndexProvider for IndexProviderImpl {
     }
     
     fn get_source(&self) -> ProviderResult<Option<String>> {
-        if let Some(data) = self.tree.get(Self::SOURCE_KEY)? {
+        if let Some(data) = self.working_index.get(Self::SOURCE_KEY)? {
             Ok(Some(String::from_utf8(data.to_vec())
                 .map_err(|e| ProviderError::SerializationError(e.to_string()))?))
         } else {
@@ -433,30 +482,30 @@ impl IndexProvider for IndexProviderImpl {
     }
     
     fn set_source(&self, url: &str) -> ProviderResult<()> {
-        self.tree.insert(Self::SOURCE_KEY, url.as_bytes())?;
+        self.working_index.insert(Self::SOURCE_KEY, url.as_bytes())?;
         info!("Set source URL to: {}", url);
         Ok(())
     }
     
     fn clear(&self) -> ProviderResult<()> {
         // Clear the index tree (change order, top change, source)
-        let index_keys: Vec<_> = self.tree.iter()
+        let index_keys: Vec<_> = self.working_index.iter()
             .filter_map(|result| result.ok())
             .map(|(key, _)| key.to_vec())
             .collect();
         
         for key in index_keys {
-            self.tree.remove(&key)?;
+            self.working_index.remove(&key)?;
         }
         
         // Clear the changes tree
-        let changes_keys: Vec<_> = self.changes_tree.iter()
+        let changes_keys: Vec<_> = self.history_storage.iter()
             .filter_map(|result| result.ok())
             .map(|(key, _)| key.to_vec())
             .collect();
         
         for key in changes_keys {
-            self.changes_tree.remove(&key)?;
+            self.history_storage.remove(&key)?;
         }
         
         info!("Cleared all index and changes data");

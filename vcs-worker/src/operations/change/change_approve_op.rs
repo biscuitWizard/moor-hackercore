@@ -80,6 +80,10 @@ impl ChangeApproveOperation {
         self.database.index().update_change(&change)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         
+        // Clear the top_change pointer (change stays in history as merged)
+        self.database.index().clear_top_change_if(&change_id)
+            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+        
         // Remove the change from workspace if it exists there (as a pending or stashed change)
         if self.database.workspace().get_workspace_change(&change_id)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
@@ -89,7 +93,7 @@ impl ChangeApproveOperation {
             info!("Removed change '{}' from workspace", change.name);
         }
         
-        info!("Successfully approved change '{}' ({}), marked as merged", 
+        info!("Successfully approved change '{}' ({}), marked as merged and removed from index", 
               change.name, change.id);
         
         Ok(diff_model)

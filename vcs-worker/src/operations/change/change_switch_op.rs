@@ -70,8 +70,8 @@ impl ChangeSwitchOperation {
                 
                 info!("Stored current change '{}' in workspace with Idle status", current_change.name);
                 
-                // Remove from index
-                self.database.index().remove_change(&current_change_id)
+                // Remove from working index
+                self.database.index().remove_from_index(&current_change_id)
                     .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
                 
                 info!("Removed current change '{}' from index", current_change.name);

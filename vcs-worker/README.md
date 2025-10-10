@@ -196,7 +196,7 @@ trait IndexProvider {
     fn push_change(&self, change_id: &str) -> ProviderResult<()>     // Push to top of stack (end, newest)
     fn get_change_order(&self) -> ProviderResult<Vec<String>>        // Get ordered list (oldest first)
     fn get_top_change(&self) -> ProviderResult<Option<String>>       // Get current LOCAL change (last element)
-    fn remove_change(&self, change_id: &str) -> ProviderResult<()>
+    fn remove_from_index(&self, change_id: &str) -> ProviderResult<()>  // Remove from working set (not from storage)
 }
 ```
 
