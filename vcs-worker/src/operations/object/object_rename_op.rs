@@ -6,6 +6,7 @@ use crate::database::DatabaseRef;
 use crate::types::{ObjectsTreeError, User};
 use crate::providers::index::IndexProvider;
 use crate::providers::refs::RefsProvider;
+use crate::providers::objects::ObjectsProvider;
 use crate::types::{ObjectRenameRequest, RenamedObject};
 
 /// Object rename operation that renames an object from one name to another
@@ -24,24 +25,6 @@ impl ObjectRenameOperation {
     fn process_object_rename(&self, request: ObjectRenameRequest) -> Result<String, ObjectsTreeError> {
         info!("Processing object rename from '{}' to '{}'", request.from_name, request.to_name);
         
-        // Validate that the source object exists
-        let existing_sha256 = self.database.refs().get_ref(&request.from_name, None)
-            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
-        
-        if existing_sha256.is_none() {
-            error!("Cannot rename object '{}' - object does not exist", request.from_name);
-            return Err(ObjectsTreeError::ObjectNotFound(format!("Object '{}' not found", request.from_name)));
-        }
-        
-        // Validate that the target object name doesn't already exist
-        let target_sha256 = self.database.refs().get_ref(&request.to_name, None)
-            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
-        
-        if target_sha256.is_some() {
-            error!("Cannot rename to '{}' - object already exists", request.to_name);
-            return Err(ObjectsTreeError::InvalidOperation(format!("Object '{}' already exists", request.to_name)));
-        }
-        
         // Check that we're not using the same name
         if request.from_name == request.to_name {
             error!("Cannot rename object to the same name");
@@ -51,6 +34,52 @@ impl ObjectRenameOperation {
         // Get or create a local change
         let mut current_change = self.database.index().get_or_create_local_change()
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+        
+        // Check if source is in added_objects or modified_objects
+        // These cases are handled simply (just update the name) without complex validation
+        let source_in_added = current_change.added_objects.iter()
+            .any(|obj| obj.name == request.from_name);
+        let source_in_modified = current_change.modified_objects.iter()
+            .any(|obj| obj.name == request.from_name);
+        
+        // Check if we're renaming back to undo a previous rename
+        let is_rename_back = current_change.renamed_objects.iter()
+            .any(|renamed| renamed.from.name == request.to_name && renamed.to.name == request.from_name);
+        
+        // Only do complex validation if NOT an added/modified object and NOT a rename-back
+        if !source_in_added && !source_in_modified && !is_rename_back {
+            // Check if the source object exists either in refs or in renamed_objects
+            let source_exists_in_refs = self.database.refs().get_ref(&request.from_name, None)
+                .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
+                .is_some();
+            
+            let source_exists_in_renamed = current_change.renamed_objects.iter()
+                .any(|renamed| renamed.to.name == request.from_name);
+            
+            if !source_exists_in_refs && !source_exists_in_renamed {
+                error!("Cannot rename object '{}' - object does not exist", request.from_name);
+                return Err(ObjectsTreeError::ObjectNotFound(format!("Object '{}' not found", request.from_name)));
+            }
+            
+            // Validate that the target object name doesn't already exist
+            let target_exists_in_refs = self.database.refs().get_ref(&request.to_name, None)
+                .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
+                .is_some();
+            
+            let target_exists_in_renamed = current_change.renamed_objects.iter()
+                .any(|renamed| renamed.to.name == request.to_name);
+            
+            let target_exists_in_added = current_change.added_objects.iter()
+                .any(|obj| obj.name == request.to_name);
+            
+            let target_exists_in_modified = current_change.modified_objects.iter()
+                .any(|obj| obj.name == request.to_name);
+            
+            if target_exists_in_refs || target_exists_in_renamed || target_exists_in_added || target_exists_in_modified {
+                error!("Cannot rename to '{}' - object already exists", request.to_name);
+                return Err(ObjectsTreeError::InvalidOperation(format!("Object '{}' already exists", request.to_name)));
+            }
+        }
         
         // The index already manages the current change, so we don't need repository management
         
@@ -70,33 +99,120 @@ impl ObjectRenameOperation {
                     })
             }).unwrap_or(1);
         
-        // Handle change tracking - remove from added/modified lists if present
-        current_change.added_objects.retain(|obj| obj.name != request.from_name);
-        current_change.modified_objects.retain(|obj| obj.name != request.from_name);
-        
-        // Add to renamed_objects list
-        let renamed_object = RenamedObject {
-            from: crate::types::ObjectInfo { name: request.from_name.clone(), version: from_version },
-            to: crate::types::ObjectInfo { name: request.to_name.clone(), version: 1 }, // New object starts at version 1
-        };
-        
-        // Remove any existing rename entry for this object
-        current_change.renamed_objects.retain(|renamed| renamed.from.name != request.from_name);
-        
-        // Add the new rename entry
-        current_change.renamed_objects.push(renamed_object);
-        info!("Added rename '{}' -> '{}' to renamed_objects in change '{}'", request.from_name, request.to_name, current_change.name);
-        
-        // If the source object was added in this change, move it to the new name in added_objects
-        if let Some(pos) = current_change.added_objects.iter().position(|obj| obj.name == request.from_name) {
-            current_change.added_objects[pos] = crate::types::ObjectInfo { name: request.to_name.clone(), version: 1 };
-            info!("Moved renamed object '{}' -> '{}' in added_objects", request.from_name, request.to_name);
-        }
-        
-        // If the source object was modified in this change, move it to the new name in modified_objects
-        if let Some(pos) = current_change.modified_objects.iter().position(|obj| obj.name == request.from_name) {
-            current_change.modified_objects[pos] = crate::types::ObjectInfo { name: request.to_name.clone(), version: 1 };
-            info!("Moved renamed object '{}' -> '{}' in modified_objects", request.from_name, request.to_name);
+        // Now handle the rename based on whether it's a rename-back or a normal rename
+        if is_rename_back {
+            // This is a rename back to the original name - remove the original rename operation
+            info!("Detected rename back to original name '{}' -> '{}', removing rename operation", 
+                  request.from_name, request.to_name);
+            
+            // Remove the original rename entry
+            current_change.renamed_objects.retain(|renamed| 
+                !(renamed.from.name == request.to_name && renamed.to.name == request.from_name));
+            
+            // Restore the object back to its original name in added/modified lists
+            // (the rename operation had moved it to the new name, now we move it back)
+            if let Some(pos) = current_change.added_objects.iter().position(|obj| obj.name == request.from_name) {
+                current_change.added_objects[pos] = crate::types::ObjectInfo { 
+                    name: request.to_name.clone(), 
+                    version: current_change.added_objects[pos].version 
+                };
+                info!("Restored object back to '{}' in added_objects", request.to_name);
+            }
+            
+            if let Some(pos) = current_change.modified_objects.iter().position(|obj| obj.name == request.from_name) {
+                current_change.modified_objects[pos] = crate::types::ObjectInfo { 
+                    name: request.to_name.clone(), 
+                    version: current_change.modified_objects[pos].version 
+                };
+                info!("Restored object back to '{}' in modified_objects", request.to_name);
+            }
+        } else {
+            // Normal rename operation
+            
+            // Check if object is in added_objects or modified_objects
+            // If so, just update the name there and DON'T add a rename entry
+            let was_in_added = current_change.added_objects.iter()
+                .any(|obj| obj.name == request.from_name);
+            let was_in_modified = current_change.modified_objects.iter()
+                .any(|obj| obj.name == request.from_name);
+            
+            if was_in_added {
+                // Object was added in this change
+                // Special case: if target is the "to.name" of a rename where "from.name" == source,
+                // then we're renaming the added object back to the renamed object's name
+                // This cancels everything out: delete the added object and delete the rename entry
+                let cancels_rename = current_change.renamed_objects.iter()
+                    .any(|renamed| renamed.from.name == request.from_name && renamed.to.name == request.to_name);
+                
+                if cancels_rename {
+                    // This rename cancels out the previous rename + add
+                    info!("Detected rename of added object back to renamed object's name, canceling both operations");
+                    
+                    // Remove the added object
+                    let removed_obj = current_change.added_objects.iter()
+                        .find(|obj| obj.name == request.from_name)
+                        .cloned();
+                    current_change.added_objects.retain(|obj| obj.name != request.from_name);
+                    info!("Removed added object '{}'", request.from_name);
+                    
+                    // Remove the rename entry
+                    current_change.renamed_objects.retain(|renamed| 
+                        !(renamed.from.name == request.from_name && renamed.to.name == request.to_name));
+                    info!("Removed rename entry '{}' -> '{}'", request.from_name, request.to_name);
+                    
+                    // Clean up the SHA256 and ref for the removed added object
+                    if let Some(removed) = removed_obj {
+                        // Get the SHA256 for this object
+                        if let Some(sha256) = self.database.refs().get_ref(&request.from_name, Some(removed.version))
+                            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))? {
+                            
+                            // Check if this SHA256 is referenced elsewhere
+                            let is_referenced = self.database.refs().is_sha256_referenced_excluding(&sha256, &request.from_name, removed.version)
+                                .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+                            
+                            if !is_referenced {
+                                // Delete the orphaned SHA256
+                                info!("Deleting orphaned SHA256 '{}' for removed object '{}'", sha256, request.from_name);
+                                self.database.objects().delete(&sha256)
+                                    .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+                            } else {
+                                info!("SHA256 '{}' is still referenced, keeping it", sha256);
+                            }
+                        }
+                        
+                        // Delete the ref for this object
+                        self.database.refs().delete_ref(&request.from_name, removed.version)
+                            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+                        info!("Deleted ref for '{}' version {}", request.from_name, removed.version);
+                    }
+                } else {
+                    // Normal case: just update the name in added_objects
+                    if let Some(pos) = current_change.added_objects.iter().position(|obj| obj.name == request.from_name) {
+                        current_change.added_objects[pos].name = request.to_name.clone();
+                        info!("Updated added object name from '{}' to '{}'", request.from_name, request.to_name);
+                    }
+                }
+            } else if was_in_modified {
+                // Object was modified in this change - just update its name in modified_objects
+                if let Some(pos) = current_change.modified_objects.iter().position(|obj| obj.name == request.from_name) {
+                    current_change.modified_objects[pos].name = request.to_name.clone();
+                    info!("Updated modified object name from '{}' to '{}'", request.from_name, request.to_name);
+                }
+                // Don't add to renamed_objects since it's already tracked as modified
+            } else {
+                // Object exists only in refs (committed history) - add to renamed_objects
+                let renamed_object = RenamedObject {
+                    from: crate::types::ObjectInfo { name: request.from_name.clone(), version: from_version },
+                    to: crate::types::ObjectInfo { name: request.to_name.clone(), version: 1 },
+                };
+                
+                // Remove any existing rename entry for this object
+                current_change.renamed_objects.retain(|renamed| renamed.from.name != request.from_name);
+                
+                // Add the new rename entry
+                current_change.renamed_objects.push(renamed_object);
+                info!("Added rename '{}' -> '{}' to renamed_objects in change '{}'", request.from_name, request.to_name, current_change.name);
+            }
         }
         
         // Update the change in the database

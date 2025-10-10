@@ -8,6 +8,7 @@
 
 mod object;
 mod object_lifecycle;
+mod object_rename_update_integration;
 
 // Future test modules:
 // mod change;

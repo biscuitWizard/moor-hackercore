@@ -40,6 +40,9 @@ pub trait RefsProvider: Send + Sync {
     
     /// Clear all refs from storage
     fn clear(&self) -> ProviderResult<()>;
+    
+    /// Delete a specific ref by object name and version
+    fn delete_ref(&self, object_name: &str, version: u64) -> ProviderResult<()>;
 }
 
 /// Implementation of RefsProvider using Fjall
@@ -220,6 +223,25 @@ impl RefsProvider for RefsProviderImpl {
         self.save_refs_storage(&empty_storage)?;
         
         info!("Cleared all refs from storage");
+        Ok(())
+    }
+    
+    fn delete_ref(&self, object_name: &str, version: u64) -> ProviderResult<()> {
+        let mut storage = self.load_refs_storage()?;
+        
+        // Remove the reference
+        let key = format!("{}:{}", object_name, version);
+        storage.refs.remove(&key);
+        
+        // Save the updated storage
+        self.save_refs_storage(&storage)?;
+        
+        // Request background flush
+        if self.flush_sender.send(()).is_err() {
+            warn!("Failed to request background flush - channel closed");
+        }
+        
+        info!("Deleted ref for object '{}' version {}", object_name, version);
         Ok(())
     }
 

@@ -120,16 +120,28 @@ impl ObjectUpdateOperation {
         
         
         // Check if this object has been renamed in the current change
-        let is_renamed_object = current_change.renamed_objects.iter()
-            .any(|renamed| renamed.from.name == request.object_name || renamed.to.name == request.object_name);
+        // If updating the renamed object (to.name), skip tracking (already tracked as rename)
+        // If updating with the old name (from.name), treat as new object (the old one was renamed away)
+        let is_renamed_to = current_change.renamed_objects.iter()
+            .any(|renamed| renamed.to.name == request.object_name);
         
-        if is_renamed_object {
-            info!("Object '{}' has been renamed in this change, skipping change tracking", request.object_name);
+        let was_renamed_from = current_change.renamed_objects.iter()
+            .any(|renamed| renamed.from.name == request.object_name);
+        
+        if is_renamed_to {
+            // This is updating the renamed object itself - skip change tracking
+            info!("Object '{}' is the target of a rename in this change, skipping change tracking", request.object_name);
         } else if !is_already_in_change {
             // Only add to tracking lists if this is the first time we're modifying this object in this change
             // If it's already in the change (added_objects or modified_objects), leave it where it is
             
-            if is_existing_object {
+            // If the object name was renamed away, treat this as a NEW object even if it exists in refs
+            if was_renamed_from {
+                // The object with this name was renamed away, so this is a new object
+                let obj_info = crate::types::ObjectInfo { name: request.object_name.clone(), version };
+                current_change.added_objects.push(obj_info.clone());
+                info!("Added object '{}' to added_objects (old name was renamed away)", request.object_name);
+            } else if is_existing_object {
                 // Object existed before this change started, add to modified_objects
                 let obj_info = crate::types::ObjectInfo { name: request.object_name.clone(), version };
                 current_change.modified_objects.push(obj_info.clone());
