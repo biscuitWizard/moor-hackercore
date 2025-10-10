@@ -2,12 +2,14 @@ use crate::operations::{Operation, OperationRoute};
 use axum::http::Method;
 use tracing::{error, info, debug};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 use crate::database::{DatabaseRef, ObjectsTreeError};
 use crate::providers::index::IndexProvider;
 use crate::providers::refs::RefsProvider;
 use crate::providers::objects::ObjectsProvider;
 use crate::types::{User, VcsObjectType};
+use moor_objdef::dump_object;
 
 /// Request structure for object update operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -45,11 +47,65 @@ impl ObjectUpdateOperation {
         debug!("Object dump for '{}':\n{}", request.object_name, object_dump);
         
         // Parse the object dump into an ObjectDefinition (validates the syntax)
-        let _object_def = self.database.objects().parse_object_dump(&object_dump)
+        let mut object_def = self.database.objects().parse_object_dump(&object_dump)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         
-        // Generate SHA256 hash for the object dump
-        let sha256_key = self.database.objects().generate_sha256_hash(&object_dump);
+        // Check if meta exists for this object
+        let meta = match self.database.refs().get_ref(VcsObjectType::MooMetaObject, &request.object_name, None)
+            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))? {
+            Some(meta_sha256) => {
+                // Meta exists, load it
+                let yaml = self.database.objects().get(&meta_sha256)
+                    .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
+                    .ok_or_else(|| ObjectsTreeError::SerializationError("Meta SHA256 exists but data not found".to_string()))?;
+                Some(self.database.objects().parse_meta_dump(&yaml)
+                    .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?)
+            }
+            None => None,
+        };
+        
+        // Filter the object if meta exists with ignored items
+        let final_dump = if let Some(meta) = meta {
+            if !meta.ignored_properties.is_empty() || !meta.ignored_verbs.is_empty() {
+                info!("Filtering object '{}' update - ignoring {} properties and {} verbs", 
+                      request.object_name, meta.ignored_properties.len(), meta.ignored_verbs.len());
+                
+                // Filter out ignored properties from property_definitions
+                object_def.property_definitions.retain(|prop| {
+                    !meta.ignored_properties.contains(&prop.name.as_string())
+                });
+                
+                // Filter out ignored properties from property_overrides
+                object_def.property_overrides.retain(|prop| {
+                    !meta.ignored_properties.contains(&prop.name.as_string())
+                });
+                
+                // Filter out ignored verbs
+                object_def.verbs.retain(|verb| {
+                    // A verb can have multiple names, check all of them
+                    !verb.names.iter().any(|name| meta.ignored_verbs.contains(&name.as_string()))
+                });
+                
+                // Re-dump the filtered object
+                let index_names = HashMap::new(); // Empty index for simple object names
+                let lines = dump_object(&index_names, &object_def)
+                    .map_err(|e| ObjectsTreeError::SerializationError(format!("Failed to dump filtered object: {e}")))?;
+                
+                let filtered = lines.join("\n");
+                info!("Filtered object '{}', reduced from {} to {} lines", 
+                      request.object_name, object_dump.lines().count(), lines.len());
+                filtered
+            } else {
+                info!("No filtering needed for object '{}' (meta exists but is empty)", request.object_name);
+                object_dump
+            }
+        } else {
+            info!("No meta exists for object '{}', no filtering needed", request.object_name);
+            object_dump
+        };
+        
+        // Generate SHA256 hash for the (potentially filtered) object dump
+        let sha256_key = self.database.objects().generate_sha256_hash(&final_dump);
         info!("Generated SHA256 key '{}' for object '{}'", sha256_key, request.object_name);
         
         // Check if this content already exists (exact same SHA256)
@@ -64,8 +120,8 @@ impl ObjectUpdateOperation {
             return Ok(format!("Object '{}' unchanged (no modifications)", request.object_name));
         }
         
-        // Store the object definition in the database by SHA256 key
-        self.database.objects().store(&sha256_key, &object_dump)
+        // Store the (potentially filtered) object definition in the database by SHA256 key
+        self.database.objects().store(&sha256_key, &final_dump)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         
         // Check if this object exists in refs to determine adding vs modifying
