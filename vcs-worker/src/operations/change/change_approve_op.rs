@@ -4,6 +4,7 @@ use tracing::{error, info};
 
 use crate::database::{DatabaseRef, ObjectsTreeError};
 use crate::providers::index::IndexProvider;
+use crate::providers::workspace::WorkspaceProvider;
 use crate::types::{ChangeApproveRequest, ChangeStatus, User, Permission};
 use crate::object_diff::{ObjectDiffModel, build_object_diff_from_change};
 use moor_var::{v_error, E_INVARG};
@@ -79,11 +80,16 @@ impl ChangeApproveOperation {
         self.database.index().update_change(&change)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         
-        // Remove the change from the top of the index (since it's no longer local)
-        self.database.index().remove_change(&change_id)
-            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+        // Remove the change from workspace if it exists there (as a pending or stashed change)
+        if self.database.workspace().get_workspace_change(&change_id)
+            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
+            .is_some() {
+            self.database.workspace().delete_workspace_change(&change_id)
+                .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+            info!("Removed change '{}' from workspace", change.name);
+        }
         
-        info!("Successfully approved change '{}' ({}), marked as merged and removed from index", 
+        info!("Successfully approved change '{}' ({}), marked as merged", 
               change.name, change.id);
         
         Ok(diff_model)
@@ -97,7 +103,7 @@ impl Operation for ChangeApproveOperation {
     }
     
     fn description(&self) -> &'static str {
-        "Approves a local change by marking it as merged and removing it from the top of the index. Returns a ChangeDiff showing what was approved."
+        "Approves a local change by marking it as merged and removing it from the workspace if present. Returns a ChangeDiff showing what was approved."
     }
     
     fn routes(&self) -> Vec<OperationRoute> {
