@@ -3,7 +3,7 @@ use axum::http::Method;
 use tracing::{error, info};
 
 use crate::database::DatabaseRef;
-use crate::types::{ObjectsTreeError, User};
+use crate::types::{ObjectsTreeError, User, VcsObjectType};
 use crate::providers::index::IndexProvider;
 use crate::providers::refs::RefsProvider;
 use crate::providers::objects::ObjectsProvider;
@@ -49,7 +49,7 @@ impl ObjectRenameOperation {
         // Only do complex validation if NOT an added/modified object and NOT a rename-back
         if !source_in_added && !source_in_modified && !is_rename_back {
             // Check if the source object exists either in refs or in renamed_objects
-            let source_exists_in_refs = self.database.refs().get_ref(&request.from_name, None)
+            let source_exists_in_refs = self.database.refs().get_ref(VcsObjectType::MooObject, &request.from_name, None)
                 .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
                 .is_some();
             
@@ -62,7 +62,7 @@ impl ObjectRenameOperation {
             }
             
             // Validate that the target object name doesn't already exist
-            let target_exists_in_refs = self.database.refs().get_ref(&request.to_name, None)
+            let target_exists_in_refs = self.database.refs().get_ref(VcsObjectType::MooObject, &request.to_name, None)
                 .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
                 .is_some();
             
@@ -84,11 +84,11 @@ impl ObjectRenameOperation {
         // The index already manages the current change, so we don't need repository management
         
         // Get the current version of the source object
-        let from_version = self.database.refs().get_ref(&request.from_name, None)
+        let from_version = self.database.refs().get_ref(VcsObjectType::MooObject, &request.from_name, None)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
             .and_then(|_| {
                 // Get the latest version number for the source object
-                self.database.refs().get_ref(&request.from_name, None)
+                self.database.refs().get_ref(VcsObjectType::MooObject, &request.from_name, None)
                     .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))
                     .ok()
                     .flatten()
@@ -113,6 +113,7 @@ impl ObjectRenameOperation {
             // (the rename operation had moved it to the new name, now we move it back)
             if let Some(pos) = current_change.added_objects.iter().position(|obj| obj.name == request.from_name) {
                 current_change.added_objects[pos] = crate::types::ObjectInfo { 
+                    object_type: current_change.added_objects[pos].object_type,
                     name: request.to_name.clone(), 
                     version: current_change.added_objects[pos].version 
                 };
@@ -121,6 +122,7 @@ impl ObjectRenameOperation {
             
             if let Some(pos) = current_change.modified_objects.iter().position(|obj| obj.name == request.from_name) {
                 current_change.modified_objects[pos] = crate::types::ObjectInfo { 
+                    object_type: current_change.modified_objects[pos].object_type,
                     name: request.to_name.clone(), 
                     version: current_change.modified_objects[pos].version 
                 };
@@ -163,11 +165,11 @@ impl ObjectRenameOperation {
                     // Clean up the SHA256 and ref for the removed added object
                     if let Some(removed) = removed_obj {
                         // Get the SHA256 for this object
-                        if let Some(sha256) = self.database.refs().get_ref(&request.from_name, Some(removed.version))
+                        if let Some(sha256) = self.database.refs().get_ref(VcsObjectType::MooObject, &request.from_name, Some(removed.version))
                             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))? {
                             
                             // Check if this SHA256 is referenced elsewhere
-                            let is_referenced = self.database.refs().is_sha256_referenced_excluding(&sha256, &request.from_name, removed.version)
+                            let is_referenced = self.database.refs().is_sha256_referenced_excluding(&sha256, VcsObjectType::MooObject, &request.from_name, removed.version)
                                 .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
                             
                             if !is_referenced {
@@ -181,7 +183,7 @@ impl ObjectRenameOperation {
                         }
                         
                         // Delete the ref for this object
-                        self.database.refs().delete_ref(&request.from_name, removed.version)
+                        self.database.refs().delete_ref(VcsObjectType::MooObject, &request.from_name, removed.version)
                             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
                         info!("Deleted ref for '{}' version {}", request.from_name, removed.version);
                     }
@@ -202,8 +204,16 @@ impl ObjectRenameOperation {
             } else {
                 // Object exists only in refs (committed history) - add to renamed_objects
                 let renamed_object = RenamedObject {
-                    from: crate::types::ObjectInfo { name: request.from_name.clone(), version: from_version },
-                    to: crate::types::ObjectInfo { name: request.to_name.clone(), version: 1 },
+                    from: crate::types::ObjectInfo { 
+                        object_type: VcsObjectType::MooObject,
+                        name: request.from_name.clone(), 
+                        version: from_version 
+                    },
+                    to: crate::types::ObjectInfo { 
+                        object_type: VcsObjectType::MooObject,
+                        name: request.to_name.clone(), 
+                        version: 1 
+                    },
                 };
                 
                 // Remove any existing rename entry for this object

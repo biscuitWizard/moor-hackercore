@@ -3,7 +3,7 @@ use axum::http::Method;
 use tracing::{error, info};
 
 use crate::database::DatabaseRef;
-use crate::types::{ObjectsTreeError, User};
+use crate::types::{ObjectsTreeError, User, VcsObjectType};
 use crate::providers::index::IndexProvider;
 use crate::providers::refs::RefsProvider;
 use crate::types::ObjectDeleteRequest;
@@ -25,7 +25,7 @@ impl ObjectDeleteOperation {
         info!("Processing object delete for '{}'", request.object_name);
         
         // Validate that the source object exists
-        let existing_sha256 = self.database.refs().get_ref(&request.object_name, None)
+        let existing_sha256 = self.database.refs().get_ref(VcsObjectType::MooObject, &request.object_name, None)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         
         if existing_sha256.is_none() {
@@ -40,7 +40,7 @@ impl ObjectDeleteOperation {
         // The index already manages the current change, so we don't need repository management
         
         // Get the current version of the object being deleted
-        let object_version = self.database.refs().get_ref(&request.object_name, None)
+        let object_version = self.database.refs().get_ref(VcsObjectType::MooObject, &request.object_name, None)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
             .and_then(|_| {
                 // For now, we'll use version 1 as a placeholder - this should be improved
@@ -63,7 +63,11 @@ impl ObjectDeleteOperation {
         }
         
         // Add to deleted_objects list if not already present
-        let obj_info = crate::types::ObjectInfo { name: request.object_name.clone(), version: object_version };
+        let obj_info = crate::types::ObjectInfo { 
+            object_type: VcsObjectType::MooObject,
+            name: request.object_name.clone(), 
+            version: object_version 
+        };
         if !current_change.deleted_objects.iter().any(|obj| obj.name == request.object_name) {
             current_change.deleted_objects.push(obj_info);
             info!("Added object '{}' to deleted_objects in change '{}'", request.object_name, current_change.name);

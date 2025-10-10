@@ -60,6 +60,7 @@ async fn test_workspace_submit_and_list() {
             .as_secs(),
         status: ChangeStatus::Review,
         added_objects: vec![ObjectInfo {
+            object_type: moor_vcs_worker::types::VcsObjectType::MooObject,
             name: "test_object".to_string(),
             version: 1,
         }],
@@ -419,14 +420,14 @@ async fn test_workspace_change_with_objects() {
             .as_secs(),
         status: ChangeStatus::Review,
         added_objects: vec![
-            ObjectInfo { name: "new_obj_1".to_string(), version: 1 },
-            ObjectInfo { name: "new_obj_2".to_string(), version: 1 },
+            ObjectInfo { object_type: moor_vcs_worker::types::VcsObjectType::MooObject, name: "new_obj_1".to_string(), version: 1 },
+            ObjectInfo { object_type: moor_vcs_worker::types::VcsObjectType::MooObject, name: "new_obj_2".to_string(), version: 1 },
         ],
         modified_objects: vec![
-            ObjectInfo { name: "mod_obj_1".to_string(), version: 2 },
+            ObjectInfo { object_type: moor_vcs_worker::types::VcsObjectType::MooObject, name: "mod_obj_1".to_string(), version: 2 },
         ],
         deleted_objects: vec![
-            ObjectInfo { name: "del_obj_1".to_string(), version: 1 },
+            ObjectInfo { object_type: moor_vcs_worker::types::VcsObjectType::MooObject, name: "del_obj_1".to_string(), version: 1 },
         ],
         renamed_objects: vec![],
         index_change_id: Some("base_change_123".to_string()),

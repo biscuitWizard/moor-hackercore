@@ -5,35 +5,35 @@ use tokio::sync::mpsc;
 use std::collections::HashMap;
 
 use super::{ProviderError, ProviderResult};
-use crate::types::ObjectInfo;
+use crate::types::{ObjectInfo, VcsObjectType};
 
 
 /// Represents the refs storage as a HashMap where key is ObjectInfo and value is sha256
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RefsStorage {
-    pub refs: HashMap<String, String>, // "name:version" -> sha256
+    pub refs: HashMap<ObjectInfo, String>, // ObjectInfo -> sha256
 }
 
 /// Provider trait for reference management
 pub trait RefsProvider: Send + Sync {
     /// Get SHA256 for an object by name and optional version (defaults to latest)
-    fn get_ref(&self, object_name: &str, version: Option<u64>) -> ProviderResult<Option<String>>;
+    fn get_ref(&self, object_type: VcsObjectType, object_name: &str, version: Option<u64>) -> ProviderResult<Option<String>>;
     
     /// Update or create a reference
-    fn update_ref(&self, object_name: &str, version: u64, sha256: &str) -> ProviderResult<()>;
+    fn update_ref(&self, object_type: VcsObjectType, object_name: &str, version: u64, sha256: &str) -> ProviderResult<()>;
     
     /// Get the next version number for an object
-    fn get_next_version(&self, object_name: &str) -> ProviderResult<u64>;
+    fn get_next_version(&self, object_type: VcsObjectType, object_name: &str) -> ProviderResult<u64>;
     
     /// Get the current version number for an object (returns None if object doesn't exist)
-    fn get_current_version(&self, object_name: &str) -> ProviderResult<Option<u64>>;
+    fn get_current_version(&self, object_type: VcsObjectType, object_name: &str) -> ProviderResult<Option<u64>>;
     
     /// Check if a SHA256 is referenced by any ref
     #[allow(dead_code)]
     fn is_sha256_referenced(&self, sha256: &str) -> ProviderResult<bool>;
     
     /// Check if a SHA256 is referenced by any ref excluding a specific object:version
-    fn is_sha256_referenced_excluding(&self, sha256: &str, exclude_object: &str, exclude_version: u64) -> ProviderResult<bool>;
+    fn is_sha256_referenced_excluding(&self, sha256: &str, exclude_object_type: VcsObjectType, exclude_object: &str, exclude_version: u64) -> ProviderResult<bool>;
     
     /// Get all refs as a HashMap (for export/cloning)
     fn get_all_refs(&self) -> ProviderResult<HashMap<ObjectInfo, String>>;
@@ -42,7 +42,7 @@ pub trait RefsProvider: Send + Sync {
     fn clear(&self) -> ProviderResult<()>;
     
     /// Delete a specific ref by object name and version
-    fn delete_ref(&self, object_name: &str, version: u64) -> ProviderResult<()>;
+    fn delete_ref(&self, object_type: VcsObjectType, object_name: &str, version: u64) -> ProviderResult<()>;
 }
 
 /// Implementation of RefsProvider using Fjall
@@ -82,28 +82,30 @@ impl RefsProviderImpl {
 }
 
 impl RefsProvider for RefsProviderImpl {
-    fn get_ref(&self, object_name: &str, version: Option<u64>) -> ProviderResult<Option<String>> {
+    fn get_ref(&self, object_type: VcsObjectType, object_name: &str, version: Option<u64>) -> ProviderResult<Option<String>> {
         let storage = self.load_refs_storage()?;
         
         if let Some(target_version) = version {
             // Specific version requested
-            let key = format!("{}:{}", object_name, target_version);
+            let key = ObjectInfo {
+                object_type,
+                name: object_name.to_string(),
+                version: target_version,
+            };
             Ok(storage.refs.get(&key).cloned())
         } else {
             // Latest version requested
             let latest_version = storage.refs.keys()
-                .filter(|key| key.starts_with(&format!("{}:", object_name)))
-                .filter_map(|key| {
-                    if let Some(version_str) = key.split(':').nth(1) {
-                        version_str.parse::<u64>().ok()
-                    } else {
-                        None
-                    }
-                })
+                .filter(|info| info.object_type == object_type && info.name == object_name)
+                .map(|info| info.version)
                 .max();
                 
-            if let Some(version) = latest_version {
-                let key = format!("{}:{}", object_name, version);
+            if let Some(ver) = latest_version {
+                let key = ObjectInfo {
+                    object_type,
+                    name: object_name.to_string(),
+                    version: ver,
+                };
                 Ok(storage.refs.get(&key).cloned())
             } else {
                 Ok(None)
@@ -112,11 +114,15 @@ impl RefsProvider for RefsProviderImpl {
     }
 
 
-    fn update_ref(&self, object_name: &str, version: u64, sha256: &str) -> ProviderResult<()> {
+    fn update_ref(&self, object_type: VcsObjectType, object_name: &str, version: u64, sha256: &str) -> ProviderResult<()> {
         let mut storage = self.load_refs_storage()?;
         
         // Add the new reference to the HashMap
-        let key = format!("{}:{}", object_name, version);
+        let key = ObjectInfo {
+            object_type,
+            name: object_name.to_string(),
+            version,
+        };
         storage.refs.insert(key, sha256.to_string());
         
         // Save the updated storage
@@ -127,23 +133,17 @@ impl RefsProvider for RefsProviderImpl {
             warn!("Failed to request background flush - channel closed");
         }
         
-        info!("Updated ref for object '{}' version {}", object_name, version);
+        info!("Updated ref for {:?} object '{}' version {}", object_type, object_name, version);
         Ok(())
     }
 
 
-    fn get_next_version(&self, object_name: &str) -> ProviderResult<u64> {
+    fn get_next_version(&self, object_type: VcsObjectType, object_name: &str) -> ProviderResult<u64> {
         let storage = self.load_refs_storage()?;
         
         let latest_version = storage.refs.keys()
-            .filter(|key| key.starts_with(&format!("{}:", object_name)))
-            .filter_map(|key| {
-                if let Some(version_str) = key.split(':').nth(1) {
-                    version_str.parse::<u64>().ok()
-                } else {
-                    None
-                }
-            })
+            .filter(|info| info.object_type == object_type && info.name == object_name)
+            .map(|info| info.version)
             .max();
             
         match latest_version {
@@ -152,18 +152,12 @@ impl RefsProvider for RefsProviderImpl {
         }
     }
 
-    fn get_current_version(&self, object_name: &str) -> ProviderResult<Option<u64>> {
+    fn get_current_version(&self, object_type: VcsObjectType, object_name: &str) -> ProviderResult<Option<u64>> {
         let storage = self.load_refs_storage()?;
         
         let latest_version = storage.refs.keys()
-            .filter(|key| key.starts_with(&format!("{}:", object_name)))
-            .filter_map(|key| {
-                if let Some(version_str) = key.split(':').nth(1) {
-                    version_str.parse::<u64>().ok()
-                } else {
-                    None
-                }
-            })
+            .filter(|info| info.object_type == object_type && info.name == object_name)
+            .map(|info| info.version)
             .max();
             
         Ok(latest_version)
@@ -182,10 +176,14 @@ impl RefsProvider for RefsProviderImpl {
         Ok(false)
     }
 
-    fn is_sha256_referenced_excluding(&self, sha256: &str, exclude_object: &str, exclude_version: u64) -> ProviderResult<bool> {
+    fn is_sha256_referenced_excluding(&self, sha256: &str, exclude_object_type: VcsObjectType, exclude_object: &str, exclude_version: u64) -> ProviderResult<bool> {
         let storage = self.load_refs_storage()?;
         
-        let exclude_key = format!("{}:{}", exclude_object, exclude_version);
+        let exclude_key = ObjectInfo {
+            object_type: exclude_object_type,
+            name: exclude_object.to_string(),
+            version: exclude_version,
+        };
         
         // Check if any ref (except the excluded one) points to this SHA256
         for (key, ref_sha256) in &storage.refs {
@@ -199,21 +197,7 @@ impl RefsProvider for RefsProviderImpl {
     
     fn get_all_refs(&self) -> ProviderResult<HashMap<ObjectInfo, String>> {
         let storage = self.load_refs_storage()?;
-        let mut result: HashMap<ObjectInfo, String> = HashMap::new();
-        
-        for (key, sha256) in &storage.refs {
-            if let Some((name, version_str)) = key.split_once(':') {
-                if let Ok(version) = version_str.parse::<u64>() {
-                    let object_info = ObjectInfo {
-                        name: name.to_string(),
-                        version,
-                    };
-                    result.insert(object_info, sha256.clone());
-                }
-            }
-        }
-        
-        Ok(result)
+        Ok(storage.refs.clone())
     }
     
     fn clear(&self) -> ProviderResult<()> {
@@ -226,11 +210,15 @@ impl RefsProvider for RefsProviderImpl {
         Ok(())
     }
     
-    fn delete_ref(&self, object_name: &str, version: u64) -> ProviderResult<()> {
+    fn delete_ref(&self, object_type: VcsObjectType, object_name: &str, version: u64) -> ProviderResult<()> {
         let mut storage = self.load_refs_storage()?;
         
         // Remove the reference
-        let key = format!("{}:{}", object_name, version);
+        let key = ObjectInfo {
+            object_type,
+            name: object_name.to_string(),
+            version,
+        };
         storage.refs.remove(&key);
         
         // Save the updated storage
@@ -241,7 +229,7 @@ impl RefsProvider for RefsProviderImpl {
             warn!("Failed to request background flush - channel closed");
         }
         
-        info!("Deleted ref for object '{}' version {}", object_name, version);
+        info!("Deleted ref for {:?} object '{}' version {}", object_type, object_name, version);
         Ok(())
     }
 

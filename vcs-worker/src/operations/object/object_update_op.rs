@@ -7,7 +7,7 @@ use crate::database::{DatabaseRef, ObjectsTreeError};
 use crate::providers::index::IndexProvider;
 use crate::providers::refs::RefsProvider;
 use crate::providers::objects::ObjectsProvider;
-use crate::types::User;
+use crate::types::{User, VcsObjectType};
 
 /// Request structure for object update operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -53,7 +53,7 @@ impl ObjectUpdateOperation {
         info!("Generated SHA256 key '{}' for object '{}'", sha256_key, request.object_name);
         
         // Check if this content already exists (exact same SHA256)
-        let existing_sha256 = self.database.refs().get_ref(&request.object_name, None)
+        let existing_sha256 = self.database.refs().get_ref(VcsObjectType::MooObject, &request.object_name, None)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         
         let is_duplicate_content = existing_sha256.map_or(false, |existing| existing == sha256_key);
@@ -70,7 +70,7 @@ impl ObjectUpdateOperation {
         
         // Check if this object exists in refs to determine adding vs modifying
         // Do this BEFORE updating the refs to avoid race condition
-        let is_existing_object = self.database.refs().get_ref(&request.object_name, None)
+        let is_existing_object = self.database.refs().get_ref(VcsObjectType::MooObject, &request.object_name, None)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
             .is_some();
         
@@ -84,16 +84,16 @@ impl ObjectUpdateOperation {
         if is_already_in_change {
             // Object was already modified in this change, use the current version
             // instead of incrementing it
-            version = self.database.refs().get_current_version(&request.object_name)
+            version = self.database.refs().get_current_version(VcsObjectType::MooObject, &request.object_name)
                 .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
                 .unwrap_or(1); // Default to 1 if no version exists yet
             
             // Get the old SHA256 for this version
-            if let Some(old_sha256) = self.database.refs().get_ref(&request.object_name, Some(version))
+            if let Some(old_sha256) = self.database.refs().get_ref(VcsObjectType::MooObject, &request.object_name, Some(version))
                 .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))? {
                 
                 // Check if the old SHA256 is referenced by any other ref (excluding this object:version)
-                let is_referenced = self.database.refs().is_sha256_referenced_excluding(&old_sha256, &request.object_name, version)
+                let is_referenced = self.database.refs().is_sha256_referenced_excluding(&old_sha256, VcsObjectType::MooObject, &request.object_name, version)
                     .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
                 
                 if !is_referenced {
@@ -110,12 +110,12 @@ impl ObjectUpdateOperation {
             info!("Updating object '{}' again in same change (keeping version {})", request.object_name, version);
         } else {
             // First time modifying this object in this change, increment version
-            version = self.database.refs().get_next_version(&request.object_name)
+            version = self.database.refs().get_next_version(VcsObjectType::MooObject, &request.object_name)
                 .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         }
         
         // Update or create the object reference (latest version tracking)
-        self.database.refs().update_ref(&request.object_name, version, &sha256_key)
+        self.database.refs().update_ref(VcsObjectType::MooObject, &request.object_name, version, &sha256_key)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         
         
@@ -138,17 +138,29 @@ impl ObjectUpdateOperation {
             // If the object name was renamed away, treat this as a NEW object even if it exists in refs
             if was_renamed_from {
                 // The object with this name was renamed away, so this is a new object
-                let obj_info = crate::types::ObjectInfo { name: request.object_name.clone(), version };
+                let obj_info = crate::types::ObjectInfo { 
+                    object_type: VcsObjectType::MooObject,
+                    name: request.object_name.clone(), 
+                    version 
+                };
                 current_change.added_objects.push(obj_info.clone());
                 info!("Added object '{}' to added_objects (old name was renamed away)", request.object_name);
             } else if is_existing_object {
                 // Object existed before this change started, add to modified_objects
-                let obj_info = crate::types::ObjectInfo { name: request.object_name.clone(), version };
+                let obj_info = crate::types::ObjectInfo { 
+                    object_type: VcsObjectType::MooObject,
+                    name: request.object_name.clone(), 
+                    version 
+                };
                 current_change.modified_objects.push(obj_info.clone());
                 info!("Added object '{}' to modified_objects in change '{}'", request.object_name, current_change.name);
             } else {
                 // Object is new in this change, add to added_objects
-                let obj_info = crate::types::ObjectInfo { name: request.object_name.clone(), version };
+                let obj_info = crate::types::ObjectInfo { 
+                    object_type: VcsObjectType::MooObject,
+                    name: request.object_name.clone(), 
+                    version 
+                };
                 current_change.added_objects.push(obj_info.clone());
                 info!("Added object '{}' to added_objects in change '{}'", request.object_name, current_change.name);
             }

@@ -208,7 +208,11 @@ impl ChangeOperationProcessor {
     fn finalize(self) -> Vec<crate::types::ObjectInfo> {
         // Convert the HashMap to a sorted list for consistent output
         let mut object_list: Vec<crate::types::ObjectInfo> = self.objects.into_iter()
-            .map(|(name, version)| crate::types::ObjectInfo { name, version })
+            .map(|(name, version)| crate::types::ObjectInfo { 
+                object_type: crate::types::VcsObjectType::MooObject,  // Default to MooObject for now
+                name, 
+                version 
+            })
             .collect();
         
         // Sort by name for consistent output

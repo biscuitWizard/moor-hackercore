@@ -6,7 +6,7 @@
 //! 3. Approving a change moves it to Merged status and canonizes refs/SHA256s
 
 use crate::common::*;
-use moor_vcs_worker::types::ChangeStatus;
+use moor_vcs_worker::types::{ChangeStatus, VcsObjectType};
 
 #[tokio::test]
 async fn test_change_create_empty_local() {
@@ -165,9 +165,9 @@ async fn test_abandon_local_change_clears_top_and_cleans_up() {
     
     // Step 5: Verify refs were cleaned up
     println!("\nStep 5: Verifying ref cleanup...");
-    let ref_1_after = server.database().refs().get_ref(object_name_1, None)
+    let ref_1_after = server.database().refs().get_ref(VcsObjectType::MooObject, object_name_1, None)
         .expect("Failed to check ref 1");
-    let ref_2_after = server.database().refs().get_ref(object_name_2, None)
+    let ref_2_after = server.database().refs().get_ref(VcsObjectType::MooObject, object_name_2, None)
         .expect("Failed to check ref 2");
     
     println!("Ref 1 after abandon: {:?}", ref_1_after);
@@ -298,7 +298,7 @@ async fn test_abandon_with_last_merged_returns_to_merged() {
     println!("✅ First change still exists as Merged");
     
     // Verify first object still exists (from merged change)
-    let ref_1 = server.database().refs().get_ref(object_name, None)
+    let ref_1 = server.database().refs().get_ref(VcsObjectType::MooObject, object_name, None)
         .expect("Failed to get ref 1");
     assert!(ref_1.is_some(), "First object should still exist");
     println!("✅ First object still exists");
@@ -397,7 +397,7 @@ async fn test_approve_change_moves_to_merged() {
     
     // Step 6: Verify ref still exists (canonized)
     println!("\nStep 6: Verifying ref canonization...");
-    let ref_after = server.database().refs().get_ref(object_name, None)
+    let ref_after = server.database().refs().get_ref(VcsObjectType::MooObject, object_name, None)
         .expect("Failed to check ref");
     
     assert!(ref_after.is_some(), "Ref should still exist after approve (canonized)");

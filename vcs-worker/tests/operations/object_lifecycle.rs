@@ -7,6 +7,7 @@
 //! - Ref updates
 
 use crate::common::*;
+use moor_vcs_worker::types::VcsObjectType;
 use moor_vcs_worker::types::ChangeStatus;
 
 #[tokio::test]
@@ -42,7 +43,7 @@ async fn test_duplicate_content_detection() {
     assert!(stored1.is_some(), "SHA256 should be stored");
     
     // Verify ref points to this SHA256
-    let ref1 = server.database().refs().get_ref(object_name, None)
+    let ref1 = server.database().refs().get_ref(VcsObjectType::MooObject, object_name, None)
         .expect("Failed to get ref");
     assert_eq!(ref1, Some(sha256_hash.clone()));
     
@@ -69,7 +70,7 @@ async fn test_duplicate_content_detection() {
     println!("✅ Duplicate detected, no extra storage");
     
     // Verify ref still points to same SHA256
-    let ref2 = server.database().refs().get_ref(object_name, None)
+    let ref2 = server.database().refs().get_ref(VcsObjectType::MooObject, object_name, None)
         .expect("Failed to get ref");
     assert_eq!(ref2, Some(sha256_hash));
     
@@ -107,7 +108,7 @@ async fn test_sha256_cleanup_on_content_change() {
     assert!(server.database().objects().get(&sha256_a).expect("Failed to get object").is_some());
     
     // Verify ref points to SHA256_A
-    let ref_a = server.database().refs().get_ref(object_name, None).expect("Failed to get ref");
+    let ref_a = server.database().refs().get_ref(VcsObjectType::MooObject, object_name, None).expect("Failed to get ref");
     assert_eq!(ref_a, Some(sha256_a.clone()));
     
     let count_after_a = server.database().objects().count();
@@ -137,7 +138,7 @@ async fn test_sha256_cleanup_on_content_change() {
     assert!(server.database().objects().get(&sha256_b).expect("Failed to get object").is_some());
     
     // Verify ref now points to SHA256_B
-    let ref_b = server.database().refs().get_ref(object_name, None).expect("Failed to get ref");
+    let ref_b = server.database().refs().get_ref(VcsObjectType::MooObject, object_name, None).expect("Failed to get ref");
     assert_eq!(ref_b, Some(sha256_b.clone()));
     
     let count_after_b = server.database().objects().count();
@@ -199,7 +200,7 @@ async fn test_content_flip_flop_version_handling() {
         "args": [object_name, serde_json::to_string(&content_a_lines).unwrap()]
     }))).await.expect("Failed to create object");
     
-    let version1 = server.database().refs().get_ref(object_name, None)
+    let version1 = server.database().refs().get_ref(VcsObjectType::MooObject, object_name, None)
         .expect("Failed to get ref")
         .expect("Ref should exist");
     println!("Version after A: ref points to {}", version1);
@@ -212,7 +213,7 @@ async fn test_content_flip_flop_version_handling() {
         "args": [object_name, serde_json::to_string(&content_b_lines).unwrap()]
     }))).await.expect("Failed to update with content B");
     
-    let version2 = server.database().refs().get_ref(object_name, None)
+    let version2 = server.database().refs().get_ref(VcsObjectType::MooObject, object_name, None)
         .expect("Failed to get ref")
         .expect("Ref should exist");
     println!("Version after B: ref points to {}", version2);
@@ -225,7 +226,7 @@ async fn test_content_flip_flop_version_handling() {
         "args": [object_name, serde_json::to_string(&content_a_lines).unwrap()]
     }))).await.expect("Failed to switch back to content A");
     
-    let version3 = server.database().refs().get_ref(object_name, None)
+    let version3 = server.database().refs().get_ref(VcsObjectType::MooObject, object_name, None)
         .expect("Failed to get ref")
         .expect("Ref should exist");
     println!("Version after A again: ref points to {}", version3);
@@ -313,7 +314,7 @@ async fn test_multiple_objects_same_content() {
         "args": ["object_1", serde_json::to_string(&content_lines).unwrap()]
     }))).await.expect("Failed to create object_1");
     
-    let ref1 = server.database().refs().get_ref("object_1", None).expect("Failed to get ref1");
+    let ref1 = server.database().refs().get_ref(VcsObjectType::MooObject, "object_1", None).expect("Failed to get ref1");
     assert_eq!(ref1, Some(sha256.clone()));
     
     let count_after_1 = server.database().objects().count();
@@ -325,7 +326,7 @@ async fn test_multiple_objects_same_content() {
         "args": ["object_2", serde_json::to_string(&content_lines).unwrap()]
     }))).await.expect("Failed to create object_2");
     
-    let ref2 = server.database().refs().get_ref("object_2", None).expect("Failed to get ref2");
+    let ref2 = server.database().refs().get_ref(VcsObjectType::MooObject, "object_2", None).expect("Failed to get ref2");
     assert_eq!(ref2, Some(sha256.clone()));
     
     let count_after_2 = server.database().objects().count();
@@ -350,7 +351,7 @@ async fn test_multiple_objects_same_content() {
     }))).await.expect("Failed to update object_1");
     
     // Verify object_1 now points to new SHA256
-    let ref1_new = server.database().refs().get_ref("object_1", None).expect("Failed to get ref1_new");
+    let ref1_new = server.database().refs().get_ref(VcsObjectType::MooObject, "object_1", None).expect("Failed to get ref1_new");
     assert_eq!(ref1_new, Some(new_sha256.clone()));
     
     // CRITICAL: Original SHA256 should NOT be deleted because object_2 still uses it
@@ -361,7 +362,7 @@ async fn test_multiple_objects_same_content() {
     println!("✅ Original SHA256 preserved (object_2 still uses it)");
     
     // Verify object_2 still points to original SHA256
-    let ref2_check = server.database().refs().get_ref("object_2", None).expect("Failed to get ref2_check");
+    let ref2_check = server.database().refs().get_ref(VcsObjectType::MooObject, "object_2", None).expect("Failed to get ref2_check");
     assert_eq!(ref2_check, Some(sha256));
     
     println!("\n✅ Test passed: SHA256 reference counting works correctly");

@@ -17,6 +17,13 @@ use std::collections::HashSet;
 use moor_var::Obj;
 use utoipa::ToSchema;
 
+/// Type of VCS object
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum VcsObjectType {
+    MooObject,
+    MooMetaObject,
+}
+
 /// Status of a change in the VCS workflow
 /// MERGED: The change has been committed and merged into the main branch
 /// LOCAL: The change is currently being worked on (current working change)
@@ -64,6 +71,7 @@ pub struct OperationRequest {
 /// Information about an object in the complete object list
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct ObjectInfo {
+    pub object_type: VcsObjectType,
     pub name: String,
     pub version: u64,
 }

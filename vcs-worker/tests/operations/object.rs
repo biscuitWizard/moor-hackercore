@@ -1,7 +1,7 @@
 //! Integration tests for object operations (create, update, get, etc.)
 
 use crate::common::*;
-use moor_vcs_worker::types::ChangeStatus;
+use moor_vcs_worker::types::{ChangeStatus, VcsObjectType};
 
 #[tokio::test]
 async fn test_object_create_and_verify() {
@@ -76,7 +76,7 @@ async fn test_object_create_and_verify() {
     println!("✅ Confirmed: Object exists in objects provider with correct hash");
     
     // Check that the ref was created
-    let object_ref = server.database().refs().get_ref(object_name, None)
+    let object_ref = server.database().refs().get_ref(VcsObjectType::MooObject, object_name, None)
         .expect("Failed to get object ref");
     
     assert!(
@@ -196,7 +196,7 @@ async fn test_object_content_integrity() {
     println!("✅ Stored content matches exactly");
     
     // Verify the ref points to the correct hash
-    let ref_hash = server.database().refs().get_ref(object_name, None)
+    let ref_hash = server.database().refs().get_ref(VcsObjectType::MooObject, object_name, None)
         .expect("Failed to get ref")
         .expect("Ref should exist");
     
@@ -295,7 +295,7 @@ async fn test_multiple_objects_persistence() {
         assert!(stored.is_some(), "Object {} should be stored", i);
         
         // Verify the ref exists
-        let ref_hash = server.database().refs().get_ref(&object_name, None)
+        let ref_hash = server.database().refs().get_ref(VcsObjectType::MooObject, &object_name, None)
             .expect("Failed to query refs provider");
         assert_eq!(ref_hash, Some(sha256_hash.clone()), "Ref should point to correct hash");
         
@@ -389,7 +389,7 @@ async fn test_multiple_objects_persistence() {
     // Verify we can retrieve each object by its ref
     for i in 1..=3 {
         let object_name = format!("test_object_{}", i);
-        let ref_hash = server.database().refs().get_ref(&object_name, None)
+        let ref_hash = server.database().refs().get_ref(VcsObjectType::MooObject, &object_name, None)
             .expect("Failed to get ref");
         assert!(ref_hash.is_some(), "Ref for {} should exist", object_name);
         
@@ -457,13 +457,13 @@ async fn test_object_update_twice_in_same_change_trims_unused_sha256() {
     );
     
     // Verify ref points to first version
-    let ref_sha_v1 = server.database().refs().get_ref(object_name, None)
+    let ref_sha_v1 = server.database().refs().get_ref(VcsObjectType::MooObject, object_name, None)
         .expect("Failed to get ref v1")
         .expect("Ref should exist");
     assert_eq!(ref_sha_v1, sha256_v1, "Ref should point to first version");
     
     // Get the version number
-    let version_v1 = server.database().refs().get_current_version(object_name)
+    let version_v1 = server.database().refs().get_current_version(VcsObjectType::MooObject, object_name)
         .expect("Failed to get current version")
         .expect("Version should exist");
     
@@ -555,7 +555,7 @@ async fn test_object_update_twice_in_same_change_trims_unused_sha256() {
     // Step 5: Verify ref points to new SHA256
     println!("\nStep 5: Verifying ref points to new SHA256...");
     
-    let ref_sha_v2 = server.database().refs().get_ref(object_name, None)
+    let ref_sha_v2 = server.database().refs().get_ref(VcsObjectType::MooObject, object_name, None)
         .expect("Failed to get ref v2")
         .expect("Ref should exist");
     
@@ -570,7 +570,7 @@ async fn test_object_update_twice_in_same_change_trims_unused_sha256() {
     // Step 6: Verify version number did NOT increment
     println!("\nStep 6: Verifying version number did not increment...");
     
-    let version_v2 = server.database().refs().get_current_version(object_name)
+    let version_v2 = server.database().refs().get_current_version(VcsObjectType::MooObject, object_name)
         .expect("Failed to get current version")
         .expect("Version should exist");
     

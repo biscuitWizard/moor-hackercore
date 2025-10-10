@@ -124,7 +124,7 @@ impl CloneOperation {
         
         // Import refs
         for (obj_info, sha256) in data.refs {
-            self.database.refs().update_ref(&obj_info.name, obj_info.version, &sha256)
+            self.database.refs().update_ref(obj_info.object_type, &obj_info.name, obj_info.version, &sha256)
                 .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         }
         info!("Imported {} refs", refs_count);

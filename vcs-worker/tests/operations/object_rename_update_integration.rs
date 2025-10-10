@@ -6,7 +6,7 @@
 //! 3. Rename back after scenario 2 should delete the added object with cleanup
 
 use crate::common::*;
-use moor_vcs_worker::types::ChangeStatus;
+use moor_vcs_worker::types::{ChangeStatus, VcsObjectType};
 
 #[tokio::test]
 async fn test_rename_and_rename_back_deletes_rename_operation() {
@@ -35,7 +35,7 @@ async fn test_rename_and_rename_back_deletes_rename_operation() {
     println!("✅ Object created: {}", object_name);
     
     // Verify object exists in refs
-    let ref_exists = server.database().refs().get_ref(object_name, None)
+    let ref_exists = server.database().refs().get_ref(VcsObjectType::MooObject, object_name, None)
         .expect("Failed to get ref")
         .is_some();
     assert!(ref_exists, "Object ref should exist");
@@ -285,11 +285,11 @@ async fn test_update_commit_rename_update_shows_renamed_and_added() {
     // Verify refs state
     // Note: refs don't update during rename operations - they only update when changes are committed
     // So renamed_object won't have a ref yet, only original_object (the new one) will
-    let original_ref = server.database().refs().get_ref(original_name, None)
+    let original_ref = server.database().refs().get_ref(VcsObjectType::MooObject, original_name, None)
         .expect("Failed to get original ref");
     assert!(original_ref.is_some(), "Original name should have a ref (new object)");
     
-    let renamed_ref = server.database().refs().get_ref(renamed_name, None)
+    let renamed_ref = server.database().refs().get_ref(VcsObjectType::MooObject, renamed_name, None)
         .expect("Failed to get renamed ref");
     assert!(renamed_ref.is_none(), "Renamed name should NOT have a ref yet (rename not committed)");
     
@@ -385,7 +385,7 @@ async fn test_rename_back_after_rename_and_add_deletes_added_object_with_cleanup
     println!("✅ New SHA256 exists in objects provider");
     
     // Get the version number for the new object
-    let new_version = server.database().refs().get_current_version(original_name)
+    let new_version = server.database().refs().get_current_version(VcsObjectType::MooObject, original_name)
         .expect("Failed to get version")
         .expect("Version should exist");
     println!("✅ New object version: {}", new_version);
@@ -457,7 +457,7 @@ async fn test_rename_back_after_rename_and_add_deletes_added_object_with_cleanup
     println!("\nStep 8: Verifying ref cleanup...");
     
     // The ref for original_name version 2 (the new object) should be deleted
-    let ref_with_version = server.database().refs().get_ref(original_name, Some(new_version))
+    let ref_with_version = server.database().refs().get_ref(VcsObjectType::MooObject, original_name, Some(new_version))
         .expect("Failed to get ref with version");
     
     assert!(
@@ -468,7 +468,7 @@ async fn test_rename_back_after_rename_and_add_deletes_added_object_with_cleanup
     
     // The latest ref for original_name should now point to version 1 (the original committed object)
     // NOT version 2 (the deleted one)
-    let latest_version_after = server.database().refs().get_current_version(original_name)
+    let latest_version_after = server.database().refs().get_current_version(VcsObjectType::MooObject, original_name)
         .expect("Failed to get current version");
     
     assert!(
@@ -486,7 +486,7 @@ async fn test_rename_back_after_rename_and_add_deletes_added_object_with_cleanup
     println!("\nStep 9: Verifying we're back to original state...");
     
     // Since the rename was canceled (never committed), renamed_object should NOT exist
-    let renamed_ref = server.database().refs().get_ref(renamed_name, None)
+    let renamed_ref = server.database().refs().get_ref(VcsObjectType::MooObject, renamed_name, None)
         .expect("Failed to get renamed ref");
     
     assert!(
@@ -517,7 +517,7 @@ async fn test_rename_back_after_rename_and_add_deletes_added_object_with_cleanup
     println!("✅ Original SHA256 still exists (in committed history)");
     
     // Verify original_object still exists with version 1 (the original)
-    let original_ref = server.database().refs().get_ref(original_name, Some(1))
+    let original_ref = server.database().refs().get_ref(VcsObjectType::MooObject, original_name, Some(1))
         .expect("Failed to get original ref v1");
     assert!(original_ref.is_some(), "Original object version 1 should exist");
     assert_eq!(original_ref.unwrap(), original_sha256, "Should point to original SHA256");

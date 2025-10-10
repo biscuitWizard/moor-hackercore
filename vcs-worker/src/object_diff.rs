@@ -5,7 +5,7 @@ use crate::database::{DatabaseRef, ObjectsTreeError};
 use crate::providers::objects::ObjectsProvider;
 use crate::providers::refs::RefsProvider;
 use crate::providers::index::IndexProvider;
-use crate::types::Change;
+use crate::types::{Change, VcsObjectType};
 use moor_compiler::ObjectDefinition;
 
 /// Represents a single object change with detailed verb and property modifications
@@ -257,7 +257,7 @@ pub fn compare_object_versions(database: &DatabaseRef, obj_name: &str, local_ver
     let mut object_change = ObjectChange::new(obj_name.to_string());
     
     // Get the local version content
-    let local_sha256 = database.refs().get_ref(obj_name, Some(local_version))
+    let local_sha256 = database.refs().get_ref(VcsObjectType::MooObject, obj_name, Some(local_version))
         .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
         .ok_or_else(|| ObjectsTreeError::SerializationError(format!("Local version {} of object '{}' not found", local_version, obj_name)))?;
     
@@ -273,7 +273,7 @@ pub fn compare_object_versions(database: &DatabaseRef, obj_name: &str, local_ver
     // For version 1 (new object), there is no baseline (version 0 doesn't exist)
     // For version 2+, the baseline is the previous version
     let baseline_version = if local_version > 1 { local_version - 1 } else { 0 };
-    let baseline_sha256 = database.refs().get_ref(obj_name, Some(baseline_version))
+    let baseline_sha256 = database.refs().get_ref(VcsObjectType::MooObject, obj_name, Some(baseline_version))
         .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
     
     if let Some(baseline_sha256) = baseline_sha256 {
