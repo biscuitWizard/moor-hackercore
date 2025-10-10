@@ -2,12 +2,15 @@ use crate::operations::{Operation, OperationRoute};
 use axum::http::Method;
 use tracing::{error, info};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 use crate::database::{DatabaseRef, ObjectsTreeError};
 use crate::providers::objects::ObjectsProvider;
 use crate::providers::index::IndexProvider;
 use crate::providers::refs::RefsProvider;
 use crate::types::{User, VcsObjectType};
+use moor_compiler::{compile_object_definitions, ObjFileContext, CompileOptions};
+use moor_objdef::dump_object;
 
 /// Request structure for object get operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -32,26 +35,92 @@ impl ObjectGetOperation {
         info!("Retrieving object '{}'", request.object_name);
         
         // Use the index provider to resolve the current state of the object
-        match self.database.index().resolve_object_current_state(
+        let sha256_key = match self.database.index().resolve_object_current_state(
             &request.object_name,
             |obj_name| self.database.refs().get_ref(VcsObjectType::MooObject, obj_name, None).map_err(|e| crate::providers::ProviderError::SerializationError(e.to_string()))
         ).map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))? {
-            Some(sha256_key) => {
-                // Object exists - get its content
-                self.database.objects().get(&sha256_key)
-                    .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))
-                    .and_then(|opt| opt.ok_or_else(|| ObjectsTreeError::SerializationError(
-                        format!("Object '{}' content not found", request.object_name)
-                    )))
-            }
+            Some(key) => key,
             None => {
                 // Object is deleted or doesn't exist
                 error!("Object '{}' not found or has been deleted", request.object_name);
-                Err(ObjectsTreeError::SerializationError(
+                return Err(ObjectsTreeError::SerializationError(
                     format!("Object '{}' not found", request.object_name)
-                ))
+                ));
             }
+        };
+        
+        // Object exists - get its content
+        let object_dump = self.database.objects().get(&sha256_key)
+            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
+            .ok_or_else(|| ObjectsTreeError::SerializationError(
+                format!("Object '{}' content not found", request.object_name)
+            ))?;
+        
+        // Check if meta exists for this object
+        let meta = match self.database.refs().get_ref(VcsObjectType::MooMetaObject, &request.object_name, None)
+            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))? {
+            Some(meta_sha256) => {
+                // Meta exists, load it
+                let yaml = self.database.objects().get(&meta_sha256)
+                    .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
+                    .ok_or_else(|| ObjectsTreeError::SerializationError("Meta SHA256 exists but data not found".to_string()))?;
+                Some(self.database.objects().parse_meta_dump(&yaml)
+                    .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?)
+            }
+            None => None,
+        };
+        
+        // If there's no meta or meta has no ignored items, return as-is
+        if meta.is_none() || (meta.as_ref().unwrap().ignored_properties.is_empty() && meta.as_ref().unwrap().ignored_verbs.is_empty()) {
+            info!("No filtering needed for object '{}'", request.object_name);
+            return Ok(object_dump);
         }
+        
+        let meta = meta.unwrap();
+        info!("Filtering object '{}' - ignoring {} properties and {} verbs", 
+              request.object_name, meta.ignored_properties.len(), meta.ignored_verbs.len());
+        
+        // Parse the object dump into an ObjectDefinition
+        let mut context = ObjFileContext::new();
+        let mut compiled_defs = compile_object_definitions(
+            &object_dump,
+            &CompileOptions::default(),
+            &mut context,
+        ).map_err(|e| ObjectsTreeError::SerializationError(format!("Failed to parse object: {e}")))?;
+        
+        if compiled_defs.len() != 1 {
+            return Err(ObjectsTreeError::SerializationError(
+                format!("Expected exactly 1 object definition, got {}", compiled_defs.len())
+            ));
+        }
+        
+        let mut obj_def = compiled_defs.remove(0);
+        
+        // Filter out ignored properties from property_definitions
+        obj_def.property_definitions.retain(|prop| {
+            !meta.ignored_properties.contains(&prop.name.as_string())
+        });
+        
+        // Filter out ignored properties from property_overrides
+        obj_def.property_overrides.retain(|prop| {
+            !meta.ignored_properties.contains(&prop.name.as_string())
+        });
+        
+        // Filter out ignored verbs
+        obj_def.verbs.retain(|verb| {
+            // A verb can have multiple names, check all of them
+            !verb.names.iter().any(|name| meta.ignored_verbs.contains(&name.as_string()))
+        });
+        
+        // Re-dump the filtered object
+        let index_names = HashMap::new(); // Empty index for simple object names
+        let lines = dump_object(&index_names, &obj_def)
+            .map_err(|e| ObjectsTreeError::SerializationError(format!("Failed to dump object: {e}")))?;
+        
+        let filtered_dump = lines.join("\n");
+        info!("Successfully filtered object '{}', returning {} lines", request.object_name, lines.len());
+        
+        Ok(filtered_dump)
     }
 }
 
