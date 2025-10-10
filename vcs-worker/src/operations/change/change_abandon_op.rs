@@ -23,10 +23,14 @@ impl ChangeAbandonOperation {
     /// Process the change abandon request and return an ObjectDiffModel showing what needs to be undone
     fn process_change_abandon(&self, _request: ChangeAbandonRequest) -> Result<ObjectDiffModel, ObjectsTreeError> {
         // Get the current change from the top of the index
-        let changes = self.database.index().list_changes()
+        let top_change_id = self.database.index().get_top_change()
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         
-        if let Some(change) = changes.first() {
+        if let Some(change_id) = top_change_id {
+            let change = self.database.index().get_change(&change_id)
+                .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
+                .ok_or_else(|| ObjectsTreeError::SerializationError(format!("Top change '{}' not found", change_id)))?;
+            
             info!("Attempting to abandon current change: {}", change.id);
             
             if change.status == ChangeStatus::Merged {
@@ -37,7 +41,7 @@ impl ChangeAbandonOperation {
             }
             
             // Build the abandon diff using shared logic
-            let undo_delta = build_abandon_diff_from_change(&self.database, change)?;
+            let undo_delta = build_abandon_diff_from_change(&self.database, &change)?;
             
             // Remove from index if it's LOCAL
             if change.status == ChangeStatus::Local {

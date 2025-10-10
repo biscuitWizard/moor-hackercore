@@ -210,22 +210,23 @@ async fn test_abandon_with_last_merged_returns_to_merged() {
         .await
         .expect("Failed to update object");
     
-    // Manually approve the change
+    // Approve the change using HTTP API
     let change_id = server.database().index().get_top_change()
         .expect("Failed to get top change")
         .expect("Should have a top change");
     
-    let mut change = server.database().index().get_change(&change_id)
-        .expect("Failed to get change")
-        .expect("Change should exist");
+    let approve_request = json!({
+        "operation": "change/approve",
+        "args": [change_id]
+    });
     
-    change.status = ChangeStatus::Merged;
-    server.database().index().update_change(&change)
-        .expect("Failed to update change");
-    server.database().index().remove_change(&change_id)
-        .expect("Failed to remove from index");
+    let approve_response = make_request("POST", &format!("{}/rpc", base_url), Some(approve_request))
+        .await
+        .expect("Failed to approve change");
     
-    println!("✅ First change committed");
+    assert!(approve_response["success"].as_bool().unwrap_or(false), "Approve should succeed");
+    
+    println!("✅ First change committed using change/approve API");
     
     // Verify no local change
     let top_change = server.database().index().get_top_change()
@@ -285,17 +286,8 @@ async fn test_abandon_with_last_merged_returns_to_merged() {
     let top_change_after = server.database().index().get_top_change()
         .expect("Failed to get top change");
     
-    // The test can be flaky, so let's be more flexible
-    // Either top is None, or it's pointing to the first (merged) change
-    if let Some(ref change_id_after) = top_change_after {
-        if change_id_after == &change_id {
-            println!("✅ Top change points to first (merged) change");
-        } else {
-            panic!("Top change should be None or first change, but got: {:?}", change_id_after);
-        }
-    } else {
-        println!("✅ Top change is None");
-    }
+    assert!(top_change_after.is_none(), "Should have no top change after abandoning");
+    println!("✅ Top change is None");
     
     // Verify the first (merged) change still exists
     let first_change = server.database().index().get_change(&change_id)
@@ -361,20 +353,21 @@ async fn test_approve_change_moves_to_merged() {
     assert_eq!(change_before.status, ChangeStatus::Local, "Should be Local before approve");
     println!("✅ Change status is Local");
     
-    // Step 2: Approve the change (manually since we don't have user auth in tests)
+    // Step 2: Approve the change using HTTP API (Wizard user has approval permission)
     println!("\nStep 2: Approving the change...");
     
-    let mut change = server.database().index().get_change(&change_id)
-        .expect("Failed to get change")
-        .expect("Change should exist");
+    let approve_request = json!({
+        "operation": "change/approve",
+        "args": [change_id.clone()]
+    });
     
-    change.status = ChangeStatus::Merged;
-    server.database().index().update_change(&change)
-        .expect("Failed to update change");
-    server.database().index().remove_change(&change_id)
-        .expect("Failed to remove from index");
+    let approve_response = make_request("POST", &format!("{}/rpc", base_url), Some(approve_request))
+        .await
+        .expect("Failed to approve change");
     
-    println!("✅ Change approved and marked as Merged");
+    assert!(approve_response["success"].as_bool().unwrap_or(false), "Approve should succeed");
+    
+    println!("✅ Change approved and marked as Merged using change/approve API");
     
     // Step 3: Verify change is marked as Merged
     println!("\nStep 3: Verifying change status...");

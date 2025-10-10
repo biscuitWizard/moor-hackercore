@@ -183,21 +183,18 @@ async fn test_update_commit_rename_update_shows_renamed_and_added() {
     // Step 2: Approve/commit the change to move it to Merged status
     println!("\nStep 2: Committing the change (marking as Merged)...");
     
-    // Note: We manually set the change status to Merged to simulate approval
-    // In a real scenario, this would be done via the change/approve operation
-    let mut change = server.database().index().get_change(&change_id)
-        .expect("Failed to get change")
-        .expect("Change should exist");
+    let approve_request = json!({
+        "operation": "change/approve",
+        "args": [change_id.clone()]
+    });
     
-    change.status = ChangeStatus::Merged;
-    server.database().index().update_change(&change)
-        .expect("Failed to update change");
+    let approve_response = make_request("POST", &format!("{}/rpc", base_url), Some(approve_request))
+        .await
+        .expect("Failed to approve change");
     
-    // Remove from top of index (simulating approval)
-    server.database().index().remove_change(&change_id)
-        .expect("Failed to remove from index");
+    assert!(approve_response["success"].as_bool().unwrap_or(false), "Approve should succeed");
     
-    println!("✅ Change committed (status: Merged)");
+    println!("✅ Change committed (status: Merged) using change/approve API");
     
     // Verify no local change exists now
     let top_change = server.database().index().get_top_change()
@@ -334,17 +331,18 @@ async fn test_rename_back_after_rename_and_add_deletes_added_object_with_cleanup
         .expect("Failed to get top change")
         .expect("Should have a top change");
     
-    let mut change = server.database().index().get_change(&change_id)
-        .expect("Failed to get change")
-        .expect("Change should exist");
+    let approve_request = json!({
+        "operation": "change/approve",
+        "args": [change_id.clone()]
+    });
     
-    change.status = ChangeStatus::Merged;
-    server.database().index().update_change(&change)
-        .expect("Failed to update change");
-    server.database().index().remove_change(&change_id)
-        .expect("Failed to remove from index");
+    let approve_response = make_request("POST", &format!("{}/rpc", base_url), Some(approve_request))
+        .await
+        .expect("Failed to approve change");
     
-    println!("✅ Change committed");
+    assert!(approve_response["success"].as_bool().unwrap_or(false), "Approve should succeed");
+    
+    println!("✅ Change committed using change/approve API");
     
     // Rename the object
     println!("\nStep 3: Renaming '{}' to 'renamed_object'...", original_name);
