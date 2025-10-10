@@ -436,8 +436,8 @@ pub fn build_object_diff_from_change(database: &DatabaseRef, change: &Change) ->
 /// Process a single change and add its modifications to the diff model
 /// This is the shared logic used by approve and status operations
 pub fn process_change_for_diff(database: &DatabaseRef, diff_model: &mut ObjectDiffModel, change: &Change) -> Result<(), ObjectsTreeError> {
-    // Process added objects
-    for obj_info in &change.added_objects {
+    // Process added objects (filter to only MooObject types)
+    for obj_info in change.added_objects.iter().filter(|o| o.object_type == VcsObjectType::MooObject) {
         let obj_name = obj_id_to_object_name(&obj_info.name, Some(&obj_info.name));
         diff_model.add_object_added(obj_name.clone());
         
@@ -446,21 +446,21 @@ pub fn process_change_for_diff(database: &DatabaseRef, diff_model: &mut ObjectDi
         diff_model.add_object_change(object_change);
     }
     
-    // Process deleted objects
-    for obj_info in &change.deleted_objects {
+    // Process deleted objects (filter to only MooObject types)
+    for obj_info in change.deleted_objects.iter().filter(|o| o.object_type == VcsObjectType::MooObject) {
         let obj_name = obj_id_to_object_name(&obj_info.name, Some(&obj_info.name));
         diff_model.add_object_deleted(obj_name);
     }
     
-    // Process renamed objects
-    for renamed in &change.renamed_objects {
+    // Process renamed objects (filter to only MooObject types)
+    for renamed in change.renamed_objects.iter().filter(|r| r.from.object_type == VcsObjectType::MooObject && r.to.object_type == VcsObjectType::MooObject) {
         let from_name = obj_id_to_object_name(&renamed.from.name, Some(&renamed.from.name));
         let to_name = obj_id_to_object_name(&renamed.to.name, Some(&renamed.to.name));
         diff_model.add_object_renamed(from_name, to_name);
     }
     
-    // Process modified objects with detailed comparison
-    for obj_info in &change.modified_objects {
+    // Process modified objects with detailed comparison (filter to only MooObject types)
+    for obj_info in change.modified_objects.iter().filter(|o| o.object_type == VcsObjectType::MooObject) {
         let obj_name = obj_id_to_object_name(&obj_info.name, Some(&obj_info.name));
         diff_model.add_object_modified(obj_name.clone());
         
@@ -488,28 +488,28 @@ pub fn build_abandon_diff_from_change(database: &DatabaseRef, change: &Change) -
     // Get object name mappings for better display names
     let object_names = get_object_names_for_change(change);
     
-    // Process added objects - to undo, we need to delete them
-    for added_obj in &change.added_objects {
+    // Process added objects - to undo, we need to delete them (filter to only MooObject types)
+    for added_obj in change.added_objects.iter().filter(|o| o.object_type == VcsObjectType::MooObject) {
         let object_name = obj_id_to_object_name(&added_obj.name, object_names.get(&added_obj.name).map(|s| s.as_str()));
         undo_delta.add_object_deleted(object_name);
     }
     
-    // Process deleted objects - to undo, we need to add them back
-    for deleted_obj in &change.deleted_objects {
+    // Process deleted objects - to undo, we need to add them back (filter to only MooObject types)
+    for deleted_obj in change.deleted_objects.iter().filter(|o| o.object_type == VcsObjectType::MooObject) {
         let object_name = obj_id_to_object_name(&deleted_obj.name, object_names.get(&deleted_obj.name).map(|s| s.as_str()));
         undo_delta.add_object_added(object_name);
     }
     
-    // Process renamed objects - to undo, we need to rename them back
-    for renamed in &change.renamed_objects {
+    // Process renamed objects - to undo, we need to rename them back (filter to only MooObject types)
+    for renamed in change.renamed_objects.iter().filter(|r| r.from.object_type == VcsObjectType::MooObject && r.to.object_type == VcsObjectType::MooObject) {
         let from_name = obj_id_to_object_name(&renamed.from.name, object_names.get(&renamed.from.name).map(|s| s.as_str()));
         let to_name = obj_id_to_object_name(&renamed.to.name, object_names.get(&renamed.to.name).map(|s| s.as_str()));
         undo_delta.add_object_renamed(to_name, from_name);
     }
     
     // Process modified objects - to undo, we need to mark them as modified
-    // and create basic ObjectChange entries
-    for modified_obj in &change.modified_objects {
+    // and create basic ObjectChange entries (filter to only MooObject types)
+    for modified_obj in change.modified_objects.iter().filter(|o| o.object_type == VcsObjectType::MooObject) {
         let object_name = obj_id_to_object_name(&modified_obj.name, object_names.get(&modified_obj.name).map(|s| s.as_str()));
         undo_delta.add_object_modified(object_name.clone());
         
@@ -529,17 +529,19 @@ pub fn build_abandon_diff_from_change(database: &DatabaseRef, change: &Change) -
 pub fn get_object_names_for_change(change: &Change) -> HashMap<String, String> {
     let mut object_names = HashMap::new();
     
-    // Try to get object names from workspace provider
+    // Try to get object names from workspace provider (filter to only MooObject types)
     for obj_info in change.added_objects.iter()
         .chain(change.modified_objects.iter())
-        .chain(change.deleted_objects.iter()) {
+        .chain(change.deleted_objects.iter())
+        .filter(|o| o.object_type == VcsObjectType::MooObject) {
         
         // For now, we'll just use the object name as the name
         // In a real implementation, you'd query the actual object names
         object_names.insert(obj_info.name.clone(), obj_info.name.clone());
     }
     
-    for renamed in &change.renamed_objects {
+    for renamed in change.renamed_objects.iter()
+        .filter(|r| r.from.object_type == VcsObjectType::MooObject && r.to.object_type == VcsObjectType::MooObject) {
         object_names.insert(renamed.from.name.clone(), renamed.from.name.clone());
         object_names.insert(renamed.to.name.clone(), renamed.to.name.clone());
     }

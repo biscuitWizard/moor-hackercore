@@ -84,7 +84,8 @@ impl IndexCalcDeltaOperation {
                     // Extract ref pairs from the change
                     // Note: The Change struct doesn't directly contain ref pairs, but we can infer them
                     // from the object operations. For now, we'll create ref pairs based on object names
-                    for added_obj in &change.added_objects {
+                    // Filter to only MooObject types
+                    for added_obj in change.added_objects.iter().filter(|o| o.object_type == crate::types::VcsObjectType::MooObject) {
                         let ref_pair = moor_var::v_map(&[
                             (moor_var::v_str("from"), moor_var::v_str("")), // No source for new objects
                             (moor_var::v_str("to"), moor_var::v_str(&added_obj.name)),
@@ -92,7 +93,7 @@ impl IndexCalcDeltaOperation {
                         ref_pairs.push(ref_pair);
                     }
                     
-                    for modified_obj in &change.modified_objects {
+                    for modified_obj in change.modified_objects.iter().filter(|o| o.object_type == crate::types::VcsObjectType::MooObject) {
                         let ref_pair = moor_var::v_map(&[
                             (moor_var::v_str("from"), moor_var::v_str(&modified_obj.name)),
                             (moor_var::v_str("to"), moor_var::v_str(&modified_obj.name)),
@@ -100,7 +101,7 @@ impl IndexCalcDeltaOperation {
                         ref_pairs.push(ref_pair);
                     }
                     
-                    for renamed_obj in &change.renamed_objects {
+                    for renamed_obj in change.renamed_objects.iter().filter(|r| r.from.object_type == crate::types::VcsObjectType::MooObject && r.to.object_type == crate::types::VcsObjectType::MooObject) {
                         let ref_pair = moor_var::v_map(&[
                             (moor_var::v_str("from"), moor_var::v_str(&renamed_obj.from.name)),
                             (moor_var::v_str("to"), moor_var::v_str(&renamed_obj.to.name)),
@@ -108,8 +109,8 @@ impl IndexCalcDeltaOperation {
                         ref_pairs.push(ref_pair);
                     }
                     
-                    // Extract objects added to the database
-                    for added_obj in &change.added_objects {
+                    // Extract objects added to the database - filter to only MooObject types
+                    for added_obj in change.added_objects.iter().filter(|o| o.object_type == crate::types::VcsObjectType::MooObject) {
                         let object_info = moor_var::v_map(&[
                             (moor_var::v_str("name"), moor_var::v_str(&added_obj.name)),
                             (moor_var::v_str("version"), moor_var::v_int(added_obj.version as i64)),
@@ -117,7 +118,7 @@ impl IndexCalcDeltaOperation {
                         objects_added.push(object_info);
                     }
                     
-                    for modified_obj in &change.modified_objects {
+                    for modified_obj in change.modified_objects.iter().filter(|o| o.object_type == crate::types::VcsObjectType::MooObject) {
                         let object_info = moor_var::v_map(&[
                             (moor_var::v_str("name"), moor_var::v_str(&modified_obj.name)),
                             (moor_var::v_str("version"), moor_var::v_int(modified_obj.version as i64)),
@@ -125,7 +126,7 @@ impl IndexCalcDeltaOperation {
                         objects_added.push(object_info);
                     }
                     
-                    for renamed_obj in &change.renamed_objects {
+                    for renamed_obj in change.renamed_objects.iter().filter(|r| r.from.object_type == crate::types::VcsObjectType::MooObject && r.to.object_type == crate::types::VcsObjectType::MooObject) {
                         let object_info = moor_var::v_map(&[
                             (moor_var::v_str("name"), moor_var::v_str(&renamed_obj.to.name)),
                             (moor_var::v_str("version"), moor_var::v_int(renamed_obj.to.version as i64)),

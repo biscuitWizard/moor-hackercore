@@ -47,12 +47,16 @@ impl ObjectDeleteOperation {
                 Some(1u64)
             }).unwrap_or(1);
         
-        // Handle change tracking - remove from added/modified lists if present
-        let was_in_added = current_change.added_objects.iter().any(|obj| obj.name == request.object_name);
-        let was_in_modified = current_change.modified_objects.iter().any(|obj| obj.name == request.object_name);
+        // Handle change tracking - remove from added/modified lists if present (filter to MooObject types)
+        let was_in_added = current_change.added_objects.iter()
+            .filter(|obj| obj.object_type == VcsObjectType::MooObject)
+            .any(|obj| obj.name == request.object_name);
+        let was_in_modified = current_change.modified_objects.iter()
+            .filter(|obj| obj.object_type == VcsObjectType::MooObject)
+            .any(|obj| obj.name == request.object_name);
         
-        current_change.added_objects.retain(|obj| obj.name != request.object_name);
-        current_change.modified_objects.retain(|obj| obj.name != request.object_name);
+        current_change.added_objects.retain(|obj| !(obj.object_type == VcsObjectType::MooObject && obj.name == request.object_name));
+        current_change.modified_objects.retain(|obj| !(obj.object_type == VcsObjectType::MooObject && obj.name == request.object_name));
         
         if was_in_added {
             info!("Removed object '{}' from added_objects (now deleting instead)", request.object_name);
@@ -62,19 +66,24 @@ impl ObjectDeleteOperation {
             info!("Removed object '{}' from modified_objects (now deleting instead)", request.object_name);
         }
         
-        // Add to deleted_objects list if not already present
+        // Add to deleted_objects list if not already present (filter to MooObject types)
         let obj_info = crate::types::ObjectInfo { 
             object_type: VcsObjectType::MooObject,
             name: request.object_name.clone(), 
             version: object_version 
         };
-        if !current_change.deleted_objects.iter().any(|obj| obj.name == request.object_name) {
+        if !current_change.deleted_objects.iter()
+            .filter(|obj| obj.object_type == VcsObjectType::MooObject)
+            .any(|obj| obj.name == request.object_name) {
             current_change.deleted_objects.push(obj_info);
             info!("Added object '{}' to deleted_objects in change '{}'", request.object_name, current_change.name);
         }
         
-        // Remove any rename entries for this object since it's being deleted
-        current_change.renamed_objects.retain(|renamed| renamed.from.name != request.object_name && renamed.to.name != request.object_name);
+        // Remove any rename entries for this object since it's being deleted (filter to MooObject types)
+        current_change.renamed_objects.retain(|renamed| 
+            !(renamed.from.object_type == VcsObjectType::MooObject && 
+              renamed.to.object_type == VcsObjectType::MooObject && 
+              (renamed.from.name == request.object_name || renamed.to.name == request.object_name)));
         
         // Update the change in the database
         self.database.index().update_change(&current_change)

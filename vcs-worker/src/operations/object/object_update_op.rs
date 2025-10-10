@@ -74,10 +74,12 @@ impl ObjectUpdateOperation {
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
             .is_some();
         
-        // Check if this object is already modified/added in the current change
+        // Check if this object is already modified/added in the current change (filter to MooObject types)
         let is_already_in_change = current_change.added_objects.iter()
+            .filter(|obj| obj.object_type == VcsObjectType::MooObject)
             .any(|obj| obj.name == request.object_name) ||
             current_change.modified_objects.iter()
+            .filter(|obj| obj.object_type == VcsObjectType::MooObject)
             .any(|obj| obj.name == request.object_name);
         
         let version;
@@ -119,13 +121,15 @@ impl ObjectUpdateOperation {
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         
         
-        // Check if this object has been renamed in the current change
+        // Check if this object has been renamed in the current change (filter to MooObject types)
         // If updating the renamed object (to.name), skip tracking (already tracked as rename)
         // If updating with the old name (from.name), treat as new object (the old one was renamed away)
         let is_renamed_to = current_change.renamed_objects.iter()
+            .filter(|r| r.from.object_type == VcsObjectType::MooObject && r.to.object_type == VcsObjectType::MooObject)
             .any(|renamed| renamed.to.name == request.object_name);
         
         let was_renamed_from = current_change.renamed_objects.iter()
+            .filter(|r| r.from.object_type == VcsObjectType::MooObject && r.to.object_type == VcsObjectType::MooObject)
             .any(|renamed| renamed.from.name == request.object_name);
         
         if is_renamed_to {

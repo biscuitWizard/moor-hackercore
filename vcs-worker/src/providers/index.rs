@@ -168,31 +168,31 @@ impl ChangeOperationProcessor {
     }
     
     fn process_change(&mut self, change: &crate::types::Change) {
-        // 1. Handle deletions first (remove from our tracking)
-        for deleted_obj in &change.deleted_objects {
+        // 1. Handle deletions first (remove from our tracking) - filter to only MooObject types
+        for deleted_obj in change.deleted_objects.iter().filter(|o| o.object_type == crate::types::VcsObjectType::MooObject) {
             if self.objects.remove(&deleted_obj.name).is_some() {
                 info!("  Deleted object: {} (version {})", deleted_obj.name, deleted_obj.version);
             }
         }
         
-        // 2. Handle renames (rename in our tracking)
-        for renamed_obj in &change.renamed_objects {
+        // 2. Handle renames (rename in our tracking) - filter to only MooObject types
+        for renamed_obj in change.renamed_objects.iter().filter(|r| r.from.object_type == crate::types::VcsObjectType::MooObject && r.to.object_type == crate::types::VcsObjectType::MooObject) {
             if let Some(version) = self.objects.remove(&renamed_obj.from.name) {
                 self.objects.insert(renamed_obj.to.name.clone(), version);
                 info!("  Renamed: {} -> {} (version {})", renamed_obj.from.name, renamed_obj.to.name, version);
             }
         }
         
-        // 3. Handle additions (add to our tracking with version 1)
-        for added_obj in &change.added_objects {
+        // 3. Handle additions (add to our tracking with version 1) - filter to only MooObject types
+        for added_obj in change.added_objects.iter().filter(|o| o.object_type == crate::types::VcsObjectType::MooObject) {
             if !self.objects.contains_key(&added_obj.name) {
                 self.objects.insert(added_obj.name.clone(), 1);
                 info!("  Added object: {} (version {})", added_obj.name, added_obj.version);
             }
         }
         
-        // 4. Handle modifications (update versions for existing objects)
-        for modified_obj in &change.modified_objects {
+        // 4. Handle modifications (update versions for existing objects) - filter to only MooObject types
+        for modified_obj in change.modified_objects.iter().filter(|o| o.object_type == crate::types::VcsObjectType::MooObject) {
             if let Some(&current_version) = self.objects.get(&modified_obj.name) {
                 let new_version = current_version + 1;
                 self.objects.insert(modified_obj.name.clone(), new_version);
@@ -406,14 +406,17 @@ impl IndexProvider for IndexProviderImpl {
             if let Some(top_change) = self.get_change(&top_change_id)? {
                 // Only consider changes that are local (working state)
                 if top_change.status == crate::types::ChangeStatus::Local {
-                    // Check if deleted
-                    if top_change.deleted_objects.iter().any(|obj| obj.name == object_name) {
+                    // Check if deleted (filter to MooObject types)
+                    if top_change.deleted_objects.iter()
+                        .filter(|obj| obj.object_type == crate::types::VcsObjectType::MooObject)
+                        .any(|obj| obj.name == object_name) {
                         info!("Object '{}' has been deleted in top change", object_name);
                         return Ok(None);
                     }
                     
-                    // Check for renamed object
+                    // Check for renamed object (filter to MooObject types)
                     if let Some(renamed) = top_change.renamed_objects.iter()
+                        .filter(|r| r.from.object_type == crate::types::VcsObjectType::MooObject && r.to.object_type == crate::types::VcsObjectType::MooObject)
                         .find(|r| r.from.name == object_name) {
                         info!("Object '{}' has been renamed to '{}' in top change", object_name, renamed.to.name);
                         // Recursively resolve the renamed object

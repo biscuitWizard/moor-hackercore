@@ -35,15 +35,18 @@ impl ObjectRenameOperation {
         let mut current_change = self.database.index().get_or_create_local_change()
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         
-        // Check if source is in added_objects or modified_objects
+        // Check if source is in added_objects or modified_objects (filter to MooObject types)
         // These cases are handled simply (just update the name) without complex validation
         let source_in_added = current_change.added_objects.iter()
+            .filter(|obj| obj.object_type == VcsObjectType::MooObject)
             .any(|obj| obj.name == request.from_name);
         let source_in_modified = current_change.modified_objects.iter()
+            .filter(|obj| obj.object_type == VcsObjectType::MooObject)
             .any(|obj| obj.name == request.from_name);
         
-        // Check if we're renaming back to undo a previous rename
+        // Check if we're renaming back to undo a previous rename (filter to MooObject types)
         let is_rename_back = current_change.renamed_objects.iter()
+            .filter(|r| r.from.object_type == VcsObjectType::MooObject && r.to.object_type == VcsObjectType::MooObject)
             .any(|renamed| renamed.from.name == request.to_name && renamed.to.name == request.from_name);
         
         // Only do complex validation if NOT an added/modified object and NOT a rename-back
@@ -54,6 +57,7 @@ impl ObjectRenameOperation {
                 .is_some();
             
             let source_exists_in_renamed = current_change.renamed_objects.iter()
+                .filter(|r| r.from.object_type == VcsObjectType::MooObject && r.to.object_type == VcsObjectType::MooObject)
                 .any(|renamed| renamed.to.name == request.from_name);
             
             if !source_exists_in_refs && !source_exists_in_renamed {
@@ -67,12 +71,15 @@ impl ObjectRenameOperation {
                 .is_some();
             
             let target_exists_in_renamed = current_change.renamed_objects.iter()
+                .filter(|r| r.from.object_type == VcsObjectType::MooObject && r.to.object_type == VcsObjectType::MooObject)
                 .any(|renamed| renamed.to.name == request.to_name);
             
             let target_exists_in_added = current_change.added_objects.iter()
+                .filter(|obj| obj.object_type == VcsObjectType::MooObject)
                 .any(|obj| obj.name == request.to_name);
             
             let target_exists_in_modified = current_change.modified_objects.iter()
+                .filter(|obj| obj.object_type == VcsObjectType::MooObject)
                 .any(|obj| obj.name == request.to_name);
             
             if target_exists_in_refs || target_exists_in_renamed || target_exists_in_added || target_exists_in_modified {
@@ -109,9 +116,10 @@ impl ObjectRenameOperation {
             current_change.renamed_objects.retain(|renamed| 
                 !(renamed.from.name == request.to_name && renamed.to.name == request.from_name));
             
-            // Restore the object back to its original name in added/modified lists
+            // Restore the object back to its original name in added/modified lists (filter to MooObject types)
             // (the rename operation had moved it to the new name, now we move it back)
-            if let Some(pos) = current_change.added_objects.iter().position(|obj| obj.name == request.from_name) {
+            if let Some(pos) = current_change.added_objects.iter()
+                .position(|obj| obj.object_type == VcsObjectType::MooObject && obj.name == request.from_name) {
                 current_change.added_objects[pos] = crate::types::ObjectInfo { 
                     object_type: current_change.added_objects[pos].object_type,
                     name: request.to_name.clone(), 
@@ -120,7 +128,8 @@ impl ObjectRenameOperation {
                 info!("Restored object back to '{}' in added_objects", request.to_name);
             }
             
-            if let Some(pos) = current_change.modified_objects.iter().position(|obj| obj.name == request.from_name) {
+            if let Some(pos) = current_change.modified_objects.iter()
+                .position(|obj| obj.object_type == VcsObjectType::MooObject && obj.name == request.from_name) {
                 current_change.modified_objects[pos] = crate::types::ObjectInfo { 
                     object_type: current_change.modified_objects[pos].object_type,
                     name: request.to_name.clone(), 
@@ -131,11 +140,13 @@ impl ObjectRenameOperation {
         } else {
             // Normal rename operation
             
-            // Check if object is in added_objects or modified_objects
+            // Check if object is in added_objects or modified_objects (filter to MooObject types)
             // If so, just update the name there and DON'T add a rename entry
             let was_in_added = current_change.added_objects.iter()
+                .filter(|obj| obj.object_type == VcsObjectType::MooObject)
                 .any(|obj| obj.name == request.from_name);
             let was_in_modified = current_change.modified_objects.iter()
+                .filter(|obj| obj.object_type == VcsObjectType::MooObject)
                 .any(|obj| obj.name == request.from_name);
             
             if was_in_added {
@@ -144,17 +155,19 @@ impl ObjectRenameOperation {
                 // then we're renaming the added object back to the renamed object's name
                 // This cancels everything out: delete the added object and delete the rename entry
                 let cancels_rename = current_change.renamed_objects.iter()
+                    .filter(|r| r.from.object_type == VcsObjectType::MooObject && r.to.object_type == VcsObjectType::MooObject)
                     .any(|renamed| renamed.from.name == request.from_name && renamed.to.name == request.to_name);
                 
                 if cancels_rename {
                     // This rename cancels out the previous rename + add
                     info!("Detected rename of added object back to renamed object's name, canceling both operations");
                     
-                    // Remove the added object
+                    // Remove the added object (filter to MooObject types)
                     let removed_obj = current_change.added_objects.iter()
+                        .filter(|obj| obj.object_type == VcsObjectType::MooObject)
                         .find(|obj| obj.name == request.from_name)
                         .cloned();
-                    current_change.added_objects.retain(|obj| obj.name != request.from_name);
+                    current_change.added_objects.retain(|obj| !(obj.object_type == VcsObjectType::MooObject && obj.name == request.from_name));
                     info!("Removed added object '{}'", request.from_name);
                     
                     // Remove the rename entry
@@ -188,15 +201,17 @@ impl ObjectRenameOperation {
                         info!("Deleted ref for '{}' version {}", request.from_name, removed.version);
                     }
                 } else {
-                    // Normal case: just update the name in added_objects
-                    if let Some(pos) = current_change.added_objects.iter().position(|obj| obj.name == request.from_name) {
+                    // Normal case: just update the name in added_objects (filter to MooObject types)
+                    if let Some(pos) = current_change.added_objects.iter()
+                        .position(|obj| obj.object_type == VcsObjectType::MooObject && obj.name == request.from_name) {
                         current_change.added_objects[pos].name = request.to_name.clone();
                         info!("Updated added object name from '{}' to '{}'", request.from_name, request.to_name);
                     }
                 }
             } else if was_in_modified {
-                // Object was modified in this change - just update its name in modified_objects
-                if let Some(pos) = current_change.modified_objects.iter().position(|obj| obj.name == request.from_name) {
+                // Object was modified in this change - just update its name in modified_objects (filter to MooObject types)
+                if let Some(pos) = current_change.modified_objects.iter()
+                    .position(|obj| obj.object_type == VcsObjectType::MooObject && obj.name == request.from_name) {
                     current_change.modified_objects[pos].name = request.to_name.clone();
                     info!("Updated modified object name from '{}' to '{}'", request.from_name, request.to_name);
                 }
