@@ -13,6 +13,7 @@ mod test_wizard_user;
 mod workspace_operations;
 mod meta;
 mod index_operations;
+mod workspace_approve_tests;
 
 // Future test modules:
 

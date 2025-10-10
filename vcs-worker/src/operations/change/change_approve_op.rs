@@ -33,19 +33,32 @@ impl ChangeApproveOperation {
             ));
         }
         
-        // Get the change by ID
-        let mut change = self.database.index().get_change(&change_id)
-            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
-            .ok_or_else(|| ObjectsTreeError::SerializationError(format!("Change '{}' not found", change_id)))?;
+        // Try to get the change from workspace first (it has the most recent version)
+        // If a change is submitted to remote, it's moved to workspace with Review status
+        // but the old Local version may still be in history_storage
+        let mut change = match self.database.workspace().get_workspace_change(&change_id)
+            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))? {
+            Some(ch) => ch,
+            None => {
+                // Not in workspace, try index
+                self.database.index().get_change(&change_id)
+                    .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
+                    .ok_or_else(|| ObjectsTreeError::SerializationError(
+                        format!("Change '{}' not found in workspace or index", change_id)
+                    ))?
+            }
+        };
         
-        info!("User '{}' attempting to approve change: {} ({})", user.id, change.name, change.id);
+        info!("User '{}' attempting to approve change: {} ({}) with status {:?}", 
+              user.id, change.name, change.id, change.status);
         
-        // Check if the change is local
-        if change.status != ChangeStatus::Local {
-            error!("Cannot approve change '{}' ({}) - it is not local (status: {:?})", 
+        // Check if the change is local or review
+        if change.status != ChangeStatus::Local && change.status != ChangeStatus::Review {
+            error!("Cannot approve change '{}' ({}) - it must be Local or Review status (current: {:?})", 
                    change.name, change.id, change.status);
             return Err(ObjectsTreeError::SerializationError(
-                format!("Cannot approve change '{}' - it is not local (status: {:?})", change.name, change.status)
+                format!("Cannot approve change '{}' - it must be Local or Review status (current: {:?})", 
+                        change.name, change.status)
             ));
         }
         
@@ -73,18 +86,46 @@ impl ChangeApproveOperation {
         // Build the ObjectDiffModel before changing the status
         let diff_model = build_object_diff_from_change(&self.database, &change)?;
         
+        // Remember original status to determine if we need to add to change_order
+        let was_in_workspace = change.status == ChangeStatus::Review;
+        
+        info!("Change status before approval: {:?}, was_in_workspace: {}", change.status, was_in_workspace);
+        
         // Update the change status to Merged
         change.status = ChangeStatus::Merged;
         
-        // Update the change in the database
-        self.database.index().update_change(&change)
-            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+        // If the change was in workspace (Review status), add it back to the index
+        if was_in_workspace {
+            info!("Processing workspace approval - will add back to index");
+            
+            // Store the change in the index
+            self.database.index().store_change(&change)
+                .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+            
+            info!("Stored change in index, now calling append_change_to_order");
+            
+            // Add the change to change_order (as merged history)
+            // Use append_change_to_order which adds to the end without setting as top_change
+            self.database.index().append_change_to_order(&change_id)
+                .map_err(|e| {
+                    error!("Failed to append change to order: {}", e);
+                    ObjectsTreeError::SerializationError(e.to_string())
+                })?;
+            
+            info!("Added change '{}' back to index as merged", change.name);
+        } else {
+            info!("Processing local approval - will update in place");
+            
+            // Change was already in index (Local status), just update it
+            self.database.index().update_change(&change)
+                .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+        }
         
         // Clear the top_change pointer (change stays in history as merged)
         self.database.index().clear_top_change_if(&change_id)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         
-        // Remove the change from workspace if it exists there (as a pending or stashed change)
+        // Remove the change from workspace if it exists there
         if self.database.workspace().get_workspace_change(&change_id)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
             .is_some() {
@@ -93,8 +134,13 @@ impl ChangeApproveOperation {
             info!("Removed change '{}' from workspace", change.name);
         }
         
-        info!("Successfully approved change '{}' ({}), marked as merged and removed from index", 
-              change.name, change.id);
+        if was_in_workspace {
+            info!("Successfully approved change '{}' ({}) from workspace, added to index as merged", 
+                  change.name, change.id);
+        } else {
+            info!("Successfully approved change '{}' ({}), marked as merged", 
+                  change.name, change.id);
+        }
         
         Ok(diff_model)
     }
@@ -107,7 +153,7 @@ impl Operation for ChangeApproveOperation {
     }
     
     fn description(&self) -> &'static str {
-        "Approves a local change by marking it as merged and removing it from the workspace if present. Returns a ChangeDiff showing what was approved."
+        "Approves a change (Local or Review status) by marking it as merged. If the change is in workspace (Review status), it's added back to the index. If it's already in the index (Local status), it's updated in place. Returns a ChangeDiff showing what was approved."
     }
     
     fn routes(&self) -> Vec<OperationRoute> {

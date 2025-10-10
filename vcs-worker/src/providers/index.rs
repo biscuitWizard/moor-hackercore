@@ -9,7 +9,12 @@ pub trait IndexProvider: Send + Sync {
     // ===== CHANGE ORDERING METHODS =====
     /// Push a change ID to the top of the stack (end of the ordered list)
     /// The list is ordered oldest first, newest last (like a stack)
+    /// This also sets the change as the top_change (active local change)
     fn push_change(&self, change_id: &str) -> ProviderResult<()>;
+    
+    /// Add a change ID to the end of the change_order list (as merged history)
+    /// WITHOUT setting it as top_change. Use this for approving changes from workspace.
+    fn append_change_to_order(&self, change_id: &str) -> ProviderResult<()>;
     
     /// Get the ordered list of change IDs (oldest first, newest last)
     fn get_change_order(&self) -> ProviderResult<Vec<String>>;
@@ -236,6 +241,27 @@ impl IndexProvider for IndexProviderImpl {
         self.working_index.insert(Self::TOP_KEY, change_id.as_bytes())?;
         
         info!("Set change '{}' as top/local change", change_id);
+        Ok(())
+    }
+    
+    fn append_change_to_order(&self, change_id: &str) -> ProviderResult<()> {
+        info!("append_change_to_order called for change '{}'", change_id);
+        
+        // Get current order
+        let mut order = self.get_change_order_internal()?;
+        info!("Current order before append: {:?}", order);
+        
+        // Remove if already exists (to avoid duplicates)
+        order.retain(|id| id != change_id);
+        
+        // Add to end of list (newest position)
+        order.push(change_id.to_string());
+        info!("New order after append: {:?}", order);
+        
+        // Save the order without modifying top_change
+        self.save_change_order(&order)?;
+        
+        info!("Appended change '{}' to change_order (without setting as top)", change_id);
         Ok(())
     }
     
