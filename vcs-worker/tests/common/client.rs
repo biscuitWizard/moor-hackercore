@@ -220,6 +220,27 @@ impl VcsTestClient {
         self.rpc_call("workspace/submit", vec![Value::String(change_json.to_string())]).await
     }
     
+    // ==================== Index Operations ====================
+    
+    /// List changes in the index with optional pagination
+    pub async fn index_list(
+        &self,
+        limit: Option<usize>,
+        page: Option<usize>,
+    ) -> Result<Value, Box<dyn std::error::Error>> {
+        let mut args = vec![];
+        
+        if let Some(lim) = limit {
+            args.push(Value::String(lim.to_string()));
+            
+            if let Some(pg) = page {
+                args.push(Value::String(pg.to_string()));
+            }
+        }
+        
+        self.rpc_call("index/list", args).await
+    }
+    
     // ==================== Low-level RPC ====================
     
     /// Make a raw RPC call with the given operation and arguments
