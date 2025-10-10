@@ -13,7 +13,7 @@ mod object_list;
 mod change_operations;
 mod test_wizard_user;
 mod workspace_operations;
-mod meta_operations;
+mod meta;
 
 // Future test modules:
 // mod index;
