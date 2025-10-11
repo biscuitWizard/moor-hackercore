@@ -303,7 +303,7 @@ diff = worker_request("vcs", {"change/submit"});
             OperationResponse::new(
                 400,
                 "Bad Request - Cannot submit change in current state",
-                r#"E_INVARG("Error: Cannot submit change 'my-change' - it is not local (status: Merged),
+                r#"E_INVARG("Error: Cannot submit change 'my-change' - it is not local (status: Merged)")"#),
             OperationResponse::new(
                 403,
                 "Forbidden - User lacks permission to submit changes",

@@ -143,7 +143,7 @@ worker_request("vcs", {"change/switch", stashed_id});"#.to_string(),
             OperationResponse::new(
                 400,
                 "Bad Request - Cannot stash non-local change",
-                r#"E_INVARG("Error: Cannot stash change 'my-change' - it is not local (status: Review),
+                r#"E_INVARG("Error: Cannot stash change 'my-change' - it is not local (status: Review)")"#),
             OperationResponse::new(
                 403,
                 "Forbidden - User lacks permission to stash changes",
