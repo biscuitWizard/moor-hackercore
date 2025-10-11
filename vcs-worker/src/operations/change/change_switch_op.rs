@@ -152,14 +152,16 @@ impl Operation for ChangeSwitchOperation {
             OperationExample {
                 description: "Switch to a different change from the workspace".to_string(),
                 moocode: r#"// First, list workspace changes to get the ID
-workspace_json = worker_request("vcs", {"workspace/list"});
-changes = parse_json(workspace_json)["changes"];
-target_id = changes[1]["id"];
+workspace_list = worker_request("vcs", {"workspace/list"});
+// Returns a string describing changes, parse it to find the change ID
+// For example, if you know the change ID:
+target_id = "xyz-789-abc...";
 
-// Switch to that change
-diff_json = worker_request("vcs", {"change/switch", target_id});
-// Returns an ObjectDiffModel showing what needs to be updated
-// You can now work on this change instead"#.to_string(),
+// Switch to that change - returns an ObjectDiffModel as a MOO map
+diff = worker_request("vcs", {"change/switch", target_id});
+// diff is a map showing what objects need to be updated
+// Keys: "added_objects", "modified_objects", "deleted_objects", "renamed_objects"
+player:tell("Need to update ", length(diff["modified_objects"]), " objects");"#.to_string(),
                 http_curl: Some(r#"curl -X POST http://localhost:8081/change/switch \
   -H "Content-Type: application/json" \
   -d '{"operation": "change/switch", "args": ["abc-123-def..."]}'"#.to_string()),

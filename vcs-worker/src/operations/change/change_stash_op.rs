@@ -105,14 +105,14 @@ impl Operation for ChangeStashOperation {
                 description: "Stash the current change for later".to_string(),
                 moocode: r#"// You're working on a feature but need to switch contexts
 diff = worker_request("vcs", {"change/stash"});
-// Current change is saved to workspace, working state is cleared
-// Apply the diff to revert your MOO database to clean state
+// diff is an ObjectDiffModel (MOO map) showing what needs to be undone
+// Current change is saved to workspace with Idle status
+player:tell("Stashed. Need to revert ", length(diff["modified_objects"]), " objects");
 
 // Later, resume with change/switch
-workspace_json = worker_request("vcs", {"workspace/list"});
-changes = parse_json(workspace_json)["changes"];
-// Find your stashed change (it has Idle status)
-stashed_id = changes[1]["id"];
+workspace_list = worker_request("vcs", {"workspace/list"});
+// Find your stashed change ID from the list (it has Idle status)
+stashed_id = "your-change-id";
 worker_request("vcs", {"change/switch", stashed_id});"#.to_string(),
                 http_curl: Some(r#"curl -X POST http://localhost:8081/change/stash"#.to_string()),
             }

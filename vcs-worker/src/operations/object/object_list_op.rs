@@ -77,12 +77,11 @@ impl Operation for ObjectListOperation {
         vec![
             OperationExample {
                 description: "List all objects in the repository".to_string(),
-                moocode: r#"json_str = worker_request("vcs", {"object/list"});
-// Returns JSON with list of objects: {"objects": [{"object_type": "MooObject", "name": "$player", "version": 3}, ...]}
-obj_list = parse_json(json_str)["objects"];
-for obj in (obj_list)
-  player:tell("Object: ", obj["name"], " (v", obj["version"], ")");
-endfor"#.to_string(),
+                moocode: r#"// Returns a string containing JSON, but you can work with it as a string
+// or parse it if you have a JSON parser available
+result = worker_request("vcs", {"object/list"});
+// result is a string like: {"objects": [{"object_type": "MooObject", "name": "$player", "version": 3}, ...]}
+player:tell("Object list: ", result);"#.to_string(),
                 http_curl: Some(r#"curl -X POST http://localhost:8081/object/list \
   -H "Content-Type: application/json" \
   -d '{"operation": "object/list", "args": []}'"#.to_string()),

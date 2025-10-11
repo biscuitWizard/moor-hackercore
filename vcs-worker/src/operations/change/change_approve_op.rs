@@ -190,14 +190,15 @@ impl Operation for ChangeApproveOperation {
             OperationExample {
                 description: "Approve a change that's been submitted for review".to_string(),
                 moocode: r#"// List workspace changes to find the one to approve
-workspace_json = worker_request("vcs", {"workspace/list"});
-changes = parse_json(workspace_json)["changes"];
-// Find a change with Review status
-change_id = changes[1]["id"];
+workspace_list = worker_request("vcs", {"workspace/list"});
+// Returns a string describing changes, parse it to find the change ID you want
+// For example, if you know the change ID:
+change_id = "abc-123-def...";
 
-// Approve it
+// Approve it - returns an ObjectDiffModel as a MOO map
 diff = worker_request("vcs", {"change/approve", change_id});
-// Change is now merged into repository history"#.to_string(),
+// diff is a map with keys like "added_objects", "modified_objects", etc.
+player:tell("Added: ", length(diff["added_objects"]), " objects");"#.to_string(),
                 http_curl: Some(r#"curl -X POST http://localhost:8081/change/approve \
   -H "Content-Type: application/json" \
   -d '{"operation": "change/approve", "args": ["abc-123-def..."]}'"#.to_string()),
