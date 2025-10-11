@@ -440,13 +440,23 @@ impl IndexProvider for IndexProviderImpl {
                         return Ok(None);
                     }
                     
-                    // Check for renamed object (filter to MooObject types)
+                    // Check if we're looking up by the NEW name (to.name) - need to map back to old name
                     if let Some(renamed) = top_change.renamed_objects.iter()
                         .filter(|r| r.from.object_type == crate::types::VcsObjectType::MooObject && r.to.object_type == crate::types::VcsObjectType::MooObject)
-                        .find(|r| r.from.name == object_name) {
-                        info!("Object '{}' has been renamed to '{}' in top change", object_name, renamed.to.name);
-                        // Recursively resolve the renamed object
-                        return self.resolve_object_current_state(&renamed.to.name, get_sha256);
+                        .find(|r| r.to.name == object_name) {
+                        info!("Object '{}' is the new name of renamed object '{}', looking up ref by old name", object_name, renamed.from.name);
+                        // Look up the ref using the old name (where the ref still is)
+                        // Don't recursively call resolve because that would find the rename again and return None
+                        return get_sha256(&renamed.from.name);
+                    }
+                    
+                    // Check for renamed object (looking up by old name) (filter to MooObject types)
+                    if top_change.renamed_objects.iter()
+                        .filter(|r| r.from.object_type == crate::types::VcsObjectType::MooObject && r.to.object_type == crate::types::VcsObjectType::MooObject)
+                        .any(|r| r.from.name == object_name) {
+                        info!("Object '{}' has been renamed away in top change (old name lookup returns none)", object_name);
+                        // If looking up by old name, return None (object no longer exists at this name)
+                        return Ok(None);
                     }
                 }
             }

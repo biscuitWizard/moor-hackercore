@@ -130,6 +130,17 @@ impl ObjectUpdateOperation {
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
             .is_some();
         
+        // Check if this object is in deleted_objects (resurrect it if so)
+        let was_deleted = current_change.deleted_objects.iter()
+            .filter(|obj| obj.object_type == VcsObjectType::MooObject)
+            .any(|obj| obj.name == request.object_name);
+        
+        if was_deleted {
+            // Remove from deleted_objects (resurrect the object)
+            current_change.deleted_objects.retain(|obj| !(obj.object_type == VcsObjectType::MooObject && obj.name == request.object_name));
+            info!("Object '{}' was deleted, removing from deleted_objects (resurrecting)", request.object_name);
+        }
+        
         // Check if this object is already modified/added in the current change (filter to MooObject types)
         let is_already_in_change = current_change.added_objects.iter()
             .filter(|obj| obj.object_type == VcsObjectType::MooObject)

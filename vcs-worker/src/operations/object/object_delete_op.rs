@@ -24,9 +24,11 @@ impl ObjectDeleteOperation {
     fn process_object_delete(&self, request: ObjectDeleteRequest) -> Result<String, ObjectsTreeError> {
         info!("Processing object delete for '{}'", request.object_name);
         
-        // Validate that the source object exists
-        let existing_sha256 = self.database.refs().get_ref(VcsObjectType::MooObject, &request.object_name, None)
-            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+        // Validate that the source object exists (using resolve to handle renames)
+        let existing_sha256 = self.database.index().resolve_object_current_state(
+            &request.object_name,
+            |obj_name| self.database.refs().get_ref(VcsObjectType::MooObject, obj_name, None).map_err(|e| crate::providers::ProviderError::SerializationError(e.to_string()))
+        ).map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         
         if existing_sha256.is_none() {
             error!("Cannot delete object '{}' - object does not exist", request.object_name);
@@ -37,10 +39,18 @@ impl ObjectDeleteOperation {
         let mut current_change = self.database.index().get_or_create_local_change()
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         
-        // The index already manages the current change, so we don't need repository management
+        // Check if this object is the result of a rename in the current change
+        // If so, we need to use the ORIGINAL name for deleted_objects
+        let original_name = current_change.renamed_objects.iter()
+            .filter(|r| r.from.object_type == VcsObjectType::MooObject && r.to.object_type == VcsObjectType::MooObject)
+            .find(|r| r.to.name == request.object_name)
+            .map(|r| r.from.name.clone())
+            .unwrap_or_else(|| request.object_name.clone());
+        
+        info!("Deleting object '{}' (original name: '{}')", request.object_name, original_name);
         
         // Get the current version of the object being deleted
-        let object_version = self.database.refs().get_ref(VcsObjectType::MooObject, &request.object_name, None)
+        let object_version = self.database.refs().get_ref(VcsObjectType::MooObject, &original_name, None)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
             .and_then(|_| {
                 // For now, we'll use version 1 as a placeholder - this should be improved
@@ -59,24 +69,29 @@ impl ObjectDeleteOperation {
         current_change.modified_objects.retain(|obj| !(obj.object_type == VcsObjectType::MooObject && obj.name == request.object_name));
         
         if was_in_added {
-            info!("Removed object '{}' from added_objects (now deleting instead)", request.object_name);
+            info!("Removed object '{}' from added_objects (deleted before commit, not adding to deleted_objects)", request.object_name);
         }
         
         if was_in_modified {
             info!("Removed object '{}' from modified_objects (now deleting instead)", request.object_name);
         }
         
-        // Add to deleted_objects list if not already present (filter to MooObject types)
-        let obj_info = crate::types::ObjectInfo { 
-            object_type: VcsObjectType::MooObject,
-            name: request.object_name.clone(), 
-            version: object_version 
-        };
-        if !current_change.deleted_objects.iter()
-            .filter(|obj| obj.object_type == VcsObjectType::MooObject)
-            .any(|obj| obj.name == request.object_name) {
-            current_change.deleted_objects.push(obj_info);
-            info!("Added object '{}' to deleted_objects in change '{}'", request.object_name, current_change.name);
+        // Only add to deleted_objects if it wasn't just added in this change
+        // If it was in added_objects, we just remove it completely
+        if !was_in_added {
+            // Add to deleted_objects list if not already present (filter to MooObject types)
+            // Use original_name (handles renamed objects correctly)
+            let obj_info = crate::types::ObjectInfo { 
+                object_type: VcsObjectType::MooObject,
+                name: original_name.clone(), 
+                version: object_version 
+            };
+            if !current_change.deleted_objects.iter()
+                .filter(|obj| obj.object_type == VcsObjectType::MooObject)
+                .any(|obj| obj.name == original_name) {
+                current_change.deleted_objects.push(obj_info);
+                info!("Added object '{}' to deleted_objects in change '{}'", original_name, current_change.name);
+            }
         }
         
         // Remove any rename entries for this object since it's being deleted (filter to MooObject types)
@@ -99,7 +114,9 @@ impl ObjectDeleteOperation {
             current_change.added_objects.retain(|obj| !(obj.object_type == VcsObjectType::MooMetaObject && obj.name == request.object_name));
             current_change.modified_objects.retain(|obj| !(obj.object_type == VcsObjectType::MooMetaObject && obj.name == request.object_name));
             
-            // Add to deleted_objects list if not already present
+            // Always add meta to deleted_objects when deleting an object
+            // Note: Meta objects are tracked in deleted_objects but filtered out of user-facing diffs
+            // This ensures proper cleanup on commit while keeping diffs focused on MOO objects only
             let meta_obj_info = crate::types::ObjectInfo {
                 object_type: VcsObjectType::MooMetaObject,
                 name: request.object_name.clone(),

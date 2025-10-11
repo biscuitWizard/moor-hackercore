@@ -50,12 +50,10 @@ impl IndexCalcDeltaOperation {
         let target_position = match target_position {
             Some(pos) => pos,
             None => {
-                warn!("Change '{}' not found in index order", request.change_id);
-                return Ok(moor_var::v_map(&[
-                    (moor_var::v_str("change_ids"), moor_var::v_list(&[])),
-                    (moor_var::v_str("ref_pairs"), moor_var::v_list(&[])),
-                    (moor_var::v_str("objects_added"), moor_var::v_list(&[])),
-                ]));
+                error!("Change '{}' not found in index order", request.change_id);
+                return Err(ObjectsTreeError::SerializationError(
+                    format!("Error: Change '{}' does not exist in index", request.change_id)
+                ));
             }
         };
         

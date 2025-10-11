@@ -25,6 +25,12 @@ impl ObjectRenameOperation {
     fn process_object_rename(&self, request: ObjectRenameRequest) -> Result<String, ObjectsTreeError> {
         info!("Processing object rename from '{}' to '{}'", request.from_name, request.to_name);
         
+        // Validate that names are not empty
+        if request.from_name.is_empty() || request.to_name.is_empty() {
+            error!("Cannot rename with empty names");
+            return Err(ObjectsTreeError::InvalidOperation("Error: Object names cannot be empty".to_string()));
+        }
+        
         // Check that we're not using the same name
         if request.from_name == request.to_name {
             error!("Cannot rename object to the same name");
@@ -34,6 +40,16 @@ impl ObjectRenameOperation {
         // Get or create a local change
         let mut current_change = self.database.index().get_or_create_local_change()
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+        
+        // Check if source is in deleted_objects (cannot rename deleted objects)
+        let source_in_deleted = current_change.deleted_objects.iter()
+            .filter(|obj| obj.object_type == VcsObjectType::MooObject)
+            .any(|obj| obj.name == request.from_name);
+        
+        if source_in_deleted {
+            error!("Cannot rename deleted object '{}'", request.from_name);
+            return Err(ObjectsTreeError::ObjectNotFound(format!("Object '{}' not found", request.from_name)));
+        }
         
         // Check if source is in added_objects or modified_objects (filter to MooObject types)
         // These cases are handled simply (just update the name) without complex validation
@@ -218,25 +234,34 @@ impl ObjectRenameOperation {
                 // Don't add to renamed_objects since it's already tracked as modified
             } else {
                 // Object exists only in refs (committed history) - add to renamed_objects
-                let renamed_object = RenamedObject {
-                    from: crate::types::ObjectInfo { 
-                        object_type: VcsObjectType::MooObject,
-                        name: request.from_name.clone(), 
-                        version: from_version 
-                    },
-                    to: crate::types::ObjectInfo { 
-                        object_type: VcsObjectType::MooObject,
-                        name: request.to_name.clone(), 
-                        version: 1 
-                    },
-                };
                 
-                // Remove any existing rename entry for this object
-                current_change.renamed_objects.retain(|renamed| renamed.from.name != request.from_name);
-                
-                // Add the new rename entry
-                current_change.renamed_objects.push(renamed_object);
-                info!("Added rename '{}' -> '{}' to renamed_objects in change '{}'", request.from_name, request.to_name, current_change.name);
+                // Check if this is a continuation of an existing rename (from_name is the to.name of an existing rename)
+                if let Some(pos) = current_change.renamed_objects.iter()
+                    .position(|r| r.from.object_type == VcsObjectType::MooObject && 
+                                  r.to.object_type == VcsObjectType::MooObject && 
+                                  r.to.name == request.from_name) {
+                    // Update the existing rename's to.name to chain the renames
+                    info!("Chaining rename: updating existing rename to point to '{}'", request.to_name);
+                    current_change.renamed_objects[pos].to.name = request.to_name.clone();
+                } else {
+                    // New rename operation
+                    let renamed_object = RenamedObject {
+                        from: crate::types::ObjectInfo { 
+                            object_type: VcsObjectType::MooObject,
+                            name: request.from_name.clone(), 
+                            version: from_version 
+                        },
+                        to: crate::types::ObjectInfo { 
+                            object_type: VcsObjectType::MooObject,
+                            name: request.to_name.clone(), 
+                            version: 1 
+                        },
+                    };
+                    
+                    // Add the new rename entry
+                    current_change.renamed_objects.push(renamed_object);
+                    info!("Added rename '{}' -> '{}' to renamed_objects in change '{}'", request.from_name, request.to_name, current_change.name);
+                }
             }
         }
         

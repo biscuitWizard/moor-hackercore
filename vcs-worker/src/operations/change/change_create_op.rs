@@ -24,17 +24,18 @@ impl ChangeCreateOperation {
         info!("Creating new change '{}' with author '{}'", request.name, request.author);
         
         // Check if there's already a local change at the top of the index
-        let changes = self.database.index().list_changes()
-            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
-        
-        if let Some(existing_change) = changes.first() {
-            if existing_change.status == ChangeStatus::Local {
-                error!("Cannot create new change '{}' - already in a local change '{}' ({})", 
-                       request.name, existing_change.name, existing_change.id);
-                return Err(ObjectsTreeError::SerializationError(
-                    format!("Already in a local change '{}' ({}). Abandon the current change before creating a new one.", 
-                            existing_change.name, existing_change.id)
-                ));
+        if let Some(top_change_id) = self.database.index().get_top_change()
+            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))? {
+            if let Some(existing_change) = self.database.index().get_change(&top_change_id)
+                .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))? {
+                if existing_change.status == ChangeStatus::Local {
+                    error!("Cannot create new change '{}' - already in a local change '{}' ({})", 
+                           request.name, existing_change.name, existing_change.id);
+                    return Err(ObjectsTreeError::SerializationError(
+                        format!("Already in a local change '{}' ({}). Abandon the current change before creating a new one.", 
+                                existing_change.name, existing_change.id)
+                    ));
+                }
             }
         }
         
