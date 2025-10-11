@@ -126,6 +126,29 @@ player:tell("Deleted: ", length(diff["deleted_objects"]), " objects");"#.to_stri
         ]
     }
     
+    fn responses(&self) -> Vec<crate::operations::OperationResponse> {
+        use crate::operations::OperationResponse;
+        vec![
+            OperationResponse::success(
+                "Operation executed successfully",
+                r#"["objects_renamed" -> ["old_obj" -> "new_obj"], "objects_deleted" -> {"obj1"}, "objects_added" -> {"obj2"}, "objects_modified" -> {"obj3"}, "changes" -> {["obj_id" -> "obj3", "verbs_modified" -> {"verb1"}, "verbs_added" -> {}, "verbs_renamed" -> [], "verbs_deleted" -> {}, "props_modified" -> {"prop1"}, "props_added" -> {}, "props_renamed" -> [], "props_deleted" -> {}]}]"#
+            ),
+            OperationResponse::new(
+                400,
+                "Bad Request - No local change available",
+                r#"E_INVARG("No local change on top of index - nothing to do)"#),
+            OperationResponse::new(
+                404,
+                "Not Found - No change to query",
+                r#"E_INVARG("Error: No change on top of index - nothing to do)"#),
+            OperationResponse::new(
+                500,
+                "Internal Server Error - Database or system error",
+                r#""Error: Database error: failed to build diff model""#
+            ),
+        ]
+    }
+    
     fn execute(&self, _args: Vec<String>, _user: &User) -> moor_var::Var {
         info!("Change status operation executed");
         

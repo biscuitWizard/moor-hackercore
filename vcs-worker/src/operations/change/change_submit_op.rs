@@ -293,6 +293,33 @@ diff = worker_request("vcs", {"change/submit"});
         ]
     }
     
+    fn responses(&self) -> Vec<crate::operations::OperationResponse> {
+        use crate::operations::OperationResponse;
+        vec![
+            OperationResponse::success(
+                "Operation executed successfully",
+                r#"["objects_renamed" -> [], "objects_deleted" -> {}, "objects_added" -> {}, "objects_modified" -> {"obj1"}, "changes" -> {["obj_id" -> "obj1", "verbs_modified" -> {}, "verbs_added" -> {}, "verbs_renamed" -> [], "verbs_deleted" -> {}, "props_modified" -> {}, "props_added" -> {}, "props_renamed" -> [], "props_deleted" -> {}]}]"#
+            ),
+            OperationResponse::new(
+                400,
+                "Bad Request - Cannot submit change in current state",
+                r#"E_INVARG("Error: Cannot submit change 'my-change' - it is not local (status: Merged),
+            OperationResponse::new(
+                403,
+                "Forbidden - User lacks permission to submit changes",
+                r#"E_INVARG("Error: User 'player123' does not have permission to submit changes)"#),
+            OperationResponse::new(
+                404,
+                "Not Found - No change to submit",
+                r#"E_INVARG("Error: No change to submit)"#),
+            OperationResponse::new(
+                500,
+                "Internal Server Error - Database or system error",
+                r#""Error: Database error: failed to submit change""#
+            ),
+        ]
+    }
+
     fn execute(&self, args: Vec<String>, user: &User) -> moor_var::Var {
         info!("Change submit operation received {} arguments for user: {}", args.len(), user.id);
         

@@ -103,6 +103,31 @@ player:tell("Object list: ", result);"#.to_string(),
         ]
     }
     
+    fn responses(&self) -> Vec<crate::operations::OperationResponse> {
+        use crate::operations::OperationResponse;
+        vec![
+            OperationResponse::success(
+                "Operation executed successfully",
+                r##"{"$player", "$room", "#123", "#124"}"##
+            ),
+            OperationResponse::new(
+                400,
+                "Bad Request - Invalid arguments",
+                r#""Error: Invalid object operation arguments""#
+            ),
+            OperationResponse::new(
+                404,
+                "Not Found - Object not found",
+                r#""Error: Object not found or has been deleted""#
+            ),
+            OperationResponse::new(
+                500,
+                "Internal Server Error - Database or system error",
+                r#""Error: Database error: operation failed""#
+            ),
+        ]
+    }
+
     fn execute(&self, args: Vec<String>, _user: &User) -> moor_var::Var {
         info!("Executing object list operation with {} args", args.len());
         

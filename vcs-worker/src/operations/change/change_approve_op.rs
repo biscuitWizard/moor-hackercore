@@ -221,6 +221,33 @@ player:tell("Added: ", length(diff["added_objects"]), " objects");"#.to_string()
         ]
     }
     
+    fn responses(&self) -> Vec<crate::operations::OperationResponse> {
+        use crate::operations::OperationResponse;
+        vec![
+            OperationResponse::success(
+                "Operation executed successfully",
+                r#"["objects_renamed" -> [], "objects_deleted" -> {}, "objects_added" -> {}, "objects_modified" -> {}, "changes" -> {}]"#
+            ),
+            OperationResponse::new(
+                400,
+                "Bad Request - Cannot approve change in current state",
+                r#"E_INVARG("Error: Cannot approve change 'my-change' - it must be Local or Review status (current: Merged),
+            OperationResponse::new(
+                403,
+                "Forbidden - User lacks permission to approve changes",
+                r#"E_INVARG("Error: User 'player123' does not have permission to approve changes)"#),
+            OperationResponse::new(
+                404,
+                "Not Found - Change not found in workspace or index",
+                r#"E_INVARG("Error: Change 'abc-123-def...' not found in workspace or index)"#),
+            OperationResponse::new(
+                500,
+                "Internal Server Error - Database or system error",
+                r#""Error: Database error: failed to serialize change""#
+            ),
+        ]
+    }
+    
     fn execute(&self, args: Vec<String>, user: &User) -> moor_var::Var {
         info!("Change approve operation received {} arguments for user: {}", args.len(), user.id);
         

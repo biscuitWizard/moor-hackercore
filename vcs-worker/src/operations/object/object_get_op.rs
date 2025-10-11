@@ -183,6 +183,38 @@ impl Operation for ObjectGetOperation {
         ]
     }
     
+    fn responses(&self) -> Vec<crate::operations::OperationResponse> {
+        use crate::operations::OperationResponse;
+        vec![
+            OperationResponse::success(
+                "Operation executed successfully",
+                r#"obj $player
+parent #1
+name "Player Object"
+owner #2
+property description "A player object"
+verb "look" this none this
+  player:tell("You look at ", this.name);
+end"#
+            ),
+            OperationResponse::new(
+                400,
+                "Bad Request - Invalid object name",
+                r#""Error: Object name is required""#
+            ),
+            OperationResponse::new(
+                404,
+                "Not Found - Object not found or has been deleted",
+                r#""Error: Object 'object_name' not found or has been deleted""#
+            ),
+            OperationResponse::new(
+                500,
+                "Internal Server Error - Failed to retrieve or parse object",
+                r#""Error: Failed to parse object: compilation error""#
+            ),
+        ]
+    }
+    
     fn execute(&self, args: Vec<String>, _user: &User) -> moor_var::Var {
         // For RPC calls, we expect the args to contain:
         // args[0] = object_name

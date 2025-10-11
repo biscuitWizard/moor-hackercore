@@ -116,6 +116,31 @@ player:tell("Change abandoned. You need to revert ", length(diff["modified_objec
         ]
     }
     
+    fn responses(&self) -> Vec<crate::operations::OperationResponse> {
+        use crate::operations::OperationResponse;
+        vec![
+            OperationResponse::success(
+                "Operation executed successfully",
+                r#"["objects_renamed" -> [], "objects_deleted" -> {}, "objects_added" -> {}, "objects_modified" -> {"obj1"}, "changes" -> {["obj_id" -> "obj1", "verbs_modified" -> {}, "verbs_added" -> {}, "verbs_renamed" -> [], "verbs_deleted" -> {}, "props_modified" -> {}, "props_added" -> {}, "props_renamed" -> [], "props_deleted" -> {}]}]"#
+            ),
+            OperationResponse::new(
+                400,
+                "Bad Request - Cannot abandon merged change",
+                r#""Error: Cannot abandon merged change 'my-change'""#
+            ),
+            OperationResponse::new(
+                404,
+                "Not Found - No change to abandon",
+                r#""Error: No change to abandon""#
+            ),
+            OperationResponse::new(
+                500,
+                "Internal Server Error - Database or system error",
+                r#""Error: Database error: failed to abandon change""#
+            ),
+        ]
+    }
+
     fn execute(&self, args: Vec<String>, _user: &User) -> moor_var::Var {
         info!("Change abandon operation received {} arguments", args.len());
         

@@ -334,171 +334,60 @@ For more details on each operation, see the categorized endpoints below."#))
                 "application/json"
             };
             
-            // Build response with operation-specific content type
-            let mut response_builder = ResponseBuilder::new()
-                .description("Operation executed successfully");
-            
-            // Add MOO response examples for text/x-moo content type
-            if content_type == "text/x-moo" {
-                let moo_example = if op_name.contains("create") {
-                    r#""Created change 'fix-login-bug' with ID: abc-123...""#
-                } else if op_name.contains("status") || op_name.contains("submit") || 
-                          op_name.contains("approve") || op_name.contains("abandon") ||
-                          op_name.contains("stash") || op_name.contains("switch") {
-                    // ObjectDiffModel structure
-                    r#"["objects_renamed" -> ["old_obj" -> "new_obj"],
- "objects_deleted" -> {"obj1", "obj2"},
- "objects_added" -> {"obj3", "obj4"},
- "objects_modified" -> {"obj5"},
- "changes" -> {
-   ["obj_id" -> "obj5",
-    "verbs_modified" -> {"verb1"},
-    "verbs_added" -> {"verb2"},
-    "verbs_renamed" -> ["old_verb" -> "new_verb"],
-    "verbs_deleted" -> {},
-    "props_modified" -> {"prop1"},
-    "props_added" -> {},
-    "props_renamed" -> [],
-    "props_deleted" -> {}]
- }]"#
-                } else {
-                    r#""Operation result in MOO format""#
-                };
-                
-                response_builder = response_builder.content(
-                    content_type, 
-                    ContentBuilder::new()
-                        .example(Some(serde_json::json!(moo_example)))
-                        .build()
-                );
-            } else {
-                response_builder = response_builder.content(
-                    content_type, 
-                    ContentBuilder::new()
-                        .schema(Some(RefOr::Ref(utoipa::openapi::Ref::from_schema_name("OperationResponse"))))
-                        .build()
-                );
-            }
-            
             let mut operation_builder = OperationBuilder::new()
                 .tag(tag)
                 .operation_id(Some(op_name.replace("/", "_")))
                 .summary(Some(op_name.clone()))
-                .description(Some(full_description))
-                .response("200", response_builder.build());
+                .description(Some(full_description));
             
-            // Add error responses for text/x-moo operations
-            if content_type == "text/x-moo" {
-                // Add 400 Bad Request response for validation/argument errors
-                let error_400_example = if op_name.starts_with("change/") {
-                    match op_name.as_str() {
-                        "change/status" => r#"E_INVARG("No local change on top of index - nothing to do")"#,
-                        "change/create" => r#""Error: Already in a local change 'existing-change' (abc-123). Abandon the current change before creating a new one.""#,
-                        "change/approve" => r#"E_INVARG("Error: Cannot approve change 'my-change' - it must be Local or Review status (current: Merged)")"#,
-                        "change/submit" => r#"E_INVARG("Error: Cannot submit change 'my-change' - it is not local (status: Merged)")"#,
-                        "change/abandon" => r#""Error: Cannot abandon merged change 'my-change'""#,
-                        "change/stash" => r#"E_INVARG("Error: Cannot stash change 'my-change' - it is not local (status: Review)")"#,
-                        "change/switch" => r#"E_INVARG("Error: Change 'target-id' not found in workspace")"#,
-                        _ => r#"E_INVARG("Error: Invalid arguments")"#
-                    }
-                } else if op_name.starts_with("object/") {
-                    match op_name.as_str() {
-                        "object/get" => r#""Error: Object 'object_name' not found or has been deleted""#,
-                        "object/update" => r#""Error: At least one var is required""#,
-                        "object/delete" => r#""Error: Object 'object_name' not found""#,
-                        "object/rename" => r#""Error: Both old and new names are required""#,
-                        "object/list" => r#""Error: Invalid list parameters""#,
-                        _ => r#""Error: Invalid object operation arguments""#
-                    }
-                } else if op_name.starts_with("index/") {
-                    r#"E_INVARG("Error: Invalid index operation arguments")"#
-                } else if op_name.starts_with("workspace/") {
-                    r#""Error: Invalid workspace operation arguments""#
-                } else if op_name.starts_with("meta/") {
-                    r#""Error: Invalid meta operation arguments""#
-                } else if op_name.starts_with("user/") {
-                    r#""Error: Invalid user operation arguments""#
-                } else if op_name == "clone" {
-                    r#""Error: Invalid source URL""#
-                } else {
-                    r#"E_INVARG("Error: Invalid operation arguments")"#
-                };
-                
-                operation_builder = operation_builder.response(
-                    "400",
-                    ResponseBuilder::new()
-                        .description("Bad Request - Invalid arguments or operation not allowed in current state")
-                        .content(
+            // Add all responses from the operation
+            if let Some(op) = operation_opt.as_ref() {
+                for response in op.responses() {
+                    let mut response_builder = ResponseBuilder::new()
+                        .description(&response.description);
+                    
+                    // Add content with proper content type
+                    if content_type == "text/x-moo" {
+                        response_builder = response_builder.content(
                             content_type,
                             ContentBuilder::new()
-                                .example(Some(serde_json::json!(error_400_example)))
+                                .example(Some(serde_json::json!(response.example)))
                                 .build()
-                        )
-                        .build()
-                );
-                
-                // Add 403 Forbidden response for permission errors
-                let error_403_example = match op_name.as_str() {
-                    "change/approve" => r#"E_INVARG("Error: User 'player123' does not have permission to approve changes")"#,
-                    "change/submit" | "change/stash" => r#"E_INVARG("Error: User 'player123' does not have permission to submit changes")"#,
-                    _ if op_name.starts_with("user/") => r#""Error: User 'player123' does not have permission to manage users""#,
-                    _ => r#"E_INVARG("Error: Permission denied")"#
-                };
-                
-                operation_builder = operation_builder.response(
-                    "403",
-                    ResponseBuilder::new()
-                        .description("Forbidden - User lacks required permissions")
-                        .content(
-                            content_type,
-                            ContentBuilder::new()
-                                .example(Some(serde_json::json!(error_403_example)))
-                                .build()
-                        )
-                        .build()
-                );
-                
-                // Add 404 Not Found response
-                let error_404_example = if op_name.starts_with("change/") {
-                    match op_name.as_str() {
-                        "change/approve" | "change/switch" => r#"E_INVARG("Error: Change 'abc-123-def...' not found in workspace or index")"#,
-                        "change/abandon" | "change/status" => r#"E_INVARG("Error: No change to abandon")"#,
-                        _ => r#"E_INVARG("Error: Change not found")"#
+                        );
+                    } else {
+                        // For application/json, use schema for 200, example for errors
+                        if response.status_code == 200 {
+                            response_builder = response_builder.content(
+                                content_type,
+                                ContentBuilder::new()
+                                    .schema(Some(RefOr::Ref(utoipa::openapi::Ref::from_schema_name("OperationResponse"))))
+                                    .build()
+                            );
+                        } else {
+                            response_builder = response_builder.content(
+                                content_type,
+                                ContentBuilder::new()
+                                    .example(Some(serde_json::json!(response.example)))
+                                    .build()
+                            );
+                        }
                     }
-                } else if op_name.starts_with("object/") {
-                    r#""Error: Object not found or has been deleted""#
-                } else if op_name.starts_with("user/") {
-                    r#""Error: User not found""#
-                } else if op_name.starts_with("workspace/") {
-                    r#""Error: Workspace item not found""#
-                } else if op_name.starts_with("meta/") {
-                    r#""Error: Meta object not found""#
-                } else {
-                    r#"E_INVARG("Error: Resource not found")"#
-                };
-                
+                    
+                    operation_builder = operation_builder.response(
+                        &response.status_code.to_string(),
+                        response_builder.build()
+                    );
+                }
+            } else {
+                // Fallback for operations without proper response definitions
                 operation_builder = operation_builder.response(
-                    "404",
+                    "200",
                     ResponseBuilder::new()
-                        .description("Not Found - Requested resource does not exist")
+                        .description("Operation executed successfully")
                         .content(
                             content_type,
                             ContentBuilder::new()
-                                .example(Some(serde_json::json!(error_404_example)))
-                                .build()
-                        )
-                        .build()
-                );
-                
-                // Add 500 Internal Server Error response
-                operation_builder = operation_builder.response(
-                    "500",
-                    ResponseBuilder::new()
-                        .description("Internal Server Error - Database or system error")
-                        .content(
-                            content_type,
-                            ContentBuilder::new()
-                                .example(Some(serde_json::json!(r#""Error: Database error: failed to serialize change""#)))
+                                .schema(Some(RefOr::Ref(utoipa::openapi::Ref::from_schema_name("OperationResponse"))))
                                 .build()
                         )
                         .build()

@@ -184,6 +184,29 @@ player:tell("Need to update ", length(diff["modified_objects"]), " objects");"#.
         ]
     }
     
+    fn responses(&self) -> Vec<crate::operations::OperationResponse> {
+        use crate::operations::OperationResponse;
+        vec![
+            OperationResponse::success(
+                "Operation executed successfully",
+                r#"["objects_renamed" -> [], "objects_deleted" -> {}, "objects_added" -> {}, "objects_modified" -> {"obj1"}, "changes" -> {["obj_id" -> "obj1", "verbs_modified" -> {}, "verbs_added" -> {}, "verbs_renamed" -> [], "verbs_deleted" -> {}, "props_modified" -> {}, "props_added" -> {}, "props_renamed" -> [], "props_deleted" -> {}]}]"#
+            ),
+            OperationResponse::new(
+                400,
+                "Bad Request - Invalid switch operation",
+                r#"E_INVARG("Error: Cannot switch away from non-local change)"#),
+            OperationResponse::new(
+                404,
+                "Not Found - Target change not found",
+                r#"E_INVARG("Error: Change 'abc-123-def...' not found in workspace)"#),
+            OperationResponse::new(
+                500,
+                "Internal Server Error - Database or system error",
+                r#""Error: Database error: failed to switch change""#
+            ),
+        ]
+    }
+
     fn execute(&self, args: Vec<String>, user: &User) -> moor_var::Var {
         info!("Workspace change switch operation received {} arguments for user: {}", args.len(), user.id);
         

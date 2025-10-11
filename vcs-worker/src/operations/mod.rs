@@ -56,6 +56,47 @@ pub struct OperationExample {
     pub http_curl: Option<String>,
 }
 
+/// Describes a response for an operation (success or error)
+#[derive(Debug, Clone)]
+pub struct OperationResponse {
+    pub status_code: u16,
+    pub description: String,
+    pub example: String,
+}
+
+impl OperationResponse {
+    pub fn new(status_code: u16, description: impl Into<String>, example: impl Into<String>) -> Self {
+        Self {
+            status_code,
+            description: description.into(),
+            example: example.into(),
+        }
+    }
+    
+    pub fn success(description: impl Into<String>, example: impl Into<String>) -> Self {
+        Self::new(200, description, example)
+    }
+    
+    pub fn bad_request(description: impl Into<String>, example: impl Into<String>) -> Self {
+        Self::new(400, description, example)
+    }
+    
+    pub fn forbidden(description: impl Into<String>, example: impl Into<String>) -> Self {
+        Self::new(403, description, example)
+    }
+    
+    pub fn not_found(description: impl Into<String>, example: impl Into<String>) -> Self {
+        Self::new(404, description, example)
+    }
+    
+    pub fn internal_error(description: impl Into<String>, example: impl Into<String>) -> Self {
+        Self::new(500, description, example)
+    }
+}
+
+// Keep ErrorResponse as an alias for backwards compatibility during transition
+pub type ErrorResponse = OperationResponse;
+
 pub trait Operation: Send + Sync {
     /// The name of the operation (used for RPC)
     fn name(&self) -> &'static str;
@@ -82,6 +123,32 @@ pub trait Operation: Send + Sync {
     /// Defaults to "application/json", but can be overridden to "text/x-moo" for MOO code responses
     fn response_content_type(&self) -> &'static str {
         "application/json"
+    }
+    
+    /// All responses (success and errors) that this operation can return
+    /// Operations should override this to provide complete response documentation
+    fn responses(&self) -> Vec<OperationResponse> {
+        vec![
+            OperationResponse::success(
+                "Operation executed successfully",
+                r#""Operation completed successfully""#
+            ),
+            OperationResponse::bad_request(
+                "Bad Request - Invalid arguments or operation not allowed in current state",
+                r#"E_INVARG("Error: Invalid operation arguments")"#
+            ),
+            OperationResponse::internal_error(
+                "Internal Server Error - Database or system error",
+                r#""Error: Database error: operation failed""#
+            ),
+        ]
+    }
+    
+    /// Error responses that this operation can return
+    /// DEPRECATED: Use responses() instead for complete documentation
+    /// This is kept for backwards compatibility during transition
+    fn error_responses(&self) -> Vec<ErrorResponse> {
+        self.responses().into_iter().filter(|r| r.status_code >= 400).collect()
     }
 }
 

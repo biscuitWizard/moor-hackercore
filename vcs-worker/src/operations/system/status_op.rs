@@ -190,6 +190,31 @@ impl Operation for StatusOperation {
         ]
     }
     
+    fn responses(&self) -> Vec<crate::operations::OperationResponse> {
+        use crate::operations::OperationResponse;
+        vec![
+            OperationResponse::success(
+                "Operation executed successfully",
+                r#""Operation completed successfully""#
+            ),
+            OperationResponse::new(
+                400,
+                "Bad Request - Invalid arguments",
+                r#""Error: Invalid operation arguments""#
+            ),
+            OperationResponse::new(
+                404,
+                "Not Found - Resource not found",
+                r#""Error: Resource not found""#
+            ),
+            OperationResponse::new(
+                500,
+                "Internal Server Error - Database or system error",
+                r#""Error: Database error: operation failed""#
+            ),
+        ]
+    }
+
     fn execute(&self, _args: Vec<String>, user: &User) -> moor_var::Var {
         info!("System status operation received");
         

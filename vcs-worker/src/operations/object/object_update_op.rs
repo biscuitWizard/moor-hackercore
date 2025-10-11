@@ -315,6 +315,31 @@ result = worker_request("vcs", {"object/update", "$my_new_object", new_obj});
         ]
     }
     
+    fn responses(&self) -> Vec<crate::operations::OperationResponse> {
+        use crate::operations::OperationResponse;
+        vec![
+            OperationResponse::success(
+                "Operation executed successfully",
+                r#""Object '$player' updated successfully with version 2""#
+            ),
+            OperationResponse::new(
+                400,
+                "Bad Request - Invalid arguments",
+                r#""Error: Invalid object operation arguments""#
+            ),
+            OperationResponse::new(
+                404,
+                "Not Found - Object not found",
+                r#""Error: Object not found or has been deleted""#
+            ),
+            OperationResponse::new(
+                500,
+                "Internal Server Error - Database or system error",
+                r#""Error: Database error: operation failed""#
+            ),
+        ]
+    }
+
     fn execute(&self, args: Vec<String>, user: &User) -> moor_var::Var {
         // For RPC calls, we expect the args to contain:
         // args[0] = object_name

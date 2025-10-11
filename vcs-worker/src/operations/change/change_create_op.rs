@@ -146,6 +146,25 @@ impl Operation for ChangeCreateOperation {
         ]
     }
     
+    fn responses(&self) -> Vec<crate::operations::OperationResponse> {
+        use crate::operations::OperationResponse;
+        vec![
+            OperationResponse::success(
+                "Operation executed successfully",
+                r#""Created change 'fix-login-bug' with ID: abc-123...""#
+            ),
+            OperationResponse::new(
+                400,
+                "Bad Request - Already in a local change or invalid arguments",
+                r#""Error: Already in a local change 'existing-change' (abc-123),
+            OperationResponse::new(
+                500,
+                "Internal Server Error - Database or system error",
+                r#""Error: Database error: failed to create change""#
+            ),
+        ]
+    }
+
     fn execute(&self, args: Vec<String>, _user: &User) -> moor_var::Var {
         info!("Change create operation received {} arguments: {:?}", args.len(), args);
         
