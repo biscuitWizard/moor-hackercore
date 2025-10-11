@@ -202,7 +202,7 @@ player:tell("Need to update ", length(diff["modified_objects"]), " objects");"#.
             OperationResponse::new(
                 500,
                 "Internal Server Error - Database or system error",
-                r#""Error: Database error: failed to switch change""#
+                r#"E_INVARG("Error: Database error: failed to switch change")"#
             ),
         ]
     }

@@ -379,6 +379,9 @@ pub trait ResponseExt {
     /// Get the result string from the response
     fn get_result_str(&self) -> Option<&str>;
     
+    /// Get the result as an array (list)
+    fn get_result_list(&self) -> Option<&Vec<Value>>;
+    
     /// Assert that the response is successful, panic with message if not
     fn assert_success(&self, context: &str) -> &Self;
     
@@ -387,6 +390,9 @@ pub trait ResponseExt {
     
     /// Get result string or panic
     fn require_result_str(&self, context: &str) -> &str;
+    
+    /// Get result list or panic
+    fn require_result_list(&self, context: &str) -> &Vec<Value>;
 }
 
 impl ResponseExt for Value {
@@ -396,6 +402,10 @@ impl ResponseExt for Value {
     
     fn get_result_str(&self) -> Option<&str> {
         self["result"].as_str()
+    }
+    
+    fn get_result_list(&self) -> Option<&Vec<Value>> {
+        self["result"].as_array()
     }
     
     fn assert_success(&self, context: &str) -> &Self {
@@ -421,6 +431,11 @@ impl ResponseExt for Value {
     fn require_result_str(&self, context: &str) -> &str {
         self.get_result_str()
             .unwrap_or_else(|| panic!("{}: response has no result string: {}", context, self))
+    }
+    
+    fn require_result_list(&self, context: &str) -> &Vec<Value> {
+        self.get_result_list()
+            .unwrap_or_else(|| panic!("{}: response has no result list: {}", context, self))
     }
 }
 

@@ -76,17 +76,17 @@ endfor"#.to_string(),
             OperationResponse::new(
                 400,
                 "Bad Request - Invalid arguments",
-                r#""Error: Invalid operation arguments""#
+                r#"E_INVARG("Error: Invalid operation arguments")"#
             ),
             OperationResponse::new(
                 404,
                 "Not Found - Resource not found",
-                r#""Error: Resource not found""#
+                r#"E_INVARG("Error: Resource not found")"#
             ),
             OperationResponse::new(
                 500,
                 "Internal Server Error - Database or system error",
-                r#""Error: Database error: operation failed""#
+                r#"E_INVARG("Error: Database error: operation failed")"#
             ),
         ]
     }
@@ -97,7 +97,7 @@ endfor"#.to_string(),
         // Check permission
         if !user.has_permission(&Permission::ManagePermissions) {
             error!("User {} does not have ManagePermissions permission", user.id);
-            return moor_var::v_str("Error: You do not have permission to list users");
+            return moor_var::v_error(moor_var::E_INVARG.msg("Error: You do not have permission to list users"));
         }
         
         // Get all users
@@ -132,7 +132,7 @@ endfor"#.to_string(),
             }
             Err(e) => {
                 error!("Failed to list users: {}", e);
-                moor_var::v_str(&format!("Error: {}", e))
+                moor_var::v_error(moor_var::E_INVARG.msg(&format!("Error: {}", e)))
             }
         }
     }

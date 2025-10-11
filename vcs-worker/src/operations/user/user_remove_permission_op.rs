@@ -99,17 +99,17 @@ impl Operation for UserRemovePermissionOperation {
             OperationResponse::new(
                 400,
                 "Bad Request - Invalid arguments",
-                r#""Error: Invalid operation arguments""#
+                r#"E_INVARG("Error: Invalid operation arguments")"#
             ),
             OperationResponse::new(
                 404,
                 "Not Found - Resource not found",
-                r#""Error: Resource not found""#
+                r#"E_INVARG("Error: Resource not found")"#
             ),
             OperationResponse::new(
                 500,
                 "Internal Server Error - Database or system error",
-                r#""Error: Database error: operation failed""#
+                r#"E_INVARG("Error: Database error: operation failed")"#
             ),
         ]
     }
@@ -120,13 +120,13 @@ impl Operation for UserRemovePermissionOperation {
         // Check permission
         if !user.has_permission(&Permission::ManagePermissions) {
             error!("User {} does not have ManagePermissions permission", user.id);
-            return moor_var::v_str("Error: You do not have permission to manage permissions");
+            return moor_var::v_error(moor_var::E_INVARG.msg("Error: You do not have permission to manage permissions"));
         }
         
         // Validate arguments
         if args.len() < 2 {
             error!("Invalid arguments for user/remove_permission: expected 2, got {}", args.len());
-            return moor_var::v_str("Error: Expected 2 arguments: user_id, permission");
+            return moor_var::v_error(moor_var::E_INVARG.msg("Error: Expected 2 arguments: user_id, permission"));
         }
         
         let target_user_id = &args[0];
@@ -137,7 +137,7 @@ impl Operation for UserRemovePermissionOperation {
             Ok(p) => p,
             Err(e) => {
                 error!("Invalid permission: {}", e);
-                return moor_var::v_str(&format!("Error: {}", e));
+                return moor_var::v_error(moor_var::E_INVARG.msg(&format!("Error: {}", e)));
             }
         };
         
@@ -156,7 +156,7 @@ impl Operation for UserRemovePermissionOperation {
             }
             Err(e) => {
                 error!("Failed to remove permission: {}", e);
-                moor_var::v_str(&format!("Error: {}", e))
+                moor_var::v_error(moor_var::E_INVARG.msg(&format!("Error: {}", e)))
             }
         }
     }

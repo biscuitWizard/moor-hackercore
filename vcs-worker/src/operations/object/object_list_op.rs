@@ -6,18 +6,13 @@ use serde::{Deserialize, Serialize};
 use crate::database::{DatabaseRef, ObjectsTreeError};
 use crate::types::{ObjectInfo, User};
 use crate::providers::index::IndexProvider;
+use moor_var::{v_error, v_list, v_str, E_INVARG, Var};
 
 /// Request structure for object list operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ObjectListRequest {
     #[allow(dead_code)]
     pub include_deleted: bool, // For future use - whether to include deleted objects
-}
-
-/// Response structure containing the list of objects
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ObjectListResponse {
-    pub objects: Vec<ObjectInfo>  // ObjectInfo comes from crate::types
 }
 
 /// Object list operation that walks through the entire change history chronologically
@@ -34,20 +29,14 @@ impl ObjectListOperation {
     }
 
     /// Process the object list request by delegating to IndexProvider
-    fn process_object_list(&self, _request: ObjectListRequest) -> Result<String, ObjectsTreeError> {
+    fn process_object_list(&self, _request: ObjectListRequest) -> Result<Vec<ObjectInfo>, ObjectsTreeError> {
         info!("Requesting complete object list from IndexProvider");
         
         // Use the IndexProvider to compute the complete object list
         let object_list = self.database.index().compute_complete_object_list()
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         
-        let response = ObjectListResponse {
-            objects: object_list,
-        };
-        
-        // Return as JSON string
-        serde_json::to_string(&response)
-            .map_err(|e| ObjectsTreeError::SerializationError(format!("JSON serialization error: {}", e)))
+        Ok(object_list)
     }
 }
 
@@ -57,7 +46,7 @@ impl Operation for ObjectListOperation {
     }
     
     fn description(&self) -> &'static str {
-        "Lists all objects by walking through the entire change history chronologically, tracking names, renames, additions, and deletions"
+        "Lists all objects by walking through the entire change history chronologically, tracking names, renames, additions, and deletions. Returns a MOO list of object names."
     }
     
     fn response_content_type(&self) -> &'static str {
@@ -67,10 +56,10 @@ impl Operation for ObjectListOperation {
     fn philosophy(&self) -> &'static str {
         "Provides a complete view of all MOO objects currently in the version control repository. This \
         operation walks through the entire change history chronologically, computing the current state by \
-        applying all additions, modifications, renames, and deletions. The result reflects what objects \
-        exist right now, taking into account all submitted changes and your current working changelist. \
-        This is useful for getting an overview of your repository contents, synchronizing with the MOO \
-        database, or building tools that need to operate on the full object set."
+        applying all additions, modifications, renames, and deletions. The result is a MOO list of object \
+        names reflecting what objects exist right now, taking into account all submitted changes and your \
+        current working changelist. This is useful for getting an overview of your repository contents, \
+        synchronizing with the MOO database, or building tools that need to operate on the full object set."
     }
     
     fn parameters(&self) -> Vec<OperationParameter> {
@@ -81,14 +70,13 @@ impl Operation for ObjectListOperation {
         vec![
             OperationExample {
                 description: "List all objects in the repository".to_string(),
-                moocode: r#"// Returns a string containing JSON, but you can work with it as a string
-// or parse it if you have a JSON parser available
-result = worker_request("vcs", {"object/list"});
-// result is a string like: {"objects": [{"object_type": "MooObject", "name": "$player", "version": 3}, ...]}
-player:tell("Object list: ", result);"#.to_string(),
-                http_curl: Some(r#"curl -X POST http://localhost:8081/api/object/list \
-  -H "Content-Type: application/json" \
-  -d '{"operation": "object/list", "args": []}'"#.to_string()),
+                moocode: r##"// Returns a list of object names
+objects = worker_request("vcs", {"object/list"});
+// objects is a list like: {"$player", "$room", "#123", "#124"}
+for obj in (objects)
+    player:tell("Object: ", obj);
+endfor"##.to_string(),
+                http_curl: Some(r##"curl -X POST http://localhost:8081/api/object/list"##.to_string()),
             }
         ]
     }
@@ -111,24 +99,14 @@ player:tell("Object list: ", result);"#.to_string(),
                 r##"{"$player", "$room", "#123", "#124"}"##
             ),
             OperationResponse::new(
-                400,
-                "Bad Request - Invalid arguments",
-                r#""Error: Invalid object operation arguments""#
-            ),
-            OperationResponse::new(
-                404,
-                "Not Found - Object not found",
-                r#""Error: Object not found or has been deleted""#
-            ),
-            OperationResponse::new(
                 500,
-                "Internal Server Error - Database or system error",
-                r#""Error: Database error: operation failed""#
+                "Internal Server Error - Database or computation error",
+                r##"E_INVARG("Failed to compute object list: database operation failed")"##
             ),
         ]
     }
 
-    fn execute(&self, args: Vec<String>, _user: &User) -> moor_var::Var {
+    fn execute(&self, args: Vec<String>, _user: &User) -> Var {
         info!("Executing object list operation with {} args", args.len());
         
         let request = ObjectListRequest {
@@ -136,13 +114,20 @@ player:tell("Object list: ", result);"#.to_string(),
         };
 
         match self.process_object_list(request) {
-            Ok(result) => {
-                info!("Object list operation completed successfully");
-                moor_var::v_str(&result)
+            Ok(object_list) => {
+                info!("Object list operation completed successfully with {} objects", object_list.len());
+                
+                // Convert ObjectInfo list to MOO list of object names (strings)
+                let object_names: Vec<Var> = object_list
+                    .iter()
+                    .map(|obj| v_str(&obj.name))
+                    .collect();
+                
+                v_list(&object_names)
             }
             Err(e) => {
                 error!("Object list operation failed: {}", e);
-                moor_var::v_str(&format!("Error: {e}"))
+                v_error(E_INVARG.msg(&format!("{e}")))
             }
         }
     }

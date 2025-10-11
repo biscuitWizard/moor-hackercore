@@ -66,17 +66,17 @@ player:tell("Permissions: ", tostr(user_info[4]));"#.to_string(),
             OperationResponse::new(
                 400,
                 "Bad Request - Invalid arguments",
-                r#""Error: Invalid operation arguments""#
+                r#"E_INVARG("Error: Invalid operation arguments")"#
             ),
             OperationResponse::new(
                 404,
                 "Not Found - Resource not found",
-                r#""Error: Resource not found""#
+                r#"E_INVARG("Error: Resource not found")"#
             ),
             OperationResponse::new(
                 500,
                 "Internal Server Error - Database or system error",
-                r#""Error: Database error: operation failed""#
+                r#"E_INVARG("Error: Database error: operation failed")"#
             ),
         ]
     }

@@ -92,17 +92,17 @@ impl Operation for UserCreateOperation {
             OperationResponse::new(
                 400,
                 "Bad Request - Invalid arguments",
-                r#""Error: Invalid operation arguments""#
+                r#"E_INVARG("Error: Invalid operation arguments")"#
             ),
             OperationResponse::new(
                 404,
                 "Not Found - Resource not found",
-                r#""Error: Resource not found""#
+                r#"E_INVARG("Error: Resource not found")"#
             ),
             OperationResponse::new(
                 500,
                 "Internal Server Error - Database or system error",
-                r#""Error: Database error: operation failed""#
+                r#"E_INVARG("Error: Database error: operation failed")"#
             ),
         ]
     }
@@ -113,13 +113,13 @@ impl Operation for UserCreateOperation {
         // Check permission
         if !user.has_permission(&Permission::CreateUser) {
             error!("User {} does not have CreateUser permission", user.id);
-            return moor_var::v_str("Error: You do not have permission to create users");
+            return moor_var::v_error(moor_var::E_INVARG.msg("Error: You do not have permission to create users"));
         }
         
         // Validate arguments
         if args.len() < 3 {
             error!("Invalid arguments for user/create: expected 3, got {}", args.len());
-            return moor_var::v_str("Error: Expected 3 arguments: user_id, email, v_obj");
+            return moor_var::v_error(moor_var::E_INVARG.msg("Error: Expected 3 arguments: user_id, email, v_obj"));
         }
         
         let user_id = &args[0];
@@ -131,7 +131,7 @@ impl Operation for UserCreateOperation {
             Ok(n) => n,
             Err(_) => {
                 error!("Invalid v_obj: {}", v_obj_str);
-                return moor_var::v_str(&format!("Error: Invalid v_obj '{}', must be an integer", v_obj_str));
+                return moor_var::v_error(moor_var::E_INVARG.msg(&format!("Error: Invalid v_obj '{}', must be an integer", v_obj_str)));
             }
         };
         
@@ -146,7 +146,7 @@ impl Operation for UserCreateOperation {
             }
             Err(e) => {
                 error!("Failed to create user: {}", e);
-                moor_var::v_str(&format!("Error: {}", e))
+                moor_var::v_error(moor_var::E_INVARG.msg(&format!("Error: {}", e)))
             }
         }
     }

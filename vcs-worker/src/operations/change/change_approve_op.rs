@@ -244,7 +244,7 @@ player:tell("Added: ", length(diff["added_objects"]), " objects");"#.to_string()
             OperationResponse::new(
                 500,
                 "Internal Server Error - Database or system error",
-                r#""Error: Database error: failed to serialize change""#
+                r#"E_INVARG("Error: Database error: failed to serialize change")"#
             ),
         ]
     }

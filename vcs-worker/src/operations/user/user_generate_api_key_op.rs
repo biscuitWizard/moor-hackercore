@@ -91,17 +91,17 @@ player:tell("New API key for alice: ", api_key);"#.to_string(),
             OperationResponse::new(
                 400,
                 "Bad Request - Invalid arguments",
-                r#""Error: Invalid operation arguments""#
+                r#"E_INVARG("Error: Invalid operation arguments")"#
             ),
             OperationResponse::new(
                 404,
                 "Not Found - Resource not found",
-                r#""Error: Resource not found""#
+                r#"E_INVARG("Error: Resource not found")"#
             ),
             OperationResponse::new(
                 500,
                 "Internal Server Error - Database or system error",
-                r#""Error: Database error: operation failed""#
+                r#"E_INVARG("Error: Database error: operation failed")"#
             ),
         ]
     }
@@ -124,7 +124,7 @@ player:tell("New API key for alice: ", api_key);"#.to_string(),
                 // Generating for another user requires ManageApiKeys permission
                 if !user.has_permission(&Permission::ManageApiKeys) {
                     error!("User {} does not have ManageApiKeys permission", user.id);
-                    return moor_var::v_str("Error: You do not have permission to manage API keys for other users");
+                    return moor_var::v_error(moor_var::E_INVARG.msg("Error: You do not have permission to manage API keys for other users"));
                 }
                 target
             }
@@ -139,7 +139,7 @@ player:tell("New API key for alice: ", api_key);"#.to_string(),
             }
             Err(e) => {
                 error!("Failed to generate API key: {}", e);
-                moor_var::v_str(&format!("Error: {}", e))
+                moor_var::v_error(moor_var::E_INVARG.msg(&format!("Error: {}", e)))
             }
         }
     }

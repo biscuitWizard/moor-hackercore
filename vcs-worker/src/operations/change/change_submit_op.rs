@@ -315,7 +315,7 @@ diff = worker_request("vcs", {"change/submit"});
             OperationResponse::new(
                 500,
                 "Internal Server Error - Database or system error",
-                r#""Error: Database error: failed to submit change""#
+                r#"E_INVARG("Error: Database error: failed to submit change")"#
             ),
         ]
     }

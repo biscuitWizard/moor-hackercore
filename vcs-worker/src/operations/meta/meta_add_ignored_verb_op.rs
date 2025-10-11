@@ -88,23 +88,32 @@ impl Operation for MetaAddIgnoredVerbOperation {
         use crate::operations::OperationResponse;
         vec![
             OperationResponse::success(
-                "Operation executed successfully",
-                r#""Operation completed successfully""#
+                "Verb successfully added to ignored list",
+                r#""Verb 'verb_name' added to ignored list for object 'object_name'""#
+            ),
+            OperationResponse::success(
+                "Verb was already in ignored list",
+                r#""Verb 'verb_name' was already ignored for object 'object_name'""#
             ),
             OperationResponse::new(
                 400,
-                "Bad Request - Invalid arguments",
-                r#""Error: Invalid operation arguments""#
+                "Bad Request - Missing required arguments",
+                r#"E_INVARG("Error: Object name and verb name are required")"#
             ),
             OperationResponse::new(
-                404,
-                "Not Found - Resource not found",
-                r#""Error: Resource not found""#
+                400,
+                "Bad Request - Object validation failed",
+                r#"E_INVARG("Error: <object validation error>")"#
             ),
             OperationResponse::new(
                 500,
-                "Internal Server Error - Database or system error",
-                r#""Error: Database error: operation failed""#
+                "Internal Server Error - Serialization error",
+                r#"E_INVARG("Error: <serialization error>")"#
+            ),
+            OperationResponse::new(
+                500,
+                "Internal Server Error - Meta operation failed",
+                r#"E_INVARG("Error: <meta load/save error>")"#
             ),
         ]
     }
@@ -114,7 +123,7 @@ impl Operation for MetaAddIgnoredVerbOperation {
         
         if args.len() < 2 {
             error!("Meta add ignored verb operation requires object name and verb name");
-            return moor_var::v_str("Error: Object name and verb name are required");
+            return moor_var::v_error(moor_var::E_INVARG.msg("Error: Object name and verb name are required"));
         }
 
         let object_name = args[0].clone();
@@ -132,7 +141,7 @@ impl Operation for MetaAddIgnoredVerbOperation {
             }
             Err(e) => {
                 error!("Meta add ignored verb operation failed: {}", e);
-                moor_var::v_str(&format!("Error: {e}"))
+                moor_var::v_error(moor_var::E_INVARG.msg(&format!("Error: {e}")))
             }
         }
     }

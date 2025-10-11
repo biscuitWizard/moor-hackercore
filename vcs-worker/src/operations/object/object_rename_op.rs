@@ -8,6 +8,7 @@ use crate::providers::index::IndexProvider;
 use crate::providers::refs::RefsProvider;
 use crate::providers::objects::ObjectsProvider;
 use crate::types::{ObjectRenameRequest, RenamedObject};
+use moor_var::{v_error, E_INVARG};
 
 /// Object rename operation that renames an object from one name to another
 #[derive(Clone)]
@@ -28,7 +29,7 @@ impl ObjectRenameOperation {
         // Validate that names are not empty
         if request.from_name.is_empty() || request.to_name.is_empty() {
             error!("Cannot rename with empty names");
-            return Err(ObjectsTreeError::InvalidOperation("Error: Object names cannot be empty".to_string()));
+            return Err(ObjectsTreeError::InvalidOperation("Object names cannot be empty".to_string()));
         }
         
         // Check that we're not using the same name
@@ -392,22 +393,37 @@ impl Operation for ObjectRenameOperation {
         vec![
             OperationResponse::success(
                 "Operation executed successfully",
-                r#""Object renamed from 'old_name' to 'new_name' successfully""#
+                r#""Object '$old_utility' rename to '$new_utility' queued successfully in change 'local'""#
             ),
             OperationResponse::new(
                 400,
-                "Bad Request - Invalid arguments",
-                r#""Error: Invalid object operation arguments""#
+                "Bad Request - Missing required arguments",
+                r#"E_INVARG("From name and to name are required")"#
+            ),
+            OperationResponse::new(
+                400,
+                "Bad Request - Empty object names",
+                r#"E_INVARG("Object names cannot be empty")"#
+            ),
+            OperationResponse::new(
+                400,
+                "Bad Request - Cannot rename to same name",
+                r#"E_INVARG("Cannot rename object to the same name")"#
             ),
             OperationResponse::new(
                 404,
-                "Not Found - Object not found",
-                r#""Error: Object not found or has been deleted""#
+                "Not Found - Source object not found",
+                r#"E_INVARG("Object '$missing_object' not found")"#
+            ),
+            OperationResponse::new(
+                409,
+                "Conflict - Target object already exists",
+                r#"E_INVARG("Object '$existing_object' already exists")"#
             ),
             OperationResponse::new(
                 500,
                 "Internal Server Error - Database or system error",
-                r#""Error: Database error: operation failed""#
+                r#"E_INVARG("Database error: failed to update change")"#
             ),
         ]
     }
@@ -417,7 +433,7 @@ impl Operation for ObjectRenameOperation {
         
         if args.len() < 2 {
             error!("Object rename operation requires at least from_name and to_name");
-            return moor_var::v_str("Error: From name and to name are required");
+            return v_error(E_INVARG.msg("From name and to name are required"));
         }
 
         let from_name = args[0].clone();
@@ -435,7 +451,7 @@ impl Operation for ObjectRenameOperation {
             }
             Err(e) => {
                 error!("Object rename operation failed: {}", e);
-                moor_var::v_str(&format!("Error: {e}"))
+                v_error(E_INVARG.msg(&e.to_string()))
             }
         }
     }

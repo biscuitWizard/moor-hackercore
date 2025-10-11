@@ -88,23 +88,27 @@ impl Operation for MetaAddIgnoredPropertyOperation {
         use crate::operations::OperationResponse;
         vec![
             OperationResponse::success(
-                "Operation executed successfully",
-                r#""Operation completed successfully""#
+                "Property successfully added to ignored list",
+                r#""Property 'property_name' added to ignored list for object 'object_name'""#
+            ),
+            OperationResponse::success(
+                "Property was already in ignored list",
+                r#""Property 'property_name' was already ignored for object 'object_name'""#
             ),
             OperationResponse::new(
                 400,
-                "Bad Request - Invalid arguments",
-                r#""Error: Invalid operation arguments""#
+                "Bad Request - Missing required arguments",
+                r#"E_INVARG("Error: Object name and property name are required")"#
             ),
             OperationResponse::new(
                 404,
-                "Not Found - Resource not found",
-                r#""Error: Resource not found""#
+                "Not Found - Object does not exist",
+                r#"E_INVARG("Error: Object not found")"#
             ),
             OperationResponse::new(
                 500,
-                "Internal Server Error - Database or system error",
-                r#""Error: Database error: operation failed""#
+                "Internal Server Error - Serialization or database error",
+                r#"E_INVARG("Error: SerializationError: failed to serialize data")"#
             ),
         ]
     }
@@ -114,7 +118,7 @@ impl Operation for MetaAddIgnoredPropertyOperation {
         
         if args.len() < 2 {
             error!("Meta add ignored property operation requires object name and property name");
-            return moor_var::v_str("Error: Object name and property name are required");
+            return moor_var::v_error(moor_var::E_INVARG.msg("Error: Object name and property name are required"));
         }
 
         let object_name = args[0].clone();
@@ -132,7 +136,7 @@ impl Operation for MetaAddIgnoredPropertyOperation {
             }
             Err(e) => {
                 error!("Meta add ignored property operation failed: {}", e);
-                moor_var::v_str(&format!("Error: {e}"))
+                moor_var::v_error(moor_var::E_INVARG.msg(&format!("Error: {e}")))
             }
         }
     }

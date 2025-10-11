@@ -156,11 +156,12 @@ impl Operation for ChangeCreateOperation {
             OperationResponse::new(
                 400,
                 "Bad Request - Already in a local change or invalid arguments",
-                r#""Error: Already in a local change 'existing-change' (abc-123),
+                r#"E_INVARG("Error: Already in a local change 'existing-change' (abc-123)")"#
+            ),
             OperationResponse::new(
                 500,
                 "Internal Server Error - Database or system error",
-                r#""Error: Database error: failed to create change""#
+                r#"E_INVARG("Error: Database error: failed to create change")"#
             ),
         ]
     }
@@ -170,7 +171,7 @@ impl Operation for ChangeCreateOperation {
         
         if args.len() < 2 {
             error!("Change create operation requires at least name and author");
-            return moor_var::v_str("Error: Name and author are required");
+            return moor_var::v_error(moor_var::E_INVARG.msg("Error: Name and author are required"));
         }
 
         let name = args[0].clone();
@@ -194,7 +195,7 @@ impl Operation for ChangeCreateOperation {
             }
             Err(e) => {
                 error!("Change create operation failed: {}", e);
-                moor_var::v_str(&format!("Error: {e}"))
+                moor_var::v_error(moor_var::E_INVARG.msg(&format!("Error: {e}")))
             }
         }
     }

@@ -96,17 +96,17 @@ impl Operation for MetaClearIgnoredVerbsOperation {
             OperationResponse::new(
                 400,
                 "Bad Request - Invalid arguments",
-                r#""Error: Invalid operation arguments""#
+                r#"E_INVARG("Error: Invalid operation arguments")"#
             ),
             OperationResponse::new(
                 404,
                 "Not Found - Resource not found",
-                r#""Error: Resource not found""#
+                r#"E_INVARG("Error: Resource not found")"#
             ),
             OperationResponse::new(
                 500,
                 "Internal Server Error - Database or system error",
-                r#""Error: Database error: operation failed""#
+                r#"E_INVARG("Error: Database error: operation failed")"#
             ),
         ]
     }
@@ -116,7 +116,7 @@ impl Operation for MetaClearIgnoredVerbsOperation {
         
         if args.is_empty() {
             error!("Meta clear ignored verbs operation requires object name");
-            return moor_var::v_str("Error: Object name is required");
+            return moor_var::v_error(moor_var::E_INVARG.msg("Error: Object name is required"));
         }
 
         let object_name = args[0].clone();
@@ -132,7 +132,7 @@ impl Operation for MetaClearIgnoredVerbsOperation {
             }
             Err(e) => {
                 error!("Meta clear ignored verbs operation failed: {}", e);
-                moor_var::v_str(&format!("Error: {e}"))
+                moor_var::v_error(moor_var::E_INVARG.msg(&format!("Error: {e}")))
             }
         }
     }

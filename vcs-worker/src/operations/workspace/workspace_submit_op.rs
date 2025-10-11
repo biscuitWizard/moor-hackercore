@@ -87,22 +87,27 @@ impl Operation for WorkspaceSubmitOperation {
         vec![
             OperationResponse::success(
                 "Operation executed successfully",
-                r#""Operation completed successfully""#
+                r#""Change 'my-feature' (change-abc123) successfully submitted for review""#
             ),
             OperationResponse::new(
                 400,
-                "Bad Request - Invalid arguments",
-                r#""Error: Invalid operation arguments""#
+                "Bad Request - No serialized change argument provided",
+                r#"E_INVARG("Workspace submit operation requires a serialized change argument")"#
             ),
             OperationResponse::new(
-                404,
-                "Not Found - Resource not found",
-                r#""Error: Resource not found""#
+                400,
+                "Bad Request - Failed to deserialize change",
+                r#"E_INVARG("Failed to deserialize change: invalid JSON at line 1 column 5")"#
+            ),
+            OperationResponse::new(
+                403,
+                "Forbidden - User lacks permission to submit changes",
+                r#"E_INVARG("User 'player123' does not have permission to submit changes")"#
             ),
             OperationResponse::new(
                 500,
-                "Internal Server Error - Database or system error",
-                r#""Error: Database error: operation failed""#
+                "Internal Server Error - Database error",
+                r#"E_INVARG("Database error: failed to store workspace change")"#
             ),
         ]
     }
@@ -124,7 +129,7 @@ impl Operation for WorkspaceSubmitOperation {
             }
             Err(e) => {
                 error!("Workspace submit operation failed: {}", e);
-                v_error(E_INVARG.msg(&format!("Error: {e}")))
+                v_error(E_INVARG.msg(&format!("{e}")))
             }
         }
     }

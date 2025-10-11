@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::database::{DatabaseRef, ObjectsTreeError};
 use crate::types::{User, ChangeStatus};
 use crate::providers::index::IndexProvider;
+use moor_var::{v_error, E_INVARG};
 
 /// Request structure for index calc delta operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -55,7 +56,7 @@ impl IndexCalcDeltaOperation {
             None => {
                 error!("Change '{}' not found in index order", change_id);
                 return Err(ObjectsTreeError::SerializationError(
-                    format!("Error: Change '{}' does not exist in index", change_id)
+                    format!("Change '{}' does not exist in index", change_id)
                 ));
             }
         };
@@ -192,23 +193,27 @@ impl Operation for IndexCalcDeltaOperation {
         use crate::operations::OperationResponse;
         vec![
             OperationResponse::success(
-                "Operation executed successfully",
-                r#""Operation completed successfully""#
+                "Operation executed successfully - Returns delta information",
+                r#"["change_ids" -> {"abc123def", "def456ghi"}, "ref_pairs" -> {["from" -> "", "to" -> "obj1"], ["from" -> "obj2", "to" -> "obj2"], ["from" -> "obj3", "to" -> "obj3_renamed"]}, "objects_added" -> {["name" -> "obj1", "version" -> 1], ["name" -> "obj2", "version" -> 2], ["name" -> "obj3_renamed", "version" -> 1]}]"#
+            ),
+            OperationResponse::success(
+                "Operation executed successfully - No changes after specified change",
+                r#"["change_ids" -> {}, "ref_pairs" -> {}, "objects_added" -> {}]"#
             ),
             OperationResponse::new(
                 400,
-                "Bad Request - Invalid arguments",
-                r#""Error: Invalid operation arguments""#
+                "Bad Request - Missing change_id argument",
+                r#"E_INVARG("change_id argument is required")"#
             ),
             OperationResponse::new(
                 404,
-                "Not Found - Resource not found",
-                r#""Error: Resource not found""#
+                "Not Found - Change does not exist in index",
+                r#"E_INVARG("Change 'xyz789' does not exist in index")"#
             ),
             OperationResponse::new(
                 500,
                 "Internal Server Error - Database or system error",
-                r#""Error: Database error: operation failed""#
+                r#"E_INVARG("Database error: failed to retrieve change order")"#
             ),
         ]
     }
@@ -219,7 +224,7 @@ impl Operation for IndexCalcDeltaOperation {
         // Parse change_id argument
         if args.is_empty() || args[0].is_empty() {
             error!("Index calc delta operation requires a change_id argument");
-            return moor_var::v_str("Error: change_id argument is required");
+            return v_error(E_INVARG.msg("change_id argument is required"));
         }
         
         let change_id = args[0].clone();
@@ -232,7 +237,7 @@ impl Operation for IndexCalcDeltaOperation {
             }
             Err(e) => {
                 error!("Index calc delta operation failed: {}", e);
-                moor_var::v_str(&format!("Error: {e}"))
+                v_error(E_INVARG.msg(&format!("{e}")))
             }
         }
     }

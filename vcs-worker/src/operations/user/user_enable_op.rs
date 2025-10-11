@@ -81,17 +81,17 @@ impl Operation for UserEnableOperation {
             OperationResponse::new(
                 400,
                 "Bad Request - Invalid arguments",
-                r#""Error: Invalid operation arguments""#
+                r#"E_INVARG("Error: Invalid operation arguments")"#
             ),
             OperationResponse::new(
                 404,
                 "Not Found - Resource not found",
-                r#""Error: Resource not found""#
+                r#"E_INVARG("Error: Resource not found")"#
             ),
             OperationResponse::new(
                 500,
                 "Internal Server Error - Database or system error",
-                r#""Error: Database error: operation failed""#
+                r#"E_INVARG("Error: Database error: operation failed")"#
             ),
         ]
     }
@@ -102,13 +102,13 @@ impl Operation for UserEnableOperation {
         // Check permission
         if !user.has_permission(&Permission::DisableUser) {
             error!("User {} does not have DisableUser permission", user.id);
-            return moor_var::v_str("Error: You do not have permission to enable users");
+            return moor_var::v_error(moor_var::E_INVARG.msg("Error: You do not have permission to enable users"));
         }
         
         // Validate arguments
         if args.is_empty() {
             error!("Invalid arguments for user/enable: expected 1, got 0");
-            return moor_var::v_str("Error: Expected 1 argument: user_id");
+            return moor_var::v_error(moor_var::E_INVARG.msg("Error: Expected 1 argument: user_id"));
         }
         
         let target_user_id = &args[0];
@@ -121,7 +121,7 @@ impl Operation for UserEnableOperation {
             }
             Err(e) => {
                 error!("Failed to enable user: {}", e);
-                moor_var::v_str(&format!("Error: {}", e))
+                moor_var::v_error(moor_var::E_INVARG.msg(&format!("Error: {}", e)))
             }
         }
     }

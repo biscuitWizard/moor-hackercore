@@ -5,7 +5,7 @@ use tracing::{error, info};
 use crate::database::{DatabaseRef, ObjectsTreeError};
 use crate::providers::workspace::WorkspaceProvider;
 use crate::types::{Change, User, Permission, ChangeStatus};
-use moor_var::{v_error, v_str, E_INVARG};
+use moor_var::{v_error, v_str, v_list, v_map, v_int, Var, E_INVARG};
 
 /// Workspace list operation that lists all changes in the workspace (stashed, in review, etc.)
 #[derive(Clone)]
@@ -20,7 +20,7 @@ impl WorkspaceListOperation {
     }
 
     /// Process the workspace list request
-    fn process_workspace_list(&self, user: &User, status_filter: Option<ChangeStatus>) -> Result<String, ObjectsTreeError> {
+    fn process_workspace_list(&self, user: &User, status_filter: Option<ChangeStatus>) -> Result<Vec<Change>, ObjectsTreeError> {
         // Check if user has permission to view workspace changes (using SubmitChanges as it's the closest permission)
         if !user.has_permission(&Permission::SubmitChanges) {
             error!("User '{}' does not have permission to view workspace changes", user.id);
@@ -42,89 +42,84 @@ impl WorkspaceListOperation {
 
         info!("Found {} workspace changes for user '{}'", changes.len(), user.id);
 
-        // Format the response
-        let response = self.format_changes_response(&changes, status_filter);
-
-        Ok(response)
+        Ok(changes)
     }
 
-    /// Format the changes into a readable response
-    fn format_changes_response(&self, changes: &[Change], status_filter: Option<ChangeStatus>) -> String {
-        if changes.is_empty() {
-            let filter_msg = if let Some(status) = status_filter {
-                format!(" with status {:?}", status)
-            } else {
-                String::new()
-            };
-            return format!("No workspace changes found{}.", filter_msg);
-        }
-
-        let mut response = String::new();
+    /// Convert a Change to a MOO map structure
+    fn change_to_moo_map(&self, change: &Change) -> Var {
+        let mut pairs = Vec::new();
         
-        // Add header
-        let filter_msg = if let Some(status) = status_filter {
-            format!(" (status: {:?})", status)
-        } else {
-            String::new()
+        // id (full hash)
+        pairs.push((v_str("id"), v_str(&change.id)));
+        
+        // short_id (abbreviated hash)
+        let short_id = crate::util::short_hash(&change.id);
+        pairs.push((v_str("short_id"), v_str(&short_id)));
+        
+        // name
+        pairs.push((v_str("name"), v_str(&change.name)));
+        
+        // description (optional)
+        if let Some(desc) = &change.description {
+            pairs.push((v_str("description"), v_str(desc)));
+        }
+        
+        // author
+        pairs.push((v_str("author"), v_str(&change.author)));
+        
+        // timestamp
+        pairs.push((v_str("timestamp"), v_int(change.timestamp as i64)));
+        
+        // status
+        let status_str = match change.status {
+            ChangeStatus::Review => "Review",
+            ChangeStatus::Idle => "Idle",
+            ChangeStatus::Merged => "Merged",
+            ChangeStatus::Local => "Local",
         };
-        response.push_str(&format!("Workspace Changes{}\n", filter_msg));
-        response.push_str(&"=".repeat(50));
-        response.push('\n');
-
-        // Group changes by status for better organization
-        let mut changes_by_status: std::collections::HashMap<ChangeStatus, Vec<&Change>> = std::collections::HashMap::new();
-        for change in changes {
-            changes_by_status.entry(change.status.clone()).or_default().push(change);
+        pairs.push((v_str("status"), v_str(status_str)));
+        
+        // based_on (optional)
+        if let Some(index_id) = &change.index_change_id {
+            pairs.push((v_str("based_on"), v_str(index_id)));
         }
-
-        // Sort statuses for consistent output
-        let mut statuses: Vec<_> = changes_by_status.keys().collect();
-        statuses.sort_by_key(|s| match s {
-            ChangeStatus::Review => 0,
-            ChangeStatus::Idle => 1,
-            ChangeStatus::Merged => 2,
-            ChangeStatus::Local => 3,
-        });
-
-        for status in statuses {
-            let status_changes = &changes_by_status[status];
-            response.push_str(&format!("\n{:?} Changes ({}):\n", status, status_changes.len()));
-            response.push_str(&"-".repeat(30));
-            response.push('\n');
-
-            for change in status_changes {
-                let short_id = crate::util::short_hash(&change.id);
-                response.push_str(&format!("  ID: {} ({})\n", change.id, short_id));
-                response.push_str(&format!("  Name: {}\n", change.name));
-                if let Some(desc) = &change.description {
-                    response.push_str(&format!("  Description: {}\n", desc));
-                }
-                response.push_str(&format!("  Author: {}\n", change.author));
-                response.push_str(&format!("  Created: {}\n", 
-                    chrono::DateTime::from_timestamp(change.timestamp as i64, 0)
-                        .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
-                        .unwrap_or_else(|| "Unknown".to_string())
-                ));
-                if let Some(index_id) = &change.index_change_id {
-                    response.push_str(&format!("  Based on: {}\n", index_id));
-                }
-                
-                // Show object counts
-                let total_objects = change.added_objects.len() + change.modified_objects.len() + 
-                                  change.deleted_objects.len() + change.renamed_objects.len();
-                response.push_str(&format!("  Objects: {} total ({} added, {} modified, {} deleted, {} renamed)\n",
-                    total_objects,
-                    change.added_objects.len(),
-                    change.modified_objects.len(),
-                    change.deleted_objects.len(),
-                    change.renamed_objects.len()
-                ));
-                response.push('\n');
-            }
-        }
-
-        response.push_str(&format!("\nTotal: {} changes\n", changes.len()));
-        response
+        
+        // Build changes list (similar to ObjectDiffModel)
+        let mut changes_pairs = Vec::new();
+        
+        // objects_added
+        let added_list: Vec<Var> = change.added_objects.iter()
+            .map(|obj| v_str(&obj.name))
+            .collect();
+        changes_pairs.push((v_str("objects_added"), v_list(&added_list)));
+        
+        // objects_modified
+        let modified_list: Vec<Var> = change.modified_objects.iter()
+            .map(|obj| v_str(&obj.name))
+            .collect();
+        changes_pairs.push((v_str("objects_modified"), v_list(&modified_list)));
+        
+        // objects_deleted
+        let deleted_list: Vec<Var> = change.deleted_objects.iter()
+            .map(|obj| v_str(&obj.name))
+            .collect();
+        changes_pairs.push((v_str("objects_deleted"), v_list(&deleted_list)));
+        
+        // objects_renamed
+        let renamed_list: Vec<Var> = change.renamed_objects.iter()
+            .map(|renamed| {
+                let rename_pairs = vec![
+                    (v_str("from"), v_str(&renamed.from.name)),
+                    (v_str("to"), v_str(&renamed.to.name)),
+                ];
+                v_map(&rename_pairs)
+            })
+            .collect();
+        changes_pairs.push((v_str("objects_renamed"), v_list(&renamed_list)));
+        
+        pairs.push((v_str("changes"), v_map(&changes_pairs)));
+        
+        v_map(&pairs)
     }
 }
 
@@ -167,23 +162,44 @@ impl Operation for WorkspaceListOperation {
         use crate::operations::OperationResponse;
         vec![
             OperationResponse::success(
-                "Operation executed successfully",
-                r#""Operation completed successfully""#
+                "Operation executed successfully - multiple changes found",
+                concat!(
+                    r#"{["id" -> "f8a3c2e1b9d04567a890e1f2c3d4e5f6a7b8c9d0", "short_id" -> "f8a3c2e1", "name" -> "my-feature-change", "#,
+                    r#""description" -> "Added new login system", "author" -> "wizard", "timestamp" -> 1728651045, "status" -> "Review", "#,
+                    r#""based_on" -> "e1f2c3d4e5f6a7b8c9d0f1a2b3c4d5e6f7a8b9c0", "changes" -> ["objects_added" -> {"obj123", "obj124"}, "#,
+                    r#""objects_modified" -> {"obj100", "obj101"}, "objects_deleted" -> {}, "objects_renamed" -> {["from" -> "obj50", "to" -> "obj51"]}]], "#,
+                    r#"["id" -> "a1b2c3d4e5f6a7b8c9d0e1f2c3d4e5f6a7b8c9d0", "short_id" -> "a1b2c3d4", "name" -> "bugfix-auth", "#,
+                    r#""description" -> "Fixed authentication bug", "author" -> "programmer", "timestamp" -> 1728657930, "status" -> "Review", "#,
+                    r#""changes" -> ["objects_added" -> {}, "objects_modified" -> {"obj200", "obj201", "obj202"}, "objects_deleted" -> {}, "objects_renamed" -> {}]]}"#
+                )
+            ),
+            OperationResponse::success(
+                "Operation executed successfully - single change found",
+                concat!(
+                    r#"{["id" -> "a1b2c3d4e5f6a7b8c9d0e1f2c3d4e5f6a7b8c9d0", "short_id" -> "a1b2c3d4", "name" -> "feature-work", "#,
+                    r#""author" -> "wizard", "timestamp" -> 1728651045, "status" -> "Idle", "#,
+                    r#""based_on" -> "e1f2c3d4e5f6a7b8c9d0f1a2b3c4d5e6f7a8b9c0", "#,
+                    r#""changes" -> ["objects_added" -> {"obj123"}, "objects_modified" -> {}, "objects_deleted" -> {}, "objects_renamed" -> {}]]}"#
+                )
+            ),
+            OperationResponse::success(
+                "Operation executed successfully - no changes found",
+                r#"{}"#
             ),
             OperationResponse::new(
                 400,
-                "Bad Request - Invalid arguments",
-                r#""Error: Invalid operation arguments""#
+                "Bad Request - Invalid status filter",
+                r#"E_INVARG("Invalid status filter: pending. Valid options: review, idle")"#
             ),
             OperationResponse::new(
-                404,
-                "Not Found - Resource not found",
-                r#""Error: Resource not found""#
+                403,
+                "Forbidden - User lacks permission to view workspace changes",
+                r#"E_INVARG("User 'player123' does not have permission to view workspace changes")"#
             ),
             OperationResponse::new(
                 500,
                 "Internal Server Error - Database or system error",
-                r#""Error: Database error: operation failed""#
+                r#"E_INVARG("Database error: failed to list workspace changes")"#
             ),
         ]
     }
@@ -206,13 +222,17 @@ impl Operation for WorkspaceListOperation {
         };
 
         match self.process_workspace_list(user, status_filter) {
-            Ok(message) => {
-                info!("Workspace list operation completed successfully");
-                v_str(&message)
+            Ok(changes) => {
+                info!("Workspace list operation completed successfully, found {} changes", changes.len());
+                // Convert each change to a MOO map and return as a list
+                let change_maps: Vec<Var> = changes.iter()
+                    .map(|change| self.change_to_moo_map(change))
+                    .collect();
+                v_list(&change_maps)
             }
             Err(e) => {
                 error!("Workspace list operation failed: {}", e);
-                v_error(E_INVARG.msg(&format!("Error: {e}")))
+                v_error(E_INVARG.msg(&format!("{e}")))
             }
         }
     }

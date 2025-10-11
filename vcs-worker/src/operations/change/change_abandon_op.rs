@@ -126,17 +126,17 @@ player:tell("Change abandoned. You need to revert ", length(diff["modified_objec
             OperationResponse::new(
                 400,
                 "Bad Request - Cannot abandon merged change",
-                r#""Error: Cannot abandon merged change 'my-change'""#
+                r#"E_INVARG("Error: Cannot abandon merged change 'my-change'")"#
             ),
             OperationResponse::new(
                 404,
                 "Not Found - No change to abandon",
-                r#""Error: No change to abandon""#
+                r#"E_INVARG("Error: No change to abandon")"#
             ),
             OperationResponse::new(
                 500,
                 "Internal Server Error - Database or system error",
-                r#""Error: Database error: failed to abandon change""#
+                r#"E_INVARG("Error: Database error: failed to abandon change")"#
             ),
         ]
     }
@@ -154,7 +154,7 @@ player:tell("Change abandoned. You need to revert ", length(diff["modified_objec
             }
             Err(e) => {
                 error!("Change abandon operation failed: {}", e);
-                moor_var::v_str(&format!("Error: {e}"))
+                moor_var::v_error(moor_var::E_INVARG.msg(&format!("Error: {e}")))
             }
         }
     }

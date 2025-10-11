@@ -144,7 +144,7 @@ player:tell("Deleted: ", length(diff["deleted_objects"]), " objects");"#.to_stri
             OperationResponse::new(
                 500,
                 "Internal Server Error - Database or system error",
-                r#""Error: Database error: failed to build diff model""#
+                r#"E_INVARG("Error: Database error: failed to build diff model")"#
             ),
         ]
     }
@@ -161,7 +161,7 @@ player:tell("Deleted: ", length(diff["deleted_objects"]), " objects");"#.to_stri
             }
             Err(e) => {
                 error!("Change status operation failed: {}", e);
-                moor_var::v_str(&format!("Error: {e}"))
+                moor_var::v_error(moor_var::E_INVARG.msg(&format!("Error: {e}")))
             }
         }
     }

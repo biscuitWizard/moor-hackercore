@@ -22,11 +22,8 @@ async fn test_object_list_shows_added_objects() {
         .expect("Failed to list objects");
     let response = binding.assert_success("List objects");
     
-    let result_str = response.require_result_str("List result");
-    let list_response: serde_json::Value = serde_json::from_str(result_str)
-        .expect("Failed to parse list response");
-    
-    let objects = list_response["objects"].as_array().unwrap();
+    let objects = response["result"].as_array()
+        .expect("Result should be an array");
     assert_eq!(objects.len(), 0, "Should have no objects initially");
     println!("✅ Empty list initially");
     
@@ -58,15 +55,12 @@ async fn test_object_list_shows_added_objects() {
         .expect("Failed to list objects");
     let response = binding.assert_success("List objects");
     
-    let result_str = response.require_result_str("List result");
-    let list_response: serde_json::Value = serde_json::from_str(result_str)
-        .expect("Failed to parse list response");
-    
-    let objects = list_response["objects"].as_array().unwrap();
+    let objects = response["result"].as_array()
+        .expect("Result should be an array");
     assert_eq!(objects.len(), 2, "Should have 2 objects");
     
     let object_names: Vec<String> = objects.iter()
-        .map(|obj| obj["name"].as_str().unwrap().to_string())
+        .map(|obj| obj.as_str().unwrap().to_string())
         .collect();
     
     assert!(object_names.contains(&"object_one".to_string()), "Should contain object_one");
@@ -116,18 +110,15 @@ async fn test_object_list_excludes_deleted_objects() {
         .expect("Failed to list objects");
     let response = binding.assert_success("List objects");
     
-    let result_str = response.require_result_str("List result");
-    let list_response: serde_json::Value = serde_json::from_str(result_str)
-        .expect("Failed to parse list response");
-    
-    let objects = list_response["objects"].as_array().unwrap();
+    let objects = response["result"].as_array()
+        .expect("Result should be an array");
     
     // When an object is added and then deleted in the same change,
     // it should net out to zero (object was never really there)
     assert_eq!(objects.len(), 1, "Should have only 1 object (second was added then deleted)");
     
     let object_names: Vec<String> = objects.iter()
-        .map(|obj| obj["name"].as_str().unwrap().to_string())
+        .map(|obj| obj.as_str().unwrap().to_string())
         .collect();
     
     assert!(object_names.contains(&"object_to_keep".to_string()), "Should contain object_to_keep");
@@ -171,15 +162,12 @@ async fn test_object_list_shows_renamed_objects_with_new_name() {
         .expect("Failed to list objects");
     let response = binding.assert_success("List objects");
     
-    let result_str = response.require_result_str("List result");
-    let list_response: serde_json::Value = serde_json::from_str(result_str)
-        .expect("Failed to parse list response");
-    
-    let objects = list_response["objects"].as_array().unwrap();
+    let objects = response["result"].as_array()
+        .expect("Result should be an array");
     assert_eq!(objects.len(), 1, "Should have 1 object");
     
     let object_names: Vec<String> = objects.iter()
-        .map(|obj| obj["name"].as_str().unwrap().to_string())
+        .map(|obj| obj.as_str().unwrap().to_string())
         .collect();
     
     assert!(object_names.contains(&"renamed_object".to_string()), "Should contain renamed_object");
@@ -238,25 +226,24 @@ async fn test_object_list_tracks_object_state_in_change() {
     
     println!("✅ Object stays in added_objects (not moved to modified_objects)");
     
-    // Step 4: Verify object appears in list with version 1
+    // Step 4: Verify object appears in list
     println!("\nStep 4: Verifying object appears in list...");
     let binding = client.object_list(None)
         .await
         .expect("Failed to list objects");
     let response = binding.assert_success("List objects");
     
-    let result_str = response.require_result_str("List result");
-    let list_response: serde_json::Value = serde_json::from_str(result_str)
-        .expect("Failed to parse list response");
-    
-    let objects = list_response["objects"].as_array().unwrap();
+    let objects = response["result"].as_array()
+        .expect("Result should be an array");
     assert_eq!(objects.len(), 1, "Should have 1 object");
     
-    let obj = &objects[0];
-    assert_eq!(obj["name"].as_str().unwrap(), "test_object", "Should be the same object");
-    assert_eq!(obj["version"].as_u64().unwrap(), 1, "Version should be 1 (added object)");
+    let object_names: Vec<String> = objects.iter()
+        .map(|obj| obj.as_str().unwrap().to_string())
+        .collect();
     
-    println!("✅ Object appears in list with version 1 (added, not modified)");
+    assert!(object_names.contains(&"test_object".to_string()), "Should contain test_object");
+    
+    println!("✅ Object appears in list (added, not modified)");
     
     println!("\n✅ Test passed: Objects modified in same change stay as 'added'");
 }
@@ -389,17 +376,14 @@ async fn test_object_list_complex_scenario() {
         .expect("Failed to list objects");
     let response = binding.assert_success("List objects");
     
-    let result_str = response.require_result_str("List result");
-    let list_response: serde_json::Value = serde_json::from_str(result_str)
-        .expect("Failed to parse list response");
-    
-    let objects = list_response["objects"].as_array().unwrap();
+    let objects = response["result"].as_array()
+        .expect("Result should be an array");
     
     // Should have 4 objects (A renamed to A_renamed, B modified, C deleted, D added, E unchanged)
     assert_eq!(objects.len(), 4, "Should have 4 objects (A renamed, B modified, D added, E unchanged, C deleted)");
     
     let object_names: Vec<String> = objects.iter()
-        .map(|obj| obj["name"].as_str().unwrap().to_string())
+        .map(|obj| obj.as_str().unwrap().to_string())
         .collect();
     
     assert!(object_names.contains(&"obj_A_renamed".to_string()), "Should contain obj_A_renamed");

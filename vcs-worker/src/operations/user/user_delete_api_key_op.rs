@@ -93,17 +93,17 @@ impl Operation for UserDeleteApiKeyOperation {
             OperationResponse::new(
                 400,
                 "Bad Request - Invalid arguments",
-                r#""Error: Invalid operation arguments""#
+                r#"E_INVARG("Error: Invalid operation arguments")"#
             ),
             OperationResponse::new(
                 404,
                 "Not Found - Resource not found",
-                r#""Error: Resource not found""#
+                r#"E_INVARG("Error: Resource not found")"#
             ),
             OperationResponse::new(
                 500,
                 "Internal Server Error - Database or system error",
-                r#""Error: Database error: operation failed""#
+                r#"E_INVARG("Error: Database error: operation failed")"#
             ),
         ]
     }
@@ -114,7 +114,7 @@ impl Operation for UserDeleteApiKeyOperation {
         // Validate arguments
         if args.is_empty() {
             error!("Invalid arguments for user/delete_api_key: expected at least 1 argument");
-            return moor_var::v_str("Error: Expected at least 1 argument: api_key");
+            return moor_var::v_error(moor_var::E_INVARG.msg("Error: Expected at least 1 argument: api_key"));
         }
         
         let api_key = &args[0];
@@ -134,7 +134,7 @@ impl Operation for UserDeleteApiKeyOperation {
                 // Deleting from another user requires ManageApiKeys permission
                 if !user.has_permission(&Permission::ManageApiKeys) {
                     error!("User {} does not have ManageApiKeys permission", user.id);
-                    return moor_var::v_str("Error: You do not have permission to manage API keys for other users");
+                    return moor_var::v_error(moor_var::E_INVARG.msg("Error: You do not have permission to manage API keys for other users"));
                 }
                 target
             }
@@ -153,7 +153,7 @@ impl Operation for UserDeleteApiKeyOperation {
             }
             Err(e) => {
                 error!("Failed to delete API key: {}", e);
-                moor_var::v_str(&format!("Error: {}", e))
+                moor_var::v_error(moor_var::E_INVARG.msg(&format!("Error: {}", e)))
             }
         }
     }

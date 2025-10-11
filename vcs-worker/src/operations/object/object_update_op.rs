@@ -10,6 +10,7 @@ use crate::providers::refs::RefsProvider;
 use crate::providers::objects::ObjectsProvider;
 use crate::types::{User, VcsObjectType};
 use moor_objdef::dump_object;
+use moor_var::{v_error, E_INVARG};
 
 /// Request structure for object update operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -319,23 +320,42 @@ result = worker_request("vcs", {"object/update", "$my_new_object", new_obj});
         use crate::operations::OperationResponse;
         vec![
             OperationResponse::success(
-                "Operation executed successfully",
+                "Operation executed successfully - object updated with new version",
                 r#""Object '$player' updated successfully with version 2""#
+            ),
+            OperationResponse::success(
+                "Operation executed successfully - object unchanged",
+                r#""Object '$player' unchanged (no modifications)""#
             ),
             OperationResponse::new(
                 400,
-                "Bad Request - Invalid arguments",
-                r#""Error: Invalid object operation arguments""#
+                "Bad Request - Missing object name",
+                r#"E_INVARG("Object name is required")"#
             ),
             OperationResponse::new(
-                404,
-                "Not Found - Object not found",
-                r#""Error: Object not found or has been deleted""#
+                400,
+                "Bad Request - Missing object vars",
+                r#"E_INVARG("At least one var is required")"#
+            ),
+            OperationResponse::new(
+                400,
+                "Bad Request - Failed to parse object dump",
+                r#"E_INVARG("Failed to parse object: invalid syntax")"#
             ),
             OperationResponse::new(
                 500,
-                "Internal Server Error - Database or system error",
-                r#""Error: Database error: operation failed""#
+                "Internal Server Error - Meta SHA256 exists but data not found",
+                r#"E_INVARG("Meta SHA256 exists but data not found")"#
+            ),
+            OperationResponse::new(
+                500,
+                "Internal Server Error - Failed to dump filtered object",
+                r#"E_INVARG("Failed to dump filtered object: serialization error")"#
+            ),
+            OperationResponse::new(
+                500,
+                "Internal Server Error - Database error",
+                r#"E_INVARG("Database error: failed to update object")"#
             ),
         ]
     }
@@ -349,7 +369,7 @@ result = worker_request("vcs", {"object/update", "$my_new_object", new_obj});
         
         if args.is_empty() {
             error!("Object update operation requires at least object name");
-            return moor_var::v_str("Error: Object name is required");
+            return v_error(E_INVARG.msg("Object name is required"));
         }
 
         let object_name = args[0].clone();
@@ -369,12 +389,12 @@ result = worker_request("vcs", {"object/update", "$my_new_object", new_obj});
             vars = args[1..].to_vec();
         } else {
             error!("Object update operation requires at least one var");
-            return moor_var::v_str("Error: At least one var is required");
+            return v_error(E_INVARG.msg("At least one var is required"));
         }
 
         if vars.is_empty() {
             error!("Object update operation requires at least one var");
-            return moor_var::v_str("Error: At least one var is required");
+            return v_error(E_INVARG.msg("At least one var is required"));
         }
 
         let request = ObjectUpdateRequest {
@@ -389,7 +409,7 @@ result = worker_request("vcs", {"object/update", "$my_new_object", new_obj});
             }
             Err(e) => {
                 error!("Object update operation failed: {}", e);
-                moor_var::v_str(&format!("Error: {e}"))
+                v_error(E_INVARG.msg(&e.to_string()))
             }
         }
     }

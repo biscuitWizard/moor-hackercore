@@ -22,9 +22,9 @@ async fn test_workspace_list_empty() {
         .expect("Failed to list workspace changes");
     
     response.assert_success("List workspace");
-    let result = response.require_result_str("List result");
-    assert!(result.contains("No workspace changes found"), "Should indicate no changes found");
-    println!("✅ Empty workspace list: {}", result);
+    let result = response.require_result_list("List result");
+    assert_eq!(result.len(), 0, "Should return empty list");
+    println!("✅ Empty workspace list returned");
     
     // Verify via database as well
     let all_changes = server.database().workspace().list_all_workspace_changes()
@@ -96,12 +96,15 @@ async fn test_workspace_submit_and_list() {
         .expect("Failed to list workspace changes");
     
     list_response.assert_success("List workspace");
-    let list_result = list_response.require_result_str("List result");
+    let list_result = list_response.require_result_list("List result");
     
-    assert!(list_result.contains(&change.id), "Should contain change ID");
-    assert!(list_result.contains(&change.name), "Should contain change name");
-    assert!(list_result.contains("test_author"), "Should contain author");
-    assert!(list_result.contains("Review"), "Should show Review status");
+    assert_eq!(list_result.len(), 1, "Should return 1 change");
+    let change_map = list_result[0].as_object().expect("Change should be a map");
+    
+    assert_eq!(change_map.get("id").and_then(|v| v.as_str()), Some(change.id.as_str()), "Should contain change ID");
+    assert_eq!(change_map.get("name").and_then(|v| v.as_str()), Some(change.name.as_str()), "Should contain change name");
+    assert_eq!(change_map.get("author").and_then(|v| v.as_str()), Some("test_author"), "Should contain author");
+    assert_eq!(change_map.get("status").and_then(|v| v.as_str()), Some("Review"), "Should show Review status");
     println!("✅ List shows submitted change");
     
     println!("\n✅ Test passed: Submit and list workspace changes");
@@ -170,10 +173,14 @@ async fn test_workspace_list_filter_by_status() {
         .await
         .expect("Failed to list all changes");
     
-    let all_result = all_response.require_result_str("List all");
-    assert!(all_result.contains(&review_change.name), "Should contain review change");
-    assert!(all_result.contains(&idle_change.name), "Should contain idle change");
-    assert!(all_result.contains("Total: 2 changes"), "Should show 2 total changes");
+    let all_result = all_response.require_result_list("List all");
+    assert_eq!(all_result.len(), 2, "Should return 2 changes");
+    
+    let names: Vec<&str> = all_result.iter()
+        .filter_map(|v| v.as_object().and_then(|m| m.get("name")).and_then(|n| n.as_str()))
+        .collect();
+    assert!(names.contains(&review_change.name.as_str()), "Should contain review change");
+    assert!(names.contains(&idle_change.name.as_str()), "Should contain idle change");
     println!("✅ All changes listed (2 total)");
     
     // Step 3: Filter by Review status
@@ -182,10 +189,12 @@ async fn test_workspace_list_filter_by_status() {
         .await
         .expect("Failed to list review changes");
     
-    let review_result = review_response.require_result_str("List review");
-    assert!(review_result.contains(&review_change.name), "Should contain review change");
-    assert!(!review_result.contains(&idle_change.name), "Should NOT contain idle change");
-    assert!(review_result.contains("status: Review") || review_result.contains("Review"), "Should indicate Review filter");
+    let review_result = review_response.require_result_list("List review");
+    assert_eq!(review_result.len(), 1, "Should return 1 review change");
+    
+    let review_map = review_result[0].as_object().expect("Change should be a map");
+    assert_eq!(review_map.get("name").and_then(|v| v.as_str()), Some(review_change.name.as_str()), "Should contain review change");
+    assert_eq!(review_map.get("status").and_then(|v| v.as_str()), Some("Review"), "Should have Review status");
     println!("✅ Review filter works correctly");
     
     // Step 4: Filter by Idle status
@@ -194,10 +203,12 @@ async fn test_workspace_list_filter_by_status() {
         .await
         .expect("Failed to list idle changes");
     
-    let idle_result = idle_response.require_result_str("List idle");
-    assert!(!idle_result.contains(&review_change.name), "Should NOT contain review change");
-    assert!(idle_result.contains(&idle_change.name), "Should contain idle change");
-    assert!(idle_result.contains("status: Idle"), "Should indicate Idle filter");
+    let idle_result = idle_response.require_result_list("List idle");
+    assert_eq!(idle_result.len(), 1, "Should return 1 idle change");
+    
+    let idle_map = idle_result[0].as_object().expect("Change should be a map");
+    assert_eq!(idle_map.get("name").and_then(|v| v.as_str()), Some(idle_change.name.as_str()), "Should contain idle change");
+    assert_eq!(idle_map.get("status").and_then(|v| v.as_str()), Some("Idle"), "Should have Idle status");
     println!("✅ Idle filter works correctly");
     
     println!("\n✅ Test passed: Status filtering works correctly");
@@ -315,16 +326,27 @@ async fn test_workspace_submit_multiple_changes() {
         .await
         .expect("Failed to list changes");
     
-    let result = response.require_result_str("List result");
+    let result = response.require_result_list("List result");
+    assert_eq!(result.len(), 3, "Should return 3 changes");
     
     // Verify all 3 changes are present
+    let change_maps: Vec<_> = result.iter()
+        .filter_map(|v| v.as_object())
+        .collect();
+    
     for (i, change_id) in change_ids.iter().enumerate() {
-        assert!(result.contains(change_id), "Should contain change {} ID", i + 1);
-        assert!(result.contains(&format!("multi_change_{}", i + 1)), 
-                "Should contain change {} name", i + 1);
+        let found = change_maps.iter().any(|m| 
+            m.get("id").and_then(|v| v.as_str()) == Some(change_id.as_str())
+        );
+        assert!(found, "Should contain change {} ID", i + 1);
+        
+        let name = format!("multi_change_{}", i + 1);
+        let found_name = change_maps.iter().any(|m| 
+            m.get("name").and_then(|v| v.as_str()) == Some(name.as_str())
+        );
+        assert!(found_name, "Should contain change {} name", i + 1);
     }
     
-    assert!(result.contains("Total: 3 changes"), "Should show 3 total changes");
     println!("✅ All 3 changes listed correctly");
     
     // Verify via database
@@ -381,17 +403,36 @@ async fn test_workspace_change_with_objects() {
         .await
         .expect("Failed to list changes");
     
-    let result = response.require_result_str("List result");
+    let result = response.require_result_list("List result");
+    assert_eq!(result.len(), 1, "Should return 1 change");
+    
+    let change_map = result[0].as_object().expect("Change should be a map");
     
     // Verify change details
-    assert!(result.contains("complex_change"), "Should contain change name");
-    assert!(result.contains("complex_author"), "Should contain author");
-    assert!(result.contains("A change with multiple object operations"), "Should contain description");
-    assert!(result.contains("2 added"), "Should show 2 added objects");
-    assert!(result.contains("1 modified"), "Should show 1 modified object");
-    assert!(result.contains("1 deleted"), "Should show 1 deleted object");
-    assert!(result.contains("4 total"), "Should show 4 total objects");
-    assert!(result.contains("base_change_123"), "Should show base change ID");
+    assert_eq!(change_map.get("name").and_then(|v| v.as_str()), Some("complex_change"), "Should contain change name");
+    assert_eq!(change_map.get("author").and_then(|v| v.as_str()), Some("complex_author"), "Should contain author");
+    assert_eq!(change_map.get("description").and_then(|v| v.as_str()), Some("A change with multiple object operations"), "Should contain description");
+    assert_eq!(change_map.get("based_on").and_then(|v| v.as_str()), Some("base_change_123"), "Should show base change ID");
+    
+    // Verify changes map
+    let changes_map = change_map.get("changes")
+        .and_then(|v| v.as_object())
+        .expect("Should have changes map");
+    
+    let added = changes_map.get("objects_added")
+        .and_then(|v| v.as_array())
+        .expect("Should have objects_added list");
+    assert_eq!(added.len(), 2, "Should show 2 added objects");
+    
+    let modified = changes_map.get("objects_modified")
+        .and_then(|v| v.as_array())
+        .expect("Should have objects_modified list");
+    assert_eq!(modified.len(), 1, "Should show 1 modified object");
+    
+    let deleted = changes_map.get("objects_deleted")
+        .and_then(|v| v.as_array())
+        .expect("Should have objects_deleted list");
+    assert_eq!(deleted.len(), 1, "Should show 1 deleted object");
     
     println!("✅ All object details displayed correctly");
     
@@ -399,11 +440,11 @@ async fn test_workspace_change_with_objects() {
 }
 
 #[tokio::test]
-async fn test_workspace_list_formatting() {
+async fn test_workspace_list_structure() {
     let server = TestServer::start().await.expect("Failed to start test server");
     let client = server.client();
     
-    println!("Test: Verify workspace list output formatting");
+    println!("Test: Verify workspace list data structure");
     
     // Submit changes with different statuses
     println!("\nSubmitting changes...");
@@ -436,7 +477,7 @@ async fn test_workspace_list_formatting() {
         index_change_id: None,
     };
     
-    for change in [review_change, idle_change] {
+    for change in [review_change.clone(), idle_change.clone()] {
         let change_json = serde_json::to_string(&change).unwrap();
         client.workspace_submit(&change_json)
             .await
@@ -445,30 +486,51 @@ async fn test_workspace_list_formatting() {
     
     println!("✅ Submitted changes");
     
-    // List and verify formatting
-    println!("\nListing and checking format...");
+    // List and verify structure
+    println!("\nListing and checking structure...");
     let response = client.workspace_list(None)
         .await
         .expect("Failed to list changes");
     
-    let result = response.require_result_str("List result");
+    let result = response.require_result_list("List result");
+    assert_eq!(result.len(), 2, "Should return 2 changes");
     
-    // Check for expected formatting elements
-    assert!(result.contains("Workspace Changes"), "Should have header");
-    assert!(result.contains("="), "Should have separator line");
-    assert!(result.contains("Review Changes"), "Should have Review section");
-    assert!(result.contains("Idle Changes"), "Should have Idle section");
-    assert!(result.contains("Total: 2 changes"), "Should have total count");
-    assert!(result.contains("ID:"), "Should have ID labels");
-    assert!(result.contains("Name:"), "Should have Name labels");
-    assert!(result.contains("Author:"), "Should have Author labels");
-    assert!(result.contains("Created:"), "Should have timestamp");
-    assert!(result.contains("Objects:"), "Should have object counts");
+    // Check structure of each change
+    for (i, change_var) in result.iter().enumerate() {
+        let change_map = change_var.as_object().expect(&format!("Change {} should be a map", i));
+        
+        // Verify required fields exist
+        assert!(change_map.contains_key("id"), "Change {} should have id", i);
+        assert!(change_map.contains_key("short_id"), "Change {} should have short_id", i);
+        assert!(change_map.contains_key("name"), "Change {} should have name", i);
+        assert!(change_map.contains_key("author"), "Change {} should have author", i);
+        assert!(change_map.contains_key("timestamp"), "Change {} should have timestamp", i);
+        assert!(change_map.contains_key("status"), "Change {} should have status", i);
+        assert!(change_map.contains_key("changes"), "Change {} should have changes map", i);
+        
+        // Verify changes map structure
+        let changes_map = change_map.get("changes")
+            .and_then(|v| v.as_object())
+            .expect(&format!("Change {} should have changes map", i));
+        
+        assert!(changes_map.contains_key("objects_added"), "Changes should have objects_added");
+        assert!(changes_map.contains_key("objects_modified"), "Changes should have objects_modified");
+        assert!(changes_map.contains_key("objects_deleted"), "Changes should have objects_deleted");
+        assert!(changes_map.contains_key("objects_renamed"), "Changes should have objects_renamed");
+        
+        println!("✅ Change {} has correct structure", i);
+    }
     
-    println!("✅ Formatting elements present");
-    println!("\nFormatted output:\n{}", result);
+    // Verify one has description and one doesn't
+    let with_desc = result.iter()
+        .filter_map(|v| v.as_object())
+        .filter(|m| m.contains_key("description"))
+        .count();
+    assert_eq!(with_desc, 1, "Exactly one change should have description");
     
-    println!("\n✅ Test passed: List formatting is correct");
+    println!("✅ Data structure verified");
+    
+    println!("\n✅ Test passed: List structure is correct");
 }
 
 #[tokio::test]
@@ -524,8 +586,15 @@ async fn test_workspace_operations_persistence() {
             .await
             .expect(&format!("Failed to list changes (iteration {})", i));
         
-        let result = response.require_result_str("List result");
-        assert!(result.contains(&change_id), "Should contain change ID (iteration {})", i);
+        let result = response.require_result_list("List result");
+        assert_eq!(result.len(), 1, "Should return 1 change (iteration {})", i);
+        
+        let change_map = result[0].as_object().expect("Change should be a map");
+        assert_eq!(
+            change_map.get("id").and_then(|v| v.as_str()), 
+            Some(change_id.as_str()), 
+            "Should contain change ID (iteration {})", i
+        );
         println!("✅ List iteration {} successful", i);
     }
     

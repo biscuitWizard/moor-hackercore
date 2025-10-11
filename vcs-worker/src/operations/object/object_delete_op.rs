@@ -7,6 +7,7 @@ use crate::types::{ObjectsTreeError, User, VcsObjectType};
 use crate::providers::index::IndexProvider;
 use crate::providers::refs::RefsProvider;
 use crate::types::ObjectDeleteRequest;
+use moor_var::{v_error, E_INVARG};
 
 /// Object delete operation that marks an object for deletion within the current change
 #[derive(Clone)]
@@ -211,23 +212,23 @@ impl Operation for ObjectDeleteOperation {
         use crate::operations::OperationResponse;
         vec![
             OperationResponse::success(
-                "Operation executed successfully",
-                r#""Object '$player' deletion queued successfully""#
+                "Operation executed successfully - Object deletion queued",
+                r#""Object '$player' deletion queued successfully in change 'local'""#
             ),
             OperationResponse::new(
                 400,
-                "Bad Request - Invalid arguments",
-                r#""Error: Invalid object operation arguments""#
+                "Bad Request - Missing required argument",
+                r#"E_INVARG("Object name is required")"#
             ),
             OperationResponse::new(
                 404,
-                "Not Found - Object not found",
-                r#""Error: Object not found or has been deleted""#
+                "Not Found - Object does not exist",
+                r#"E_INVARG("Object '$nonexistent' not found")"#
             ),
             OperationResponse::new(
                 500,
-                "Internal Server Error - Database or system error",
-                r#""Error: Database error: operation failed""#
+                "Internal Server Error - Database or serialization error",
+                r#"E_INVARG("Database error: failed to update change")"#
             ),
         ]
     }
@@ -237,7 +238,7 @@ impl Operation for ObjectDeleteOperation {
         
         if args.len() < 1 {
             error!("Object delete operation requires object name");
-            return moor_var::v_str("Error: Object name is required");
+            return v_error(E_INVARG.msg("Object name is required"));
         }
 
         let object_name = args[0].clone();
@@ -253,7 +254,7 @@ impl Operation for ObjectDeleteOperation {
             }
             Err(e) => {
                 error!("Object delete operation failed: {}", e);
-                moor_var::v_str(&format!("Error: {e}"))
+                v_error(E_INVARG.msg(&format!("{e}")))
             }
         }
     }

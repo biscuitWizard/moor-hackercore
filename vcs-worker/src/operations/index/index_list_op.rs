@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::database::{DatabaseRef, ObjectsTreeError};
 use crate::types::User;
 use crate::providers::index::IndexProvider;
+use moor_var::{v_error, E_INVARG};
 
 /// Request structure for index list operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -135,23 +136,17 @@ impl Operation for IndexListOperation {
         use crate::operations::OperationResponse;
         vec![
             OperationResponse::success(
-                "Operation executed successfully",
-                r#""Operation completed successfully""#
+                "Operation executed successfully - returns list of changes",
+                r#"{[change_id -> "abc123def456...", short_id -> "abc123", message -> "Fixed login bug", name -> "fix-login", timestamp -> 1697020800, author -> "developer", status -> "merged"], [change_id -> "def456ghi789...", short_id -> "def456", message -> "Added new feature", name -> "new-feature", timestamp -> 1697107200, author -> "developer", status -> "local"]}"#
             ),
-            OperationResponse::new(
-                400,
-                "Bad Request - Invalid arguments",
-                r#""Error: Invalid operation arguments""#
-            ),
-            OperationResponse::new(
-                404,
-                "Not Found - Resource not found",
-                r#""Error: Resource not found""#
+            OperationResponse::success(
+                "Empty result - page beyond available changes",
+                r#"{}"#
             ),
             OperationResponse::new(
                 500,
-                "Internal Server Error - Database or system error",
-                r#""Error: Database error: operation failed""#
+                "Internal Server Error - Database error retrieving changes",
+                r#"E_INVARG("Database error: failed to retrieve change order")"#
             ),
         ]
     }
@@ -190,7 +185,7 @@ impl Operation for IndexListOperation {
             }
             Err(e) => {
                 error!("Index list operation failed: {}", e);
-                moor_var::v_str(&format!("Error: {e}"))
+                v_error(E_INVARG.msg(&format!("{e}")))
             }
         }
     }

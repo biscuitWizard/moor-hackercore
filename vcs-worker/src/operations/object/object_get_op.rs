@@ -11,6 +11,7 @@ use crate::providers::refs::RefsProvider;
 use crate::types::{User, VcsObjectType};
 use moor_compiler::{compile_object_definitions, ObjFileContext, CompileOptions};
 use moor_objdef::dump_object;
+use moor_var::{v_error, E_INVARG};
 
 /// Request structure for object get operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -188,29 +189,34 @@ impl Operation for ObjectGetOperation {
         vec![
             OperationResponse::success(
                 "Operation executed successfully",
-                r#"obj $player
+                r#""obj $player
 parent #1
-name "Player Object"
+name \"Player Object\"
 owner #2
-property description "A player object"
-verb "look" this none this
-  player:tell("You look at ", this.name);
-end"#
+property description \"A player object\"
+verb \"look\" this none this
+  player:tell(\"You look at \", this.name);
+end""#
             ),
             OperationResponse::new(
                 400,
-                "Bad Request - Invalid object name",
-                r#""Error: Object name is required""#
+                "Bad Request - Object name is required",
+                r#"E_INVARG("Object name is required")"#
             ),
             OperationResponse::new(
                 404,
                 "Not Found - Object not found or has been deleted",
-                r#""Error: Object 'object_name' not found or has been deleted""#
+                r#"E_INVARG("Object '$player' not found")"#
             ),
             OperationResponse::new(
                 500,
-                "Internal Server Error - Failed to retrieve or parse object",
-                r#""Error: Failed to parse object: compilation error""#
+                "Internal Server Error - Object content not found",
+                r#"E_INVARG("Object '$player' content not found")"#
+            ),
+            OperationResponse::new(
+                500,
+                "Internal Server Error - Failed to parse object",
+                r#"E_INVARG("Failed to parse object: compilation error")"#
             ),
         ]
     }
@@ -221,7 +227,7 @@ end"#
         
         if args.is_empty() {
             error!("Object get operation requires object name");
-            return moor_var::v_str("Error: Object name is required");
+            return v_error(E_INVARG.msg("Object name is required"));
         }
 
         let object_name = args[0].clone();
@@ -237,7 +243,7 @@ end"#
             }
             Err(e) => {
                 error!("Object get operation failed: {}", e);
-                moor_var::v_str(&format!("Error: {e}"))
+                v_error(E_INVARG.msg(&format!("{e}")))
             }
         }
     }

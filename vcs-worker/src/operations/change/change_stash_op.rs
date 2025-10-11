@@ -151,12 +151,12 @@ worker_request("vcs", {"change/switch", stashed_id});"#.to_string(),
             OperationResponse::new(
                 404,
                 "Not Found - No change to stash",
-                r#""Error: No change to stash""#
+                r#"E_INVARG("Error: No change to stash")"#
             ),
             OperationResponse::new(
                 500,
                 "Internal Server Error - Database or system error",
-                r#""Error: Database error: failed to stash change""#
+                r#"E_INVARG("Error: Database error: failed to stash change")"#
             ),
         ]
     }
