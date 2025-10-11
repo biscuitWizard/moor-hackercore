@@ -18,6 +18,7 @@ mod workspace_approve_tests;
 mod clone_tests;
 mod index_update_tests;
 mod change_switch_tests;
+mod system_status_tests;
 
 // Future test modules:
 

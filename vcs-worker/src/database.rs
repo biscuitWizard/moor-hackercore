@@ -43,6 +43,9 @@ pub struct Database {
     
     #[allow(dead_code)]
     flush_sender: mpsc::UnboundedSender<()>,
+    
+    // Store the database path for partition size calculations
+    db_path: std::path::PathBuf,
 }
 
 impl Database {
@@ -133,6 +136,7 @@ impl Database {
             user_provider,
             workspace_provider,
             flush_sender,
+            db_path: config.db_path.clone(),
         })
     }
 
@@ -159,6 +163,11 @@ impl Database {
     /// Get direct access to the workspace provider
     pub fn workspace(&self) -> &Arc<WorkspaceProviderImpl> {
         &self.workspace_provider
+    }
+    
+    /// Get the database path
+    pub fn db_path(&self) -> &std::path::Path {
+        &self.db_path
     }
 }
 
