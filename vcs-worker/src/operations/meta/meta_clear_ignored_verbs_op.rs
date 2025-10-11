@@ -63,7 +63,7 @@ impl Operation for MetaClearIgnoredVerbsOperation {
     fn routes(&self) -> Vec<OperationRoute> {
         vec![
             OperationRoute {
-                path: "/meta/clear_ignored_verbs".to_string(),
+                path: "/api/meta/clear_ignored_verbs".to_string(),
                 method: Method::POST,
                 is_json: true,
             },
