@@ -6,6 +6,9 @@
 ![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge&logo=docker)
 ![Rust](https://img.shields.io/badge/Powered%20by-Rust-orange?style=for-the-badge&logo=rust)
 
+[![CI](https://github.com/biscuitWizard/moor-hackercore/actions/workflows/ci.yml/badge.svg)](https://github.com/biscuitWizard/moor-hackercore/actions/workflows/ci.yml)
+[![Coverage Status](https://coveralls.io/repos/github/biscuitWizard/moor-hackercore/badge.svg?branch=main)](https://coveralls.io/github/biscuitWizard/moor-hackercore?branch=main)
+
 *A modern MUD (Multi-User Dungeon) Core built with mooR - the next generation MOO server*
 
 </div>
