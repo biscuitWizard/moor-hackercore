@@ -385,3 +385,181 @@ async fn test_clone_only_exports_merged_changes() {
     println!("\n✅ Test passed: Clone only exports merged changes");
 }
 
+#[tokio::test]
+async fn test_clone_import_when_already_cloned() {
+    let source_server = TestServer::start().await.expect("Failed to start source server");
+    let target_server = TestServer::start().await.expect("Failed to start target server");
+    
+    let source_client = source_server.client();
+    let source_db = source_server.db_assertions();
+    let target_client = target_server.client();
+    
+    println!("Test: Clone import when already cloned should handle gracefully");
+    
+    // Step 1: Create state on source
+    println!("\nStep 1: Creating state on source...");
+    source_client.change_create("source_change", "test_author", Some("Source"))
+        .await
+        .expect("Failed to create change");
+    
+    source_client.object_update_from_file("source_obj", "test_object.moo")
+        .await
+        .expect("Failed to update object");
+    
+    let (source_change_id, _) = source_db.require_top_change();
+    source_client.change_approve(&source_change_id)
+        .await
+        .expect("Failed to approve")
+        .assert_success("Approve");
+    
+    println!("✅ Source has 1 merged change");
+    
+    // Step 2: Clone from source to target (first time)
+    println!("\nStep 2: First clone...");
+    let source_url = format!("{}/api/clone", source_server.base_url());
+    
+    target_client.clone_import(&source_url)
+        .await
+        .expect("Failed to clone")
+        .assert_success("Clone");
+    
+    println!("✅ First clone successful");
+    
+    // Step 3: Verify source is set
+    let source_after_first = target_server.database().index().get_source()
+        .expect("Failed to get source")
+        .expect("Source should be set");
+    
+    let expected_base_url = source_url.trim_end_matches("/api/clone");
+    assert_eq!(source_after_first, expected_base_url, "Source should be set");
+    
+    // Step 4: Try to clone again (should handle gracefully)
+    println!("\nStep 4: Attempting second clone...");
+    let second_clone_response = target_client.clone_import(&source_url)
+        .await
+        .expect("Request should complete");
+    
+    println!("Second clone response: {:?}", second_clone_response);
+    
+    // Should either succeed (overwrite) or fail gracefully
+    // Check if it contains an error or succeeds
+    let result_str = second_clone_response.get_result_str().unwrap_or("");
+    if result_str.contains("Error") {
+        println!("✅ Second clone rejected with: {}", result_str);
+    } else {
+        println!("✅ Second clone succeeded (overwrite behavior)");
+    }
+    
+    println!("\n✅ Test passed: Clone import when already cloned handles gracefully");
+}
+
+#[tokio::test]
+async fn test_clone_import_with_invalid_url_format() {
+    let target_server = TestServer::start().await.expect("Failed to start target server");
+    let target_client = target_server.client();
+    
+    println!("Test: Clone import with invalid URL format should fail gracefully");
+    
+    let invalid_urls = vec![
+        "not-a-url",
+        "ftp://invalid-protocol.com",
+        "http://",
+        "",
+        "   ",
+    ];
+    
+    for invalid_url in invalid_urls {
+        println!("\nTesting invalid URL: '{}'", invalid_url);
+        let response = target_client.clone_import(invalid_url)
+            .await
+            .expect("Request should complete");
+        
+        // Should fail with error
+        let result_str = response.get_result_str().unwrap_or("");
+        assert!(result_str.contains("Error") || result_str.contains("failed") || result_str.contains("invalid"), 
+                "Should indicate error for '{}', got: {}", invalid_url, result_str);
+        println!("✅ Failed appropriately: {}", result_str);
+    }
+    
+    println!("\n✅ Test passed: Clone import handles invalid URLs gracefully");
+}
+
+#[tokio::test]
+async fn test_clone_import_with_unreachable_url() {
+    let target_server = TestServer::start().await.expect("Failed to start target server");
+    let target_client = target_server.client();
+    
+    println!("Test: Clone import with unreachable URL should handle network errors gracefully");
+    
+    // Use a URL that should be unreachable
+    let unreachable_url = "http://localhost:99999/api/clone";
+    
+    println!("\nAttempting to clone from unreachable URL: {}", unreachable_url);
+    let response = target_client.clone_import(unreachable_url)
+        .await
+        .expect("Request should complete");
+    
+    // Should fail with network error
+    let result_str = response.get_result_str().unwrap_or("");
+    assert!(result_str.contains("Error") || result_str.contains("failed") || result_str.contains("connection"), 
+            "Should indicate network error, got: {}", result_str);
+    println!("✅ Network error handled gracefully: {}", result_str);
+    
+    println!("\n✅ Test passed: Clone handles unreachable URLs gracefully");
+}
+
+#[tokio::test]
+async fn test_clone_export_then_import_to_same_repo() {
+    let server = TestServer::start().await.expect("Failed to start test server");
+    let client = server.client();
+    let db = server.db_assertions();
+    
+    println!("Test: Clone export then import to same repo should be detected");
+    
+    // Step 1: Create state
+    println!("\nStep 1: Creating state...");
+    client.change_create("test_change", "test_author", Some("Test"))
+        .await
+        .expect("Failed to create change");
+    
+    client.object_update_from_file("test_obj", "test_object.moo")
+        .await
+        .expect("Failed to update object");
+    
+    let (change_id, _) = db.require_top_change();
+    client.change_approve(&change_id)
+        .await
+        .expect("Failed to approve")
+        .assert_success("Approve");
+    
+    println!("✅ State created");
+    
+    // Step 2: Export
+    println!("\nStep 2: Exporting...");
+    let export_response = client.clone_export()
+        .await
+        .expect("Failed to export");
+    export_response.assert_success("Export");
+    println!("✅ Export successful");
+    
+    // Step 3: Try to import to same repo
+    println!("\nStep 3: Attempting to import to same repo...");
+    let self_url = format!("{}/api/clone", server.base_url());
+    let import_response = client.clone_import(&self_url)
+        .await
+        .expect("Request should complete");
+    
+    println!("Import response: {:?}", import_response);
+    
+    // This might succeed (self-clone) or fail - both are acceptable
+    // Just verify it doesn't crash
+    let result_str = import_response.get_result_str().unwrap_or("");
+    if result_str.contains("Error") {
+        println!("✅ Self-clone rejected: {}", result_str);
+    } else {
+        println!("✅ Self-clone succeeded (creates source reference)");
+    }
+    
+    println!("\n✅ Test passed: Clone to same repo handled");
+}
+

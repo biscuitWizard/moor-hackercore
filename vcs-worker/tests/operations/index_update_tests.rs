@@ -485,3 +485,123 @@ async fn test_update_and_calc_delta_integration() {
     println!("\n✅ Test passed: Update and calc_delta work together correctly");
 }
 
+#[tokio::test]
+async fn test_calc_delta_with_non_existent_change_id() {
+    let source_server = TestServer::start().await.expect("Failed to start source server");
+    let source_client = source_server.client();
+    
+    println!("Test: calc_delta with non-existent change ID should fail");
+    
+    // Attempt calc_delta with non-existent change ID
+    println!("\nAttempting calc_delta with non-existent change ID...");
+    let response = source_client.index_calc_delta("non_existent_change_id")
+        .await
+        .expect("Request should complete");
+    
+    // Should fail with error
+    let result_str = response.get_result_str().unwrap_or("");
+    assert!(result_str.contains("Error") || result_str.contains("not found") || result_str.contains("does not exist"), 
+            "Should indicate change not found, got: {}", result_str);
+    println!("✅ calc_delta failed with appropriate error: {}", result_str);
+    
+    println!("\n✅ Test passed: calc_delta fails with non-existent change ID");
+}
+
+#[tokio::test]
+async fn test_calc_delta_with_empty_change_id() {
+    let source_server = TestServer::start().await.expect("Failed to start source server");
+    let source_client = source_server.client();
+    
+    println!("Test: calc_delta with empty change ID should fail");
+    
+    // Attempt calc_delta with empty change ID
+    println!("\nAttempting calc_delta with empty change ID...");
+    let response = source_client.index_calc_delta("")
+        .await
+        .expect("Request should complete");
+    
+    // Should fail with error
+    let result_str = response.get_result_str().unwrap_or("");
+    assert!(result_str.contains("Error") || result_str.contains("required") || result_str.contains("not found"), 
+            "Should indicate error, got: {}", result_str);
+    println!("✅ calc_delta failed with appropriate error: {}", result_str);
+    
+    println!("\n✅ Test passed: calc_delta fails with empty change ID");
+}
+
+#[tokio::test]
+async fn test_calc_delta_from_most_recent_returns_empty() {
+    let source_server = TestServer::start().await.expect("Failed to start source server");
+    let source_client = source_server.client();
+    let source_db = source_server.db_assertions();
+    
+    println!("Test: calc_delta from most recent change should return empty delta");
+    
+    // Step 1: Create and approve a change
+    println!("\nStep 1: Creating and approving change...");
+    source_client.change_create("latest_change", "author", Some("Latest"))
+        .await
+        .expect("Failed to create change");
+    
+    source_client.object_update_from_file("obj_1", "test_object.moo")
+        .await
+        .expect("Failed to update object");
+    
+    let (change_id, _) = source_db.require_top_change();
+    source_client.change_approve(&change_id).await.expect("Failed to approve").assert_success("Approve");
+    
+    println!("✅ Change approved");
+    
+    // Step 2: Calc delta from this change (most recent)
+    println!("\nStep 2: Calculating delta from most recent change...");
+    let delta_response = source_client.index_calc_delta(&change_id)
+        .await
+        .expect("calc_delta should complete");
+    
+    delta_response.assert_success("calc_delta");
+    
+    // Step 3: Verify delta is empty
+    println!("\nStep 3: Verifying delta is empty...");
+    let result = &delta_response["result"];
+    
+    let change_ids = result.get("change_ids")
+        .and_then(|v| v.as_array())
+        .expect("Delta should have change_ids array");
+    
+    assert_eq!(change_ids.len(), 0, "Should have 0 changes after most recent");
+    println!("✅ Delta is empty");
+    
+    println!("\n✅ Test passed: calc_delta from most recent returns empty");
+}
+
+#[tokio::test]
+async fn test_calc_delta_with_malformed_change_id() {
+    let source_server = TestServer::start().await.expect("Failed to start source server");
+    let source_client = source_server.client();
+    
+    println!("Test: calc_delta with malformed change ID should fail gracefully");
+    
+    // Test with various malformed IDs
+    let malformed_ids = vec![
+        "not-a-uuid",
+        "12345",
+        "invalid@@@id",
+        "spaces in id",
+    ];
+    
+    for malformed_id in malformed_ids {
+        println!("\nTesting malformed ID: '{}'", malformed_id);
+        let response = source_client.index_calc_delta(malformed_id)
+            .await
+            .expect("Request should complete");
+        
+        // Should fail with error
+        let result_str = response.get_result_str().unwrap_or("");
+        assert!(result_str.contains("Error") || result_str.contains("not found") || result_str.contains("does not exist"), 
+                "Should indicate error for '{}', got: {}", malformed_id, result_str);
+        println!("✅ Failed appropriately: {}", result_str);
+    }
+    
+    println!("\n✅ Test passed: calc_delta handles malformed IDs gracefully");
+}
+

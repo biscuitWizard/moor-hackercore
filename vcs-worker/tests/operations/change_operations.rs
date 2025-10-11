@@ -861,3 +861,212 @@ async fn test_submit_on_remote_index_sends_to_workspace() {
     
     println!("\n✅ Test passed: Submit on remote index moves change to workspace with Review status");
 }
+
+#[tokio::test]
+async fn test_approve_non_existent_change() {
+    let server = TestServer::start().await.expect("Failed to start test server");
+    let client = server.client();
+    
+    println!("Test: Approving a non-existent change ID should fail");
+    
+    // Attempt to approve non-existent change
+    println!("\nAttempting to approve non-existent change...");
+    let response = client.change_approve("non_existent_change_id")
+        .await
+        .expect("Request should complete");
+    
+    // Should fail with error
+    let result_str = response.get_result_str().unwrap_or("");
+    assert!(result_str.contains("Error") || result_str.contains("not found"), 
+            "Should indicate change not found, got: {}", result_str);
+    println!("✅ Approve failed with appropriate error: {}", result_str);
+    
+    println!("\n✅ Test passed: Cannot approve non-existent change");
+}
+
+#[tokio::test]
+async fn test_approve_already_merged_change() {
+    let server = TestServer::start().await.expect("Failed to start test server");
+    let client = server.client();
+    let db = server.db_assertions();
+    
+    println!("Test: Approving an already merged change should be idempotent or fail gracefully");
+    
+    // Step 1: Create and approve a change
+    println!("\nStep 1: Creating and approving change...");
+    client.change_create("test_approve_merged", "test_author", None)
+        .await
+        .expect("Failed to create change");
+    
+    client.object_update_from_file("merged_obj", "test_object.moo")
+        .await
+        .expect("Failed to update object");
+    
+    let (change_id, _) = db.require_top_change();
+    
+    client.change_approve(&change_id)
+        .await
+        .expect("Failed to approve")
+        .assert_success("Approve");
+    
+    println!("✅ Change approved (merged)");
+    
+    // Step 2: Verify change is merged
+    let merged_change = server.database().index().get_change(&change_id)
+        .expect("Failed to get change")
+        .expect("Change should exist");
+    assert_eq!(merged_change.status, ChangeStatus::Merged, "Should be Merged");
+    
+    // Step 3: Try to approve again
+    println!("\nStep 3: Attempting to approve again...");
+    let response = client.change_approve(&change_id)
+        .await
+        .expect("Request should complete");
+    
+    println!("Second approve response: {:?}", response);
+    
+    // Should either be idempotent (succeed) or fail gracefully
+    let result_str = response.get_result_str().unwrap_or("");
+    if result_str.contains("Error") {
+        println!("✅ Second approve rejected: {}", result_str);
+    } else {
+        println!("✅ Second approve was idempotent");
+    }
+    
+    println!("\n✅ Test passed: Approve handles already merged change");
+}
+
+#[tokio::test]
+async fn test_approve_empty_change() {
+    let server = TestServer::start().await.expect("Failed to start test server");
+    let client = server.client();
+    let db = server.db_assertions();
+    
+    println!("Test: Approving an empty change with no objects should work");
+    
+    // Step 1: Create an empty change
+    println!("\nStep 1: Creating empty change...");
+    client.change_create("empty_change", "test_author", Some("Empty change"))
+        .await
+        .expect("Failed to create change")
+        .assert_success("Create change");
+    
+    let (change_id, change_before) = db.require_top_change();
+    assert_eq!(change_before.added_objects.len(), 0, "Should have no objects");
+    assert_eq!(change_before.status, ChangeStatus::Local, "Should be Local");
+    println!("✅ Empty change created");
+    
+    // Step 2: Approve the empty change
+    println!("\nStep 2: Approving empty change...");
+    let response = client.change_approve(&change_id)
+        .await
+        .expect("Request should complete");
+    
+    // Should succeed
+    response.assert_success("Approve empty change");
+    println!("✅ Empty change approved");
+    
+    // Step 3: Verify change is merged
+    println!("\nStep 3: Verifying change is merged...");
+    let merged_change = server.database().index().get_change(&change_id)
+        .expect("Failed to get change")
+        .expect("Change should exist");
+    
+    assert_eq!(merged_change.status, ChangeStatus::Merged, "Should be Merged");
+    assert_eq!(merged_change.added_objects.len(), 0, "Should still have no objects");
+    println!("✅ Empty change is merged");
+    
+    println!("\n✅ Test passed: Can approve empty change");
+}
+
+#[tokio::test]
+async fn test_approve_with_empty_change_id() {
+    let server = TestServer::start().await.expect("Failed to start test server");
+    let client = server.client();
+    
+    println!("Test: Approving with empty change ID should fail");
+    
+    // Attempt to approve with empty change ID
+    println!("\nAttempting to approve with empty change ID...");
+    let response = client.change_approve("")
+        .await
+        .expect("Request should complete");
+    
+    // Should fail with error
+    let result_str = response.get_result_str().unwrap_or("");
+    assert!(result_str.contains("Error") || result_str.contains("required") || result_str.contains("not found"), 
+            "Should indicate error, got: {}", result_str);
+    println!("✅ Approve failed with appropriate error: {}", result_str);
+    
+    println!("\n✅ Test passed: Cannot approve with empty change ID");
+}
+
+#[tokio::test]
+async fn test_abandon_when_no_change_exists() {
+    let server = TestServer::start().await.expect("Failed to start test server");
+    let client = server.client();
+    let db = server.db_assertions();
+    
+    println!("Test: Abandoning when no change exists should fail gracefully");
+    
+    // Step 1: Verify no change initially
+    println!("\nStep 1: Verifying no change initially...");
+    db.assert_no_top_change();
+    println!("✅ No change initially");
+    
+    // Step 2: Try to abandon
+    println!("\nStep 2: Attempting to abandon...");
+    let response = client.change_abandon()
+        .await
+        .expect("Request should complete");
+    
+    // Should fail gracefully
+    let result_str = response.get_result_str().unwrap_or("");
+    assert!(result_str.contains("Error") || result_str.contains("No change") || result_str.contains("not found"), 
+            "Should indicate no change to abandon, got: {}", result_str);
+    println!("✅ Abandon failed gracefully: {}", result_str);
+    
+    println!("\n✅ Test passed: Abandon fails gracefully when no change exists");
+}
+
+#[tokio::test]
+async fn test_abandon_multiple_times() {
+    let server = TestServer::start().await.expect("Failed to start test server");
+    let client = server.client();
+    let db = server.db_assertions();
+    
+    println!("Test: Abandoning multiple times should fail after first abandon");
+    
+    // Step 1: Create a change
+    println!("\nStep 1: Creating change...");
+    client.change_create("test_abandon", "test_author", None)
+        .await
+        .expect("Failed to create change");
+    
+    db.require_top_change();
+    println!("✅ Change created");
+    
+    // Step 2: Abandon the change
+    println!("\nStep 2: Abandoning change...");
+    client.change_abandon()
+        .await
+        .expect("Failed to abandon")
+        .assert_success("Abandon");
+    
+    db.assert_no_top_change();
+    println!("✅ Change abandoned");
+    
+    // Step 3: Try to abandon again
+    println!("\nStep 3: Attempting to abandon again...");
+    let response = client.change_abandon()
+        .await
+        .expect("Request should complete");
+    
+    // Should fail since no change to abandon
+    let result_str = response.get_result_str().unwrap_or("");
+    assert!(result_str.contains("Error") || result_str.contains("No change"), 
+            "Should indicate no change to abandon, got: {}", result_str);
+    println!("✅ Second abandon failed appropriately: {}", result_str);
+    
+    println!("\n✅ Test passed: Multiple abandons fail after first");
+}

@@ -6,6 +6,7 @@
 //! - index: Index operations (list, calc delta, update)
 //! - workspace: Workspace operations
 //! - meta: Meta operations (add/remove/clear ignored properties and verbs)
+//! - change_switch_tests: Tests for change/switch operation
 
 mod object;
 mod change_operations;
@@ -16,6 +17,7 @@ mod index_operations;
 mod workspace_approve_tests;
 mod clone_tests;
 mod index_update_tests;
+mod change_switch_tests;
 
 // Future test modules:
 
