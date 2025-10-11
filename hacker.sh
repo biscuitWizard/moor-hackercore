@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # hacker.sh - Docker Compose management script for hackercore
-# Usage: ./hacker.sh [start|stop|restart|status|clean|rebuild|clean-rebuild|logs|update]
+# Usage: ./hacker.sh [start|stop|restart|status|clean|rebuild|clean-rebuild|logs|deploy|update]
 
 set -e
 
@@ -421,6 +421,62 @@ follow_logs() {
     docker-compose logs -f moor-daemon
 }
 
+# Function to deploy and tag all images
+deploy_images() {
+    print_info "Building and tagging all Docker images for deployment..."
+    cd "$SCRIPT_DIR"
+    
+    # Initialize and fetch submodules before building
+    init_submodules
+    
+    # Define image tags
+    local BACKEND_TAG="hackercore-backend:latest"
+    local DOME_CLIENT_TAG="hackercore-dome-client:latest"
+    
+    print_info "Building backend image (moor services)..."
+    docker build \
+        --target backend \
+        --build-arg BUILD_PROFILE="${BUILD_PROFILE:-release}" \
+        -t "$BACKEND_TAG" \
+        -f Dockerfile \
+        .
+    
+    if [[ $? -eq 0 ]]; then
+        print_success "Backend image built and tagged: $BACKEND_TAG"
+    else
+        print_error "Failed to build backend image"
+        exit 1
+    fi
+    
+    print_info "Building dome-client image..."
+    docker build \
+        -t "$DOME_CLIENT_TAG" \
+        -f vendor/dome-client/Dockerfile \
+        vendor/dome-client
+    
+    if [[ $? -eq 0 ]]; then
+        print_success "Dome-client image built and tagged: $DOME_CLIENT_TAG"
+    else
+        print_error "Failed to build dome-client image"
+        exit 1
+    fi
+    
+    print_success "All images built and tagged successfully!"
+    echo
+    print_info "=== Container Tags ==="
+    echo "Backend Services (moor-daemon, moor-telnet-host, moor-curl-worker, moor-vcs-worker):"
+    echo "  $BACKEND_TAG"
+    echo
+    echo "Dome Client:"
+    echo "  $DOME_CLIENT_TAG"
+    echo
+    print_info "You can now push these images to a registry or use them locally."
+    print_info "To start services with these images, run: ./hacker.sh start"
+    
+    # Save git heads after successful deploy
+    save_git_heads
+}
+
 # Function to update a submodule to latest version
 update_submodule() {
     local submodule_path=${1:-"vendor/moor"}  # Default to vendor/moor for backward compatibility
@@ -537,6 +593,9 @@ main() {
         "logs")
             follow_logs
             ;;
+        "deploy")
+            deploy_images
+            ;;
         "update")
             local submodule_path=${2:-""}
             update_submodule "$submodule_path"
@@ -544,7 +603,7 @@ main() {
         "")
             print_error "No command specified."
             echo
-            echo "Usage: $0 [start|stop|restart|status|clean|rebuild|clean-rebuild|logs|update [submodule_path]]"
+            echo "Usage: $0 [start|stop|restart|status|clean|rebuild|clean-rebuild|logs|deploy|update [submodule_path]]"
             echo
             echo "Commands:"
             echo "  start        - Start all hackercore services (automatically follows logs)"
@@ -555,13 +614,14 @@ main() {
             echo "  rebuild      - Force rebuild all Docker images (no cache)"
             echo "  clean-rebuild - Clean everything and rebuild from scratch"
             echo "  logs         - Follow moor daemon logs"
+            echo "  deploy       - Build and tag all Docker images for deployment"
             echo "  update [path] - Update submodule to latest version (default: vendor/moor)"
             exit 1
             ;;
         *)
             print_error "Unknown command: $command"
             echo
-            echo "Usage: $0 [start|stop|restart|status|clean|rebuild|clean-rebuild|logs|update [submodule_path]]"
+            echo "Usage: $0 [start|stop|restart|status|clean|rebuild|clean-rebuild|logs|deploy|update [submodule_path]]"
             exit 1
             ;;
     esac
