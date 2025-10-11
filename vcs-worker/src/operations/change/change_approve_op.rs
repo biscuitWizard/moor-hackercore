@@ -23,7 +23,8 @@ impl ChangeApproveOperation {
 
     /// Process the change approve request
     fn process_change_approve(&self, request: ChangeApproveRequest, user: &User) -> Result<ObjectDiffModel, ObjectsTreeError> {
-        let change_id = request.change_id;
+        // Resolve short or full hash to full hash
+        let change_id = self.database.resolve_change_id(&request.change_id)?;
         
         // Check if user has permission to approve changes
         if !user.has_permission(&Permission::ApproveChanges) {

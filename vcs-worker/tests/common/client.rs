@@ -7,6 +7,7 @@
 
 use serde_json::Value;
 use crate::common::*;
+use moor_vcs_worker::operations::Operation;
 
 /// High-level test client for VCS worker operations
 pub struct VcsTestClient {
@@ -208,6 +209,26 @@ impl VcsTestClient {
         self.rpc_call("meta/clear_ignored_verbs", vec![
             Value::String(object_name.to_string()),
         ]).await
+    }
+    
+    // ==================== System Operations ====================
+    
+    /// Get system status
+    pub async fn status(&self) -> Result<moor_var::Var, Box<dyn std::error::Error>> {
+        // Call status operation directly through the database
+        if let Some(ref db) = self.database {
+            let status_op = moor_vcs_worker::operations::StatusOperation::new(db.clone());
+            let wizard_user = moor_vcs_worker::types::User::new_system_user(
+                "wizard".to_string(),
+                "wizard@localhost".to_string(),
+                moor_var::Obj::mk_id(0),
+            );
+            let result = status_op.execute(vec![], &wizard_user);
+            return Ok(result);
+        }
+        
+        // Fallback - shouldn't happen in tests
+        Err("No database available for status operation".into())
     }
     
     // ==================== Workspace Operations ====================

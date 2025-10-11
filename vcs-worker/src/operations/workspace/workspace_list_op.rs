@@ -93,7 +93,8 @@ impl WorkspaceListOperation {
             response.push('\n');
 
             for change in status_changes {
-                response.push_str(&format!("  ID: {}\n", change.id));
+                let short_id = crate::util::short_hash(&change.id);
+                response.push_str(&format!("  ID: {} ({})\n", change.id, short_id));
                 response.push_str(&format!("  Name: {}\n", change.name));
                 if let Some(desc) = &change.description {
                     response.push_str(&format!("  Description: {}\n", desc));

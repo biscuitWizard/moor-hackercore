@@ -76,10 +76,18 @@ impl StatusOperation {
             0i64
         };
         
+        // Get short IDs
+        let top_change_short_id = if !top_change_id.is_empty() {
+            crate::util::short_hash(&top_change_id)
+        } else {
+            String::new()
+        };
+        
         // Build the status map
         let status_map = moor_var::v_map(&[
             (moor_var::v_str("game_name"), game_name),
             (moor_var::v_str("top_change_id"), moor_var::v_str(&top_change_id)),
+            (moor_var::v_str("top_change_short_id"), moor_var::v_str(&top_change_short_id)),
             (moor_var::v_str("idle_changes"), moor_var::v_int(idle_changes_count)),
             (moor_var::v_str("pending_review"), moor_var::v_int(pending_review_count)),
             (moor_var::v_str("current_username"), current_username),
@@ -108,9 +116,11 @@ impl StatusOperation {
                 
                 // Check if it's merged (not local)
                 if change.status == ChangeStatus::Merged {
+                    let short_id = crate::util::short_hash(&change.id);
                     // Return a map with change details
                     return Ok(moor_var::v_map(&[
                         (moor_var::v_str("id"), moor_var::v_str(&change.id)),
+                        (moor_var::v_str("short_id"), moor_var::v_str(&short_id)),
                         (moor_var::v_str("author"), moor_var::v_str(&change.author)),
                         (moor_var::v_str("timestamp"), moor_var::v_int(change.timestamp as i64)),
                         (moor_var::v_str("message"), moor_var::v_str(change.description.as_deref().unwrap_or(""))),

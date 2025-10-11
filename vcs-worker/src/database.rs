@@ -12,6 +12,7 @@ use crate::providers::{
     RefsProviderImpl,
     index::IndexProvider,
     IndexProviderImpl,
+    workspace::WorkspaceProvider,
     UserProviderImpl,
     WorkspaceProviderImpl,
 };
@@ -190,6 +191,44 @@ impl Database {
             "index" => self.index_provider.get_index_data_size(),
             "changes" => self.index_provider.get_changes_data_size(),
             _ => 0,
+        }
+    }
+    
+    /// Resolve a possibly-short hash to a full hash by searching both index and workspace
+    /// Returns the full hash if found uniquely, error if ambiguous or not found
+    pub fn resolve_change_id(&self, short_or_full: &str) -> Result<String, ObjectsTreeError> {
+        // If it's already a full hash (64 chars for Blake3), return it
+        if short_or_full.len() == 64 {
+            return Ok(short_or_full.to_string());
+        }
+        
+        // Collect all change IDs from both index and workspace
+        let mut all_change_ids = Vec::new();
+        
+        // Get changes from index
+        if let Ok(change_order) = self.index_provider.get_change_order() {
+            all_change_ids.extend(change_order);
+        }
+        
+        // Get changes from workspace
+        if let Ok(workspace_changes) = self.workspace_provider.list_all_workspace_changes() {
+            all_change_ids.extend(workspace_changes.into_iter().map(|c| c.id));
+        }
+        
+        // Find matches
+        let matches: Vec<String> = all_change_ids
+            .into_iter()
+            .filter(|hash| hash.starts_with(short_or_full))
+            .collect();
+        
+        match matches.len() {
+            0 => Err(ObjectsTreeError::SerializationError(
+                format!("Change ID '{}' not found", short_or_full)
+            )),
+            1 => Ok(matches[0].clone()),
+            _ => Err(ObjectsTreeError::SerializationError(
+                format!("Ambiguous change ID prefix '{}' matches multiple changes. Please provide more characters.", short_or_full)
+            )),
         }
     }
 }

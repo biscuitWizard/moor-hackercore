@@ -69,8 +69,10 @@ impl IndexListOperation {
                 .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))? {
                 
                 // Create map representing the Change struct directly
+                let short_id = crate::util::short_hash(&change.id);
                 let change_map = moor_var::v_map(&[
                     (moor_var::v_str("change_id"), moor_var::v_str(&change.id)),
+                    (moor_var::v_str("short_id"), moor_var::v_str(&short_id)),
                     (moor_var::v_str("message"), moor_var::v_str(change.description.as_deref().unwrap_or(""))),
                     (moor_var::v_str("name"), moor_var::v_str(&change.name)),
                     (moor_var::v_str("timestamp"), moor_var::v_int(change.timestamp as i64)),

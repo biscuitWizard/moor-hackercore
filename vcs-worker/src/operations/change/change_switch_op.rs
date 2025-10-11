@@ -23,7 +23,8 @@ impl ChangeSwitchOperation {
 
     /// Process the change switch request
     fn process_change_switch(&self, request: ChangeSwitchRequest, _user: &User) -> Result<ObjectDiffModel, ObjectsTreeError> {
-        let target_change_id = request.change_id;
+        // Resolve short or full hash to full hash
+        let target_change_id = self.database.resolve_change_id(&request.change_id)?;
         
         info!("Attempting to switch to change: {}", target_change_id);
         

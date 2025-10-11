@@ -39,12 +39,20 @@ impl ChangeCreateOperation {
             }
         }
         
+        let timestamp = crate::util::current_unix_timestamp();
+        let change_id = crate::util::generate_change_id(
+            &request.name,
+            request.description.as_deref(),
+            &request.author,
+            timestamp,
+        );
+        
         let change = Change {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: change_id,
             name: request.name.clone(),
             description: request.description,
             author: request.author,
-            timestamp: crate::util::current_unix_timestamp(),
+            timestamp,
             status: ChangeStatus::Local,
             added_objects: Vec::new(),
             modified_objects: Vec::new(),

@@ -114,6 +114,7 @@ pub struct ChangeStatusRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChangeStatusResponse {
     pub change_id: Option<String>,
+    pub short_id: Option<String>,
     pub change_name: Option<String>,
     pub status: ChangeStatus,
 }

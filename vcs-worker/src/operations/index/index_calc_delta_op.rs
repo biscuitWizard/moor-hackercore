@@ -39,25 +39,28 @@ impl IndexCalcDeltaOperation {
     fn process_calc_delta(&self, request: IndexCalcDeltaRequest) -> Result<moor_var::Var, ObjectsTreeError> {
         info!("Processing index calc delta request for change_id: {}", request.change_id);
         
+        // Resolve short or full hash to full hash
+        let change_id = self.database.resolve_change_id(&request.change_id)?;
+        
         // Get the ordered list of change IDs from index
         let change_order = self.database.index().get_change_order()
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         
         // Find the position of the specified change in the chronological order
         let target_position = change_order.iter()
-            .position(|id| id == &request.change_id);
+            .position(|id| id == &change_id);
         
         let target_position = match target_position {
             Some(pos) => pos,
             None => {
-                error!("Change '{}' not found in index order", request.change_id);
+                error!("Change '{}' not found in index order", change_id);
                 return Err(ObjectsTreeError::SerializationError(
-                    format!("Error: Change '{}' does not exist in index", request.change_id)
+                    format!("Error: Change '{}' does not exist in index", change_id)
                 ));
             }
         };
         
-        info!("Found change '{}' at position {} in chronological order", request.change_id, target_position);
+        info!("Found change '{}' at position {} in chronological order", change_id, target_position);
         
         // Get all changes chronologically after the target change
         // Note: change_order is oldest first, so we want changes with indices > target_position
@@ -139,7 +142,7 @@ impl IndexCalcDeltaOperation {
             }
         }
         
-        info!("Successfully processed {} merged changes after '{}'", change_ids.len(), request.change_id);
+        info!("Successfully processed {} merged changes after '{}'", change_ids.len(), change_id);
         
         // Return the result as a map
         Ok(moor_var::v_map(&[

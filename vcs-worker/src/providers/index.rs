@@ -368,15 +368,25 @@ impl IndexProvider for IndexProviderImpl {
     }
     
     fn create_blank_change(&self, author: Option<String>) -> ProviderResult<crate::types::Change> {
+        let author_str = author.unwrap_or_else(|| "system".to_string());
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        
+        let change_id = crate::util::generate_change_id(
+            "", // Blank name
+            None,
+            &author_str,
+            timestamp,
+        );
+        
         let change = crate::types::Change {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: change_id,
             name: String::new(), // Blank name
             description: None,
-            author: author.unwrap_or_else(|| "system".to_string()),
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs(),
+            author: author_str,
+            timestamp,
             status: crate::types::ChangeStatus::Local,
             added_objects: Vec::new(),
             modified_objects: Vec::new(),
