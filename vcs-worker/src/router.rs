@@ -3,6 +3,7 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 use tracing::info;
 use utoipa::OpenApi;
+use serde_json;
 use utoipa::openapi::{
     PathsBuilder, InfoBuilder, ResponseBuilder, ContentBuilder, RefOr,
     path::{PathItemBuilder, OperationBuilder},
@@ -133,6 +134,49 @@ fn generate_openapi_spec(registry: &OperationRegistry) -> utoipa::openapi::OpenA
                 "system"
             };
             
+            // Build request body with parameter schema if operation has parameters
+            let mut request_body_builder = None;
+            
+            if let Some(op) = operation_opt.as_ref() {
+                let params = op.parameters();
+                if !params.is_empty() && method != "GET" {
+                    // Build a JSON schema example for the request body
+                    let mut example_obj = serde_json::Map::new();
+                    example_obj.insert("operation".to_string(), serde_json::json!(op_name));
+                    
+                    let mut args_example = Vec::new();
+                    for param in &params {
+                        if param.required {
+                            // Add a placeholder for required params
+                            args_example.push(format!("<{}>", param.name));
+                        }
+                    }
+                    example_obj.insert("args".to_string(), serde_json::json!(args_example));
+                    
+                    let example_json = serde_json::to_string_pretty(&example_obj).unwrap_or_default();
+                    
+                    request_body_builder = Some(
+                        RequestBodyBuilder::new()
+                            .description(Some(format!(
+                                "Request body with operation name and arguments.\n\nParameters:\n{}",
+                                params.iter()
+                                    .map(|p| format!("- **{}** {}: {}", 
+                                        p.name,
+                                        if p.required { "(required)" } else { "(optional)" },
+                                        p.description))
+                                    .collect::<Vec<_>>()
+                                    .join("\n")
+                            )))
+                            .content("application/json", ContentBuilder::new()
+                                .example(Some(serde_json::from_str(&example_json).unwrap_or(serde_json::json!({}))))
+                                .schema(Some(RefOr::Ref(utoipa::openapi::Ref::from_schema_name("HttpRequest"))))
+                                .build())
+                            .required(Some(utoipa::openapi::Required::True))
+                            .build()
+                    );
+                }
+            }
+            
             if let Some(op) = operation_opt {
                 // Add philosophy section
                 let philosophy = op.philosophy();
@@ -174,7 +218,7 @@ fn generate_openapi_spec(registry: &OperationRegistry) -> utoipa::openapi::OpenA
                 }
             }
             
-            let operation = OperationBuilder::new()
+            let mut operation_builder = OperationBuilder::new()
                 .tag(tag)
                 .operation_id(Some(op_name.replace("/", "_")))
                 .summary(Some(op_name.clone()))
@@ -184,8 +228,14 @@ fn generate_openapi_spec(registry: &OperationRegistry) -> utoipa::openapi::OpenA
                     .content("application/json", ContentBuilder::new()
                         .schema(Some(RefOr::Ref(utoipa::openapi::Ref::from_schema_name("OperationResponse"))))
                         .build())
-                    .build())
-                .build();
+                    .build());
+            
+            // Add request body if we have one
+            if let Some(request_body) = request_body_builder {
+                operation_builder = operation_builder.request_body(Some(request_body));
+            }
+            
+            let operation = operation_builder.build();
             
             let http_method = match method.as_str() {
                 "GET" => HttpMethod::Get,
