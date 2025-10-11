@@ -7,6 +7,7 @@ use crate::types::{User, CloneData, ObjectInfo};
 use crate::providers::refs::RefsProvider;
 use crate::providers::objects::ObjectsProvider;
 use crate::providers::index::IndexProvider;
+use moor_var::{v_error, E_INVARG};
 
 /// Clone operation that exports or imports repository state
 #[derive(Clone)]
@@ -345,23 +346,32 @@ impl Operation for CloneOperation {
         use crate::operations::OperationResponse;
         vec![
             OperationResponse::success(
-                "Operation executed successfully",
-                r#""Operation completed successfully""#
+                "Export - Returns complete repository state as JSON",
+                r#""{\"refs\":[[{\"object_type\":\"Verb\",\"name\":\"test:verb\",\"version\":1},\"abc123...\"]],\"objects\":{\"abc123...\":\"...object data...\"},\"changes\":[{\"id\":\"change1\",\"name\":\"Initial commit\",\"status\":\"Merged\",\"author\":\"user1\",\"timestamp\":1234567890,\"description\":\"First commit\",\"refs_snapshot\":{}}],\"change_order\":[\"change1\"],\"source\":null}""#
+            ),
+            OperationResponse::success(
+                "Import - Returns success message after importing from URL",
+                r#""Successfully cloned from http://source-server:8081/api/clone""#
+            ),
+            OperationResponse::new(
+                403,
+                "Forbidden - User lacks Clone permission",
+                r#"E_INVARG("You do not have permission to clone repositories")"#
             ),
             OperationResponse::new(
                 400,
-                "Bad Request - Invalid arguments",
-                r#""Error: Invalid operation arguments""#
-            ),
-            OperationResponse::new(
-                404,
-                "Not Found - Resource not found",
-                r#""Error: Resource not found""#
+                "Bad Request - Failed to serialize clone data during export",
+                r#"E_INVARG("Failed to serialize: invalid UTF-8 sequence")"#
             ),
             OperationResponse::new(
                 500,
-                "Internal Server Error - Database or system error",
-                r#""Error: Database error: operation failed""#
+                "Internal Server Error - Database error during export",
+                r#"E_INVARG("Database error: failed to read refs")"#
+            ),
+            OperationResponse::new(
+                500,
+                "Internal Server Error - Network or parsing error during import",
+                r#"E_INVARG("HTTP request failed: connection refused")"#
             ),
         ]
     }
@@ -372,7 +382,7 @@ impl Operation for CloneOperation {
         // Check if user has Clone permission
         if !user.has_permission(&crate::types::Permission::Clone) {
             error!("User {} does not have Clone permission", user.id);
-            return moor_var::v_str("Error: You do not have permission to clone repositories");
+            return v_error(E_INVARG.msg("You do not have permission to clone repositories"));
         }
         
         // If no URL provided, export state
@@ -386,13 +396,13 @@ impl Operation for CloneOperation {
                         }
                         Err(e) => {
                             error!("Failed to serialize clone data: {}", e);
-                            moor_var::v_str(&format!("Error: Failed to serialize: {}", e))
+                            v_error(E_INVARG.msg(&format!("Failed to serialize: {}", e)))
                         }
                     }
                 }
                 Err(e) => {
                     error!("Failed to export repository state: {}", e);
-                    moor_var::v_str(&format!("Error: {}", e))
+                    v_error(E_INVARG.msg(&format!("{}", e)))
                 }
             }
         } else {
@@ -414,7 +424,7 @@ impl Operation for CloneOperation {
                 }
                 Err(e) => {
                     error!("Clone operation failed: {}", e);
-                    moor_var::v_str(&format!("Error: {}", e))
+                    v_error(E_INVARG.msg(&format!("{}", e)))
                 }
             }
         }
