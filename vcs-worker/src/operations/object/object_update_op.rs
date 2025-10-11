@@ -31,11 +31,11 @@ impl ObjectUpdateOperation {
     }
 
     /// Parse and process the object update request
-    fn process_object_update(&self, request: ObjectUpdateRequest) -> Result<String, ObjectsTreeError> {
+    fn process_object_update(&self, request: ObjectUpdateRequest, author: Option<String>) -> Result<String, ObjectsTreeError> {
         info!("Processing object update for '{}' with {} var(s)", request.object_name, request.vars.len());
         
         // Get or create a local change using the index
-        let mut current_change = self.database.index().get_or_create_local_change()
+        let mut current_change = self.database.index().get_or_create_local_change(author)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         
         // The index already manages the current change, so we don't need repository management
@@ -311,7 +311,7 @@ result = worker_request("vcs", {"object/update", "$my_new_object", new_obj});
         ]
     }
     
-    fn execute(&self, args: Vec<String>, _user: &User) -> moor_var::Var {
+    fn execute(&self, args: Vec<String>, user: &User) -> moor_var::Var {
         // For RPC calls, we expect the args to contain:
         // args[0] = object_name
         // args[1..] = the var strings (either JSON encoded or individual strings)
@@ -353,7 +353,7 @@ result = worker_request("vcs", {"object/update", "$my_new_object", new_obj});
             vars,
         };
 
-        match self.process_object_update(request) {
+        match self.process_object_update(request, Some(user.id.clone())) {
             Ok(result) => {
                 info!("Object update operation completed successfully");
                 moor_var::v_str(&result)

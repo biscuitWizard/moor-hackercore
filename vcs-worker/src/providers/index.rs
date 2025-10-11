@@ -50,7 +50,7 @@ pub trait IndexProvider: Send + Sync {
     fn delete_change(&self, change_id: &str) -> ProviderResult<()>;
     
     /// Create a blank change automatically
-    fn create_blank_change(&self) -> ProviderResult<crate::types::Change>;
+    fn create_blank_change(&self, author: Option<String>) -> ProviderResult<crate::types::Change>;
     
     /// List all changes (optional/for debugging)
     #[allow(dead_code)]
@@ -58,7 +58,7 @@ pub trait IndexProvider: Send + Sync {
     
     // ===== COMBINED METHODS =====
     /// Get or create a local change - uses internal change storage now
-    fn get_or_create_local_change(&self) -> ProviderResult<crate::types::Change>;
+    fn get_or_create_local_change(&self, author: Option<String>) -> ProviderResult<crate::types::Change>;
     
     /// Resolve the current state of an object considering the top change in the index.
     fn resolve_object_current_state<F>(&self, object_name: &str, get_sha256: F) -> ProviderResult<Option<String>>
@@ -360,12 +360,12 @@ impl IndexProvider for IndexProviderImpl {
         Ok(())
     }
     
-    fn create_blank_change(&self) -> ProviderResult<crate::types::Change> {
+    fn create_blank_change(&self, author: Option<String>) -> ProviderResult<crate::types::Change> {
         let change = crate::types::Change {
             id: uuid::Uuid::new_v4().to_string(),
             name: String::new(), // Blank name
             description: None,
-            author: "system".to_string(),
+            author: author.unwrap_or_else(|| "system".to_string()),
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
@@ -379,7 +379,7 @@ impl IndexProvider for IndexProviderImpl {
         };
         
         self.store_change(&change)?;
-        info!("Created blank change '{}'", change.id);
+        info!("Created blank change '{}' with author '{}'", change.id, change.author);
         Ok(change)
     }
     
@@ -399,7 +399,7 @@ impl IndexProvider for IndexProviderImpl {
     }
     
     // ===== UPDATED COMBINED METHODS =====
-    fn get_or_create_local_change(&self) -> ProviderResult<crate::types::Change> {
+    fn get_or_create_local_change(&self, author: Option<String>) -> ProviderResult<crate::types::Change> {
         // Check if we have a top change and if it's local
         if let Some(top_change_id) = self.get_top_change()? {
             if let Some(change) = self.get_change(&top_change_id)? {
@@ -417,7 +417,7 @@ impl IndexProvider for IndexProviderImpl {
         }
         
         // Create new local change and set it as top
-        let new_change = self.create_blank_change()?;
+        let new_change = self.create_blank_change(author)?;
         self.push_change(&new_change.id)?;
         info!("Created and set new local change '{}' ({})", new_change.name, new_change.id);
         Ok(new_change)

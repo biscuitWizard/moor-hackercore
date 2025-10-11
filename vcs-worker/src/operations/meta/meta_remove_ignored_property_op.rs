@@ -20,14 +20,14 @@ impl MetaRemoveIgnoredPropertyOperation {
     }
 
     /// Parse and process the meta remove ignored property request
-    fn process_meta_remove_ignored_property(&self, request: MetaRemoveIgnoredPropertyRequest) -> Result<String, ObjectsTreeError> {
+    fn process_meta_remove_ignored_property(&self, request: MetaRemoveIgnoredPropertyRequest, author: Option<String>) -> Result<String, ObjectsTreeError> {
         info!("Processing meta remove ignored property for '{}', property '{}'", request.object_name, request.property_name);
         
         // Validate object exists
         meta_utils::validate_object_exists(&self.database, &request.object_name)?;
         
         // Get or create the local change
-        let mut current_change = self.database.index().get_or_create_local_change()
+        let mut current_change = self.database.index().get_or_create_local_change(author)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         
         // Load existing meta or create default
@@ -80,7 +80,7 @@ impl Operation for MetaRemoveIgnoredPropertyOperation {
         vec![]
     }
 
-    fn execute(&self, args: Vec<String>, _user: &User) -> moor_var::Var {
+    fn execute(&self, args: Vec<String>, user: &User) -> moor_var::Var {
         info!("Meta remove ignored property operation received {} arguments: {:?}", args.len(), args);
         
         if args.len() < 2 {
@@ -96,7 +96,7 @@ impl Operation for MetaRemoveIgnoredPropertyOperation {
             property_name,
         };
 
-        match self.process_meta_remove_ignored_property(request) {
+        match self.process_meta_remove_ignored_property(request, Some(user.id.clone())) {
             Ok(result) => {
                 info!("Meta remove ignored property operation completed successfully");
                 moor_var::v_str(&result)

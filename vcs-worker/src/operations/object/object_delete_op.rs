@@ -21,7 +21,7 @@ impl ObjectDeleteOperation {
     }
 
     /// Parse and process the object delete request
-    fn process_object_delete(&self, request: ObjectDeleteRequest) -> Result<String, ObjectsTreeError> {
+    fn process_object_delete(&self, request: ObjectDeleteRequest, author: Option<String>) -> Result<String, ObjectsTreeError> {
         info!("Processing object delete for '{}'", request.object_name);
         
         // Validate that the source object exists (using resolve to handle renames)
@@ -36,7 +36,7 @@ impl ObjectDeleteOperation {
         }
         
         // Get or create a local change
-        let mut current_change = self.database.index().get_or_create_local_change()
+        let mut current_change = self.database.index().get_or_create_local_change(author)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         
         // Check if this object is the result of a rename in the current change
@@ -203,7 +203,7 @@ impl Operation for ObjectDeleteOperation {
         ]
     }
     
-    fn execute(&self, args: Vec<String>, _user: &User) -> moor_var::Var {
+    fn execute(&self, args: Vec<String>, user: &User) -> moor_var::Var {
         info!("Object delete operation received {} arguments: {:?}", args.len(), args);
         
         if args.len() < 1 {
@@ -217,7 +217,7 @@ impl Operation for ObjectDeleteOperation {
             object_name,
         };
 
-        match self.process_object_delete(request) {
+        match self.process_object_delete(request, Some(user.id.clone())) {
             Ok(result) => {
                 info!("Object delete operation completed successfully");
                 moor_var::v_str(&result)

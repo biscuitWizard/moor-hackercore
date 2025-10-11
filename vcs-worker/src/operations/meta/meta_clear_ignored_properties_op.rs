@@ -20,14 +20,14 @@ impl MetaClearIgnoredPropertiesOperation {
     }
 
     /// Parse and process the meta clear ignored properties request
-    fn process_meta_clear_ignored_properties(&self, request: MetaClearIgnoredPropertiesRequest) -> Result<String, ObjectsTreeError> {
+    fn process_meta_clear_ignored_properties(&self, request: MetaClearIgnoredPropertiesRequest, author: Option<String>) -> Result<String, ObjectsTreeError> {
         info!("Processing meta clear ignored properties for '{}'", request.object_name);
         
         // Validate object exists
         meta_utils::validate_object_exists(&self.database, &request.object_name)?;
         
         // Get or create the local change
-        let mut current_change = self.database.index().get_or_create_local_change()
+        let mut current_change = self.database.index().get_or_create_local_change(author)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         
         // Check if meta exists - if not, nothing to clear
@@ -82,7 +82,7 @@ impl Operation for MetaClearIgnoredPropertiesOperation {
         vec![]
     }
 
-    fn execute(&self, args: Vec<String>, _user: &User) -> moor_var::Var {
+    fn execute(&self, args: Vec<String>, user: &User) -> moor_var::Var {
         info!("Meta clear ignored properties operation received {} arguments: {:?}", args.len(), args);
         
         if args.is_empty() {
@@ -96,7 +96,7 @@ impl Operation for MetaClearIgnoredPropertiesOperation {
             object_name,
         };
 
-        match self.process_meta_clear_ignored_properties(request) {
+        match self.process_meta_clear_ignored_properties(request, Some(user.id.clone())) {
             Ok(result) => {
                 info!("Meta clear ignored properties operation completed successfully");
                 moor_var::v_str(&result)

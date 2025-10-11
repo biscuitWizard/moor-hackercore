@@ -22,7 +22,7 @@ impl ObjectRenameOperation {
     }
 
     /// Parse and process the object rename request
-    fn process_object_rename(&self, request: ObjectRenameRequest) -> Result<String, ObjectsTreeError> {
+    fn process_object_rename(&self, request: ObjectRenameRequest, author: Option<String>) -> Result<String, ObjectsTreeError> {
         info!("Processing object rename from '{}' to '{}'", request.from_name, request.to_name);
         
         // Validate that names are not empty
@@ -38,7 +38,7 @@ impl ObjectRenameOperation {
         }
         
         // Get or create a local change
-        let mut current_change = self.database.index().get_or_create_local_change()
+        let mut current_change = self.database.index().get_or_create_local_change(author)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         
         // Check if source is in deleted_objects (cannot rename deleted objects)
@@ -383,7 +383,7 @@ impl Operation for ObjectRenameOperation {
         ]
     }
     
-    fn execute(&self, args: Vec<String>, _user: &User) -> moor_var::Var {
+    fn execute(&self, args: Vec<String>, user: &User) -> moor_var::Var {
         info!("Object rename operation received {} arguments: {:?}", args.len(), args);
         
         if args.len() < 2 {
@@ -399,7 +399,7 @@ impl Operation for ObjectRenameOperation {
             to_name,
         };
 
-        match self.process_object_rename(request) {
+        match self.process_object_rename(request, Some(user.id.clone())) {
             Ok(result) => {
                 info!("Object rename operation completed successfully");
                 moor_var::v_str(&result)
