@@ -87,7 +87,10 @@ hackercore/
 │   └── ...                   # Game objects
 ├── 📂 vendor/moor/           # mooR server implementation
 ├── 📂 vcs-worker/            # Custom worker processes
-└── 📂 db/                    # Database storage
+└── 📂 game/                  # Testing storage for dev of game
+│   ├── 📂 db/                # Moor game database
+│   ├── 📂 partitions/        # VCS partitions
+│   └── ...                   # Other VCS data
 ```
 
 ## Troubleshooting
