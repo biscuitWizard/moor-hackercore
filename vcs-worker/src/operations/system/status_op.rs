@@ -51,6 +51,9 @@ impl StatusOperation {
         // Get current username
         let current_username = moor_var::v_str(&user.id);
         
+        // Get game name
+        let game_name = moor_var::v_str(self.database.game_name());
+        
         // Get latest non-local merged change
         let latest_merged_change = self.get_latest_merged_change()?;
         
@@ -75,6 +78,7 @@ impl StatusOperation {
         
         // Build the status map
         let status_map = moor_var::v_map(&[
+            (moor_var::v_str("game_name"), game_name),
             (moor_var::v_str("top_change_id"), moor_var::v_str(&top_change_id)),
             (moor_var::v_str("idle_changes"), moor_var::v_int(idle_changes_count)),
             (moor_var::v_str("pending_review"), moor_var::v_int(pending_review_count)),
@@ -122,11 +126,11 @@ impl StatusOperation {
 
 impl Operation for StatusOperation {
     fn name(&self) -> &'static str {
-        "system/status"
+        "status"
     }
     
     fn description(&self) -> &'static str {
-        "Get comprehensive system status including change counts, partition sizes, and remote repository information"
+        "Get comprehensive repository status including game name, change counts, partition sizes, and remote repository information"
     }
     
     fn philosophy(&self) -> &'static str {
@@ -142,21 +146,22 @@ impl Operation for StatusOperation {
     fn examples(&self) -> Vec<OperationExample> {
         vec![
             OperationExample {
-                description: "Get system status".to_string(),
-                moocode: r#"status = worker_request("vcs", {"system/status"});
+                description: "Get repository status".to_string(),
+                moocode: r#"status = worker_request("vcs", {"status"});
 // Returns a map with:
-// - top_change_id: ID of current local change
+// - game_name: Name of the game/world
+// - top_change_id: ID of current local change (empty if none)
 // - idle_changes: Count of idle changes in workspace
 // - pending_review: Count of changes awaiting approval
 // - current_username: Your username
 // - changes_in_index: Total changes in working index
-// - latest_merged_change: Info about most recent merged change
+// - latest_merged_change: Info about most recent merged change (empty if none)
 // - index_partition_size: Size of index partition in bytes
 // - refs_partition_size: Size of refs partition in bytes
 // - objects_partition_size: Size of objects partition in bytes
-// - remote_url: Remote repository URL (if cloned)
+// - remote_url: Remote repository URL (empty if not cloned)
 // - pending_updates: Number of updates available from remote"#.to_string(),
-                http_curl: Some(r#"curl -X GET http://localhost:8081/api/system/status"#.to_string()),
+                http_curl: Some(r#"curl -X GET http://localhost:8081/api/status"#.to_string()),
             }
         ]
     }
@@ -164,7 +169,7 @@ impl Operation for StatusOperation {
     fn routes(&self) -> Vec<OperationRoute> {
         vec![
             OperationRoute {
-                path: "/api/system/status".to_string(),
+                path: "/api/status".to_string(),
                 method: Method::GET,
                 is_json: false,
             }

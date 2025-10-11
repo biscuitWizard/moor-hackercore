@@ -19,7 +19,7 @@ async fn test_system_status_basic() {
     // Step 1: Get status on fresh repository
     println!("\nStep 1: Getting status on fresh repository...");
     let status_request = json!({
-        "operation": "system/status",
+        "operation": "status",
         "args": []
     });
     
@@ -36,6 +36,7 @@ async fn test_system_status_basic() {
     assert!(result.is_object(), "Result should be a map/object");
     
     let result_obj = result.as_object().unwrap();
+    assert!(result_obj.contains_key("game_name"), "Should have game_name");
     assert!(result_obj.contains_key("top_change_id"), "Should have top_change_id");
     assert!(result_obj.contains_key("idle_changes"), "Should have idle_changes");
     assert!(result_obj.contains_key("pending_review"), "Should have pending_review");
@@ -49,6 +50,11 @@ async fn test_system_status_basic() {
     assert!(result_obj.contains_key("pending_updates"), "Should have pending_updates");
     
     println!("✅ All required fields are present");
+    
+    // Check game name (default is "Unknown Game" when VCS_GAME_NAME env var is not set)
+    let game_name = result_obj["game_name"].as_str().unwrap_or("");
+    println!("Game name: {}", game_name);
+    assert!(!game_name.is_empty(), "Game name should not be empty");
     
     // Verify fresh repository values
     assert_eq!(result_obj["top_change_id"].as_str().unwrap_or("x"), "", "Fresh repo should have empty top change ID");
@@ -100,7 +106,7 @@ async fn test_system_status_with_changes() {
     // Step 2: Check status after first merged change
     println!("\nStep 2: Checking status after first merged change...");
     let status_request = json!({
-        "operation": "system/status",
+        "operation": "status",
         "args": []
     });
     
@@ -199,7 +205,7 @@ async fn test_system_status_partition_sizes() {
     // Get status
     println!("\nStep 1: Getting partition sizes...");
     let status_request = json!({
-        "operation": "system/status",
+        "operation": "status",
         "args": []
     });
     
@@ -238,7 +244,7 @@ async fn test_system_status_reports_correct_counts() {
     // Get status on fresh repository
     println!("\nStep 1: Checking counts on fresh repository...");
     let status_request = json!({
-        "operation": "system/status",
+        "operation": "status",
         "args": []
     });
     

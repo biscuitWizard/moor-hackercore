@@ -49,6 +49,9 @@ pub struct Database {
     
     // Store the database path for partition size calculations
     db_path: std::path::PathBuf,
+    
+    // Store the game name
+    game_name: String,
 }
 
 impl Database {
@@ -140,6 +143,7 @@ impl Database {
             workspace_provider,
             flush_sender,
             db_path: config.db_path.clone(),
+            game_name: config.game_name.clone(),
         })
     }
 
@@ -171,6 +175,11 @@ impl Database {
     /// Get the database path
     pub fn db_path(&self) -> &std::path::Path {
         &self.db_path
+    }
+    
+    /// Get the game name
+    pub fn game_name(&self) -> &str {
+        &self.game_name
     }
     
     /// Get the data size of a partition by iterating through all entries
