@@ -49,6 +49,7 @@ pub struct Database {
     flush_sender: mpsc::UnboundedSender<()>,
     
     // Store the database path for partition size calculations
+    #[allow(dead_code)]
     db_path: std::path::PathBuf,
     
     // Store the game name
@@ -174,6 +175,7 @@ impl Database {
     }
     
     /// Get the database path
+    #[allow(dead_code)]
     pub fn db_path(&self) -> &std::path::Path {
         &self.db_path
     }

@@ -38,6 +38,7 @@ pub fn short_hash(hash: &str) -> String {
 
 /// Resolve a possibly-short hash to a full hash by searching the index
 /// Returns Ok(Some(full_hash)) if found, Ok(None) if not found, Err if error
+#[allow(dead_code)]
 pub fn resolve_hash(
     short_or_full: &str,
     get_change_order: impl Fn() -> Result<Vec<String>, Box<dyn std::error::Error>>,

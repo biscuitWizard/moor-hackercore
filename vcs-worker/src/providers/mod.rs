@@ -15,7 +15,7 @@ pub mod user;
 pub mod error;
 
 pub use error::{ProviderError, ProviderResult};
-pub use objects::{ObjectsProvider, ObjectsProviderImpl};
+pub use objects::ObjectsProviderImpl;
 pub use refs::RefsProviderImpl;
 pub use index::IndexProviderImpl;
 pub use user::UserProviderImpl;

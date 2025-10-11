@@ -35,6 +35,7 @@ impl IndexUpdateOperation {
     }
     
     /// Public async method for testing and direct async use
+    #[allow(dead_code)]
     pub async fn update_async(&self) -> Result<moor_var::Var, ObjectsTreeError> {
         let request = IndexUpdateRequest {};
         self.process_update_async(request).await
@@ -186,6 +187,7 @@ impl IndexUpdateOperation {
     }
     
     /// Apply delta to local index, refs, and objects
+    #[allow(dead_code)]
     fn apply_delta(&self, delta_result: moor_var::Var) -> Result<ObjectDiffModel, ObjectsTreeError> {
         info!("Applying delta to local index, refs, and objects");
         
@@ -244,6 +246,7 @@ impl IndexUpdateOperation {
     }
     
     /// Build object diff from commit IDs
+    #[allow(dead_code)]
     fn build_object_diff_from_commit_ids(&self, commit_ids: &[String]) -> Result<ObjectDiffModel, ObjectsTreeError> {
         info!("Building object diff from {} commit IDs", commit_ids.len());
         
