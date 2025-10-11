@@ -113,7 +113,8 @@ services:
     container_name: "moor-vcs-worker"
     environment:
       - RUST_BACKTRACE=1
-      - VCS_REPOSITORY_URL=git@github.com:biscuitWizard/moor-hackercore-core.git
+      - VCS_DB_PATH=/game
+      - VCS_GAME_NAME=HackerCore
     working_dir: /moor
     volumes:
       - ./game:/game
@@ -123,6 +124,10 @@ services:
         --events-address=tcp://moor-daemon:7898 
         --workers-request-address=tcp://moor-daemon:7896 
         --workers-response-address=tcp://moor-daemon:7897
+        --http-address=0.0.0.0:9998
+    ports:
+      # HTTP API and Swagger UI
+      - "9998:9998"
     networks:
       - moor_net
   
