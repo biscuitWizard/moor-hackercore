@@ -1,4 +1,4 @@
-use axum::{response::Json, routing::{get, post}, Router};
+use axum::{response::{Json, Redirect}, routing::{get, post}, Router};
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tracing::info;
@@ -283,6 +283,7 @@ pub fn create_http_router(registry: Arc<OperationRegistry>) -> Router {
     
     // Create the final router with Swagger UI (no state needed for Swagger routes)
     Router::new()
+        .route("/", get(|| async { Redirect::permanent("/swagger-ui") }))
         .merge(SwaggerUi::new("/swagger-ui")
             .url("/api-docs/openapi.json", openapi_spec))
         .merge(api_router)
