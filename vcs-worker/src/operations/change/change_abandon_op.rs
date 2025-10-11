@@ -97,7 +97,7 @@ impl Operation for ChangeAbandonOperation {
 // Returns an ObjectDiffModel showing what to undo
 // Apply this diff to revert your MOO database to previous state
 player:tell("Change abandoned. You need to revert ", length(diff["modified_objects"]), " objects");"#.to_string(),
-                http_curl: Some(r#"curl -X POST http://localhost:8081/change/abandon"#.to_string()),
+                http_curl: Some(r#"curl -X POST http://localhost:8081/api/change/abandon"#.to_string()),
             }
         ]
     }

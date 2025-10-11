@@ -37,7 +37,7 @@ impl Operation for StatOperation {
 player:tell("User ID: ", user_info[1]);
 player:tell("Email: ", user_info[2]);
 player:tell("Permissions: ", tostr(user_info[4]));"#.to_string(),
-                http_curl: Some(r#"curl -X GET http://localhost:8081/user/stat"#.to_string()),
+                http_curl: Some(r#"curl -X GET http://localhost:8081/api/user/stat"#.to_string()),
             }
         ]
     }

@@ -31,7 +31,7 @@ impl Operation for HelloOperation {
                 description: "Basic hello operation call".to_string(),
                 moocode: r#"result = worker_request("vcs", {"hello"});
 // Returns: "goodbye""#.to_string(),
-                http_curl: Some(r#"curl -X GET http://localhost:8081/hello"#.to_string()),
+                http_curl: Some(r#"curl -X GET http://localhost:8081/api/hello"#.to_string()),
             }
         ]
     }

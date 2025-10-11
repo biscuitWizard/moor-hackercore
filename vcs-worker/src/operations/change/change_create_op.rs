@@ -111,7 +111,7 @@ impl Operation for ChangeCreateOperation {
                 moocode: r#"result = worker_request("vcs", {"change/create", "fix-login-bug", player.name});
 // Returns: "Created change 'fix-login-bug' with ID: abc-123..."
 // Now you can start modifying objects in this change"#.to_string(),
-                http_curl: Some(r#"curl -X POST http://localhost:8081/change/create \
+                http_curl: Some(r#"curl -X POST http://localhost:8081/api/change/create \
   -H "Content-Type: application/json" \
   -d '{"operation": "change/create", "args": ["fix-login-bug", "Wizard"]}'"#.to_string()),
             },

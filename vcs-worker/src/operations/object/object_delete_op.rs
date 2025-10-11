@@ -181,7 +181,7 @@ impl Operation for ObjectDeleteOperation {
                 description: "Delete an object from version control".to_string(),
                 moocode: r#"result = worker_request("vcs", {"object/delete", "$obsolete_object"});
 // Returns: "Object '$obsolete_object' deletion queued successfully in change 'local'""#.to_string(),
-                http_curl: Some(r#"curl -X POST http://localhost:8081/object/delete \
+                http_curl: Some(r#"curl -X POST http://localhost:8081/api/object/delete \
   -H "Content-Type: application/json" \
   -d '{"operation": "object/delete", "args": ["$obsolete_object"]}'"#.to_string()),
             },

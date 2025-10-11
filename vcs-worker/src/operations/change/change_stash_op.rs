@@ -114,7 +114,7 @@ workspace_list = worker_request("vcs", {"workspace/list"});
 // Find your stashed change ID from the list (it has Idle status)
 stashed_id = "your-change-id";
 worker_request("vcs", {"change/switch", stashed_id});"#.to_string(),
-                http_curl: Some(r#"curl -X POST http://localhost:8081/change/stash"#.to_string()),
+                http_curl: Some(r#"curl -X POST http://localhost:8081/api/change/stash"#.to_string()),
             }
         ]
     }

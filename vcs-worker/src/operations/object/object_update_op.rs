@@ -288,7 +288,7 @@ impl Operation for ObjectUpdateOperation {
             OperationExample {
                 description: "Update an object definition".to_string(),
                 moocode: "// First, get the object definition lines\nobjdef_lines = {\"obj number-123\", \"parent number-1\", \"name \\\"My Object\\\"\", \"owner number-2\"};\nresult = worker_request(\"vcs\", {\"object/update\", \"number-123\", objdef_lines});\n// Returns: \"Object 'number-123' updated successfully with version 2\"".to_string(),
-                http_curl: Some("curl -X POST http://localhost:8081/object/update \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"operation\": \"object/update\", \"args\": [\"number-123\", [\"obj number-123\", \"parent number-1\"]]}'".to_string()),
+                http_curl: Some("curl -X POST http://localhost:8081/api/object/update \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"operation\": \"object/update\", \"args\": [\"number-123\", [\"obj number-123\", \"parent number-1\"]]}'".to_string()),
             },
             OperationExample {
                 description: "Create a new object in version control".to_string(),

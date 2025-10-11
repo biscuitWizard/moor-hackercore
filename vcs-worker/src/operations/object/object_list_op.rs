@@ -82,7 +82,7 @@ impl Operation for ObjectListOperation {
 result = worker_request("vcs", {"object/list"});
 // result is a string like: {"objects": [{"object_type": "MooObject", "name": "$player", "version": 3}, ...]}
 player:tell("Object list: ", result);"#.to_string(),
-                http_curl: Some(r#"curl -X POST http://localhost:8081/object/list \
+                http_curl: Some(r#"curl -X POST http://localhost:8081/api/object/list \
   -H "Content-Type: application/json" \
   -d '{"operation": "object/list", "args": []}'"#.to_string()),
             }

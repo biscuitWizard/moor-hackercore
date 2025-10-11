@@ -157,7 +157,7 @@ impl Operation for ObjectGetOperation {
                 description: "Retrieve an object definition by name".to_string(),
                 moocode: r#"objdef = worker_request("vcs", {"object/get", "$player"});
 // Returns the object definition as a string"#.to_string(),
-                http_curl: Some(r#"curl -X POST http://localhost:8081/object/get \
+                http_curl: Some(r#"curl -X POST http://localhost:8081/api/object/get \
   -H "Content-Type: application/json" \
   -d '{"operation": "object/get", "args": ["$player"]}'"#.to_string()),
             },

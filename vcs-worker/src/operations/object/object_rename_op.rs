@@ -361,7 +361,7 @@ impl Operation for ObjectRenameOperation {
                 description: "Rename an object to a new name".to_string(),
                 moocode: r#"result = worker_request("vcs", {"object/rename", "$old_utility", "$new_utility"});
 // Returns: "Object '$old_utility' rename to '$new_utility' queued successfully in change 'local'""#.to_string(),
-                http_curl: Some(r#"curl -X POST http://localhost:8081/object/rename \
+                http_curl: Some(r#"curl -X POST http://localhost:8081/api/object/rename \
   -H "Content-Type: application/json" \
   -d '{"operation": "object/rename", "args": ["$old_utility", "$new_utility"]}'"#.to_string()),
             },

@@ -227,7 +227,7 @@ impl Operation for CloneOperation {
                 moocode: r#"json_data = worker_request("vcs", {"clone"});
 // Returns complete repository as JSON string
 // Save this for backup or transfer to another system"#.to_string(),
-                http_curl: Some(r#"curl -X GET http://localhost:8081/clone > backup.json"#.to_string()),
+                http_curl: Some(r#"curl -X GET http://localhost:8081/api/clone > backup.json"#.to_string()),
             },
             OperationExample {
                 description: "Import from a URL".to_string(),

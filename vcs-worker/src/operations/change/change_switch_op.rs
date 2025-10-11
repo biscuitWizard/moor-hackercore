@@ -162,7 +162,7 @@ diff = worker_request("vcs", {"change/switch", target_id});
 // diff is a map showing what objects need to be updated
 // Keys: "added_objects", "modified_objects", "deleted_objects", "renamed_objects"
 player:tell("Need to update ", length(diff["modified_objects"]), " objects");"#.to_string(),
-                http_curl: Some(r#"curl -X POST http://localhost:8081/change/switch \
+                http_curl: Some(r#"curl -X POST http://localhost:8081/api/change/switch \
   -H "Content-Type: application/json" \
   -d '{"operation": "change/switch", "args": ["abc-123-def..."]}'"#.to_string()),
             }

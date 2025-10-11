@@ -199,7 +199,7 @@ change_id = "abc-123-def...";
 diff = worker_request("vcs", {"change/approve", change_id});
 // diff is a map with keys like "added_objects", "modified_objects", etc.
 player:tell("Added: ", length(diff["added_objects"]), " objects");"#.to_string(),
-                http_curl: Some(r#"curl -X POST http://localhost:8081/change/approve \
+                http_curl: Some(r#"curl -X POST http://localhost:8081/api/change/approve \
   -H "Content-Type: application/json" \
   -d '{"operation": "change/approve", "args": ["abc-123-def..."]}'"#.to_string()),
             }

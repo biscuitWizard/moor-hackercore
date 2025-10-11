@@ -43,6 +43,38 @@ fn generate_openapi_spec(registry: &OperationRegistry) -> utoipa::openapi::OpenA
         .description(Some("A worker for handling version control of MOO entities"))
         .build();
     
+    // Add tags with descriptions for each category
+    openapi.tags = Some(vec![
+        utoipa::openapi::tag::TagBuilder::new()
+            .name("object")
+            .description(Some("Object operations for managing MOO object definitions in version control. These operations handle retrieving, updating, renaming, deleting, and listing objects."))
+            .build(),
+        utoipa::openapi::tag::TagBuilder::new()
+            .name("change")
+            .description(Some("Change operations for managing changelists in the VCS workflow. Changes are the fundamental unit of work organization, similar to branches in git but lighter weight. Use these to create, switch, submit, approve, and manage your work."))
+            .build(),
+        utoipa::openapi::tag::TagBuilder::new()
+            .name("index")
+            .description(Some("Index operations for managing the version control index. The index tracks the current state of the repository and maintains the history of changes."))
+            .build(),
+        utoipa::openapi::tag::TagBuilder::new()
+            .name("workspace")
+            .description(Some("Workspace operations for managing saved changes. The workspace stores changes that are not currently active, including stashed changes, changes awaiting review, and idle changes."))
+            .build(),
+        utoipa::openapi::tag::TagBuilder::new()
+            .name("meta")
+            .description(Some("Meta operations for configuring object filtering rules. Use these to specify which properties and verbs should be ignored when storing objects in version control."))
+            .build(),
+        utoipa::openapi::tag::TagBuilder::new()
+            .name("user")
+            .description(Some("User operations for authentication and permission management. Use these to check current user status and permissions."))
+            .build(),
+        utoipa::openapi::tag::TagBuilder::new()
+            .name("system")
+            .description(Some("System-level operations including repository cloning and basic connectivity tests."))
+            .build(),
+    ]);
+    
     let mut paths = PathsBuilder::new();
     
     // Add the generic RPC endpoint
@@ -94,6 +126,13 @@ fn generate_openapi_spec(registry: &OperationRegistry) -> utoipa::openapi::OpenA
             // Build comprehensive description with philosophy, parameters, and examples
             let mut full_description = description.clone();
             
+            // Determine tag/category from operation name (e.g., "object/get" -> "object")
+            let tag = if op_name.contains('/') {
+                op_name.split('/').next().unwrap_or("system")
+            } else {
+                "system"
+            };
+            
             if let Some(op) = operation_opt {
                 // Add philosophy section
                 let philosophy = op.philosophy();
@@ -136,7 +175,7 @@ fn generate_openapi_spec(registry: &OperationRegistry) -> utoipa::openapi::OpenA
             }
             
             let operation = OperationBuilder::new()
-                .tag("vcs-worker")
+                .tag(tag)
                 .operation_id(Some(op_name.replace("/", "_")))
                 .summary(Some(op_name.clone()))
                 .description(Some(full_description))

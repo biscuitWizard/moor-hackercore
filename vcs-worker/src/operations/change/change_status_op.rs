@@ -107,7 +107,7 @@ impl Operation for ChangeStatusOperation {
 player:tell("Added: ", length(diff["added_objects"]), " objects");
 player:tell("Modified: ", length(diff["modified_objects"]), " objects");
 player:tell("Deleted: ", length(diff["deleted_objects"]), " objects");"#.to_string(),
-                http_curl: Some(r#"curl -X GET http://localhost:8081/change/status"#.to_string()),
+                http_curl: Some(r#"curl -X GET http://localhost:8081/api/change/status"#.to_string()),
             }
         ]
     }

@@ -268,7 +268,7 @@ worker_request("vcs", {"change/status"});
 diff = worker_request("vcs", {"change/submit"});
 // For local repos: change is merged immediately
 // For remote repos: change is sent for review"#.to_string(),
-                http_curl: Some(r#"curl -X POST http://localhost:8081/change/submit"#.to_string()),
+                http_curl: Some(r#"curl -X POST http://localhost:8081/api/change/submit"#.to_string()),
             },
             OperationExample {
                 description: "Submit with a custom commit message".to_string(),
