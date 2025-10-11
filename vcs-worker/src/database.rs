@@ -6,8 +6,11 @@ use tokio::sync::mpsc;
 use tokio::time::sleep;
 use crate::config::Config;
 use crate::providers::{
-    ObjectsProvider, ObjectsProviderImpl,
+    objects::ObjectsProvider,
+    ObjectsProviderImpl,
+    refs::RefsProvider,
     RefsProviderImpl,
+    index::IndexProvider,
     IndexProviderImpl,
     UserProviderImpl,
     WorkspaceProviderImpl,
@@ -168,6 +171,17 @@ impl Database {
     /// Get the database path
     pub fn db_path(&self) -> &std::path::Path {
         &self.db_path
+    }
+    
+    /// Get the data size of a partition by iterating through all entries
+    pub fn get_partition_data_size(&self, partition_name: &str) -> u64 {
+        match partition_name {
+            "objects" => self.objects_provider.get_data_size(),
+            "refs" => self.refs_provider.get_data_size(),
+            "index" => self.index_provider.get_index_data_size(),
+            "changes" => self.index_provider.get_changes_data_size(),
+            _ => 0,
+        }
     }
 }
 

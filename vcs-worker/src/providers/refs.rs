@@ -67,6 +67,9 @@ pub trait RefsProvider: Send + Sync {
     
     /// Delete a specific ref by object name and version
     fn delete_ref(&self, object_type: VcsObjectType, object_name: &str, version: u64) -> ProviderResult<()>;
+    
+    /// Get the total data size (sum of all keys and values in bytes)
+    fn get_data_size(&self) -> u64;
 }
 
 /// Implementation of RefsProvider using Fjall
@@ -255,6 +258,17 @@ impl RefsProvider for RefsProviderImpl {
         
         info!("Deleted ref for {:?} object '{}' version {}", object_type, object_name, version);
         Ok(())
+    }
+    
+    fn get_data_size(&self) -> u64 {
+        let mut total_size = 0u64;
+        for result in self.refs_tree.iter() {
+            if let Ok((key, value)) = result {
+                total_size += key.len() as u64;
+                total_size += value.len() as u64;
+            }
+        }
+        total_size
     }
 
 }

@@ -51,18 +51,18 @@ async fn test_system_status_basic() {
     println!("✅ All required fields are present");
     
     // Verify fresh repository values
-    assert_eq!(result_obj["top_change_id"].as_str().unwrap_or(""), "none", "Fresh repo should have no top change");
+    assert_eq!(result_obj["top_change_id"].as_str().unwrap_or("x"), "", "Fresh repo should have empty top change ID");
     assert_eq!(result_obj["idle_changes"].as_i64().unwrap_or(-1), 0, "Fresh repo should have 0 idle changes");
     assert_eq!(result_obj["pending_review"].as_i64().unwrap_or(-1), 0, "Fresh repo should have 0 pending review");
     assert_eq!(result_obj["changes_in_index"].as_i64().unwrap_or(-1), 0, "Fresh repo should have 0 changes in index");
-    assert_eq!(result_obj["remote_url"].as_str().unwrap_or(""), "none", "Fresh repo should have no remote URL");
+    assert_eq!(result_obj["remote_url"].as_str().unwrap_or("x"), "", "Fresh repo should have empty remote URL");
     assert_eq!(result_obj["pending_updates"].as_i64().unwrap_or(-1), 0, "Fresh repo should have 0 pending updates");
     
     // Check username
     assert_eq!(result_obj["current_username"].as_str().unwrap_or(""), "Wizard", "Should be Wizard user by default");
     
-    // Verify latest_merged_change is "none" on fresh repo
-    assert_eq!(result_obj["latest_merged_change"].as_str().unwrap_or(""), "none", "Fresh repo should have no merged changes");
+    // Verify latest_merged_change is empty string on fresh repo
+    assert_eq!(result_obj["latest_merged_change"].as_str().unwrap_or("x"), "", "Fresh repo should have no merged changes");
     
     println!("✅ Fresh repository values are correct");
     
@@ -111,7 +111,7 @@ async fn test_system_status_with_changes() {
     let result = &response["result"];
     let result_obj = result.as_object().unwrap();
     
-    assert_eq!(result_obj["top_change_id"].as_str().unwrap_or(""), "none", "Should have no top change after approval");
+    assert_eq!(result_obj["top_change_id"].as_str().unwrap_or("x"), "", "Should have no top change after approval");
     assert_eq!(result_obj["changes_in_index"].as_i64().unwrap_or(-1), 1, "Should have 1 change in index");
     
     // Verify latest_merged_change has correct structure
@@ -180,7 +180,7 @@ async fn test_system_status_with_changes() {
     let result = &response["result"];
     let result_obj = result.as_object().unwrap();
     
-    assert_eq!(result_obj["top_change_id"].as_str().unwrap_or(""), "none", "Should have no top change after stash");
+    assert_eq!(result_obj["top_change_id"].as_str().unwrap_or("x"), "", "Should have no top change after stash");
     assert_eq!(result_obj["idle_changes"].as_i64().unwrap_or(-1), 1, "Should have 1 idle change");
     assert_eq!(result_obj["changes_in_index"].as_i64().unwrap_or(-1), 1, "Should have 1 change in index (only merged)");
     

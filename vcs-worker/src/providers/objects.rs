@@ -40,6 +40,9 @@ pub trait ObjectsProvider: Send + Sync {
     
     /// Generate YAML dump from a MooMetaObject
     fn generate_meta_dump(&self, meta: &MooMetaObject) -> ProviderResult<String>;
+    
+    /// Get the total data size (sum of all keys and values in bytes)
+    fn get_data_size(&self) -> u64;
 }
 
 /// Implementation of ObjectsProvider using Fjall
@@ -151,5 +154,16 @@ impl ObjectsProvider for ObjectsProviderImpl {
         let yaml = serde_yaml::to_string(meta)
             .map_err(|e| ProviderError::SerializationError(format!("YAML serialization error: {e}")))?;
         Ok(yaml)
+    }
+    
+    fn get_data_size(&self) -> u64 {
+        let mut total_size = 0u64;
+        for result in self.objects_tree.iter() {
+            if let Ok((key, value)) = result {
+                total_size += key.len() as u64;
+                total_size += value.len() as u64;
+            }
+        }
+        total_size
     }
 }

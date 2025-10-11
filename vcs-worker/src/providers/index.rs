@@ -78,6 +78,13 @@ pub trait IndexProvider: Send + Sync {
     // ===== CLEAR METHODS =====
     /// Clear all changes and index data
     fn clear(&self) -> ProviderResult<()>;
+    
+    // ===== SIZE METHODS =====
+    /// Get the total data size (sum of all keys and values in bytes) for the index partition
+    fn get_index_data_size(&self) -> u64;
+    
+    /// Get the total data size (sum of all keys and values in bytes) for the changes partition
+    fn get_changes_data_size(&self) -> u64;
 }
 
 /// Implementation of the IndexProvider trait using two separate Fjall partitions:
@@ -553,5 +560,27 @@ impl IndexProvider for IndexProviderImpl {
         
         info!("Cleared all index and changes data");
         Ok(())
+    }
+    
+    fn get_index_data_size(&self) -> u64 {
+        let mut total_size = 0u64;
+        for result in self.working_index.iter() {
+            if let Ok((key, value)) = result {
+                total_size += key.len() as u64;
+                total_size += value.len() as u64;
+            }
+        }
+        total_size
+    }
+    
+    fn get_changes_data_size(&self) -> u64 {
+        let mut total_size = 0u64;
+        for result in self.history_storage.iter() {
+            if let Ok((key, value)) = result {
+                total_size += key.len() as u64;
+                total_size += value.len() as u64;
+            }
+        }
+        total_size
     }
 }

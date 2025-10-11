@@ -19,41 +19,9 @@ impl StatusOperation {
         Self { database }
     }
 
-    /// Get the size of a directory in bytes
-    fn get_directory_size(path: &std::path::Path) -> Result<u64, std::io::Error> {
-        let mut total_size = 0u64;
-        
-        if path.is_dir() {
-            for entry in std::fs::read_dir(path)? {
-                let entry = entry?;
-                let path = entry.path();
-                
-                if path.is_file() {
-                    total_size += entry.metadata()?.len();
-                } else if path.is_dir() {
-                    total_size += Self::get_directory_size(&path)?;
-                }
-            }
-        }
-        
-        Ok(total_size)
-    }
-    
-    /// Get the size of a partition directory in bytes
-    fn get_partition_size(&self, partition_name: &str) -> u64 {
-        // Partitions are stored in subdirectories of the database path
-        // The database path is stored in the Database struct
-        // We need to construct the full path to the partition
-        let db_path = self.database.db_path();
-        let partition_path = db_path.join(partition_name);
-        
-        match Self::get_directory_size(&partition_path) {
-            Ok(size) => size,
-            Err(e) => {
-                error!("Failed to get size for partition '{}': {}", partition_name, e);
-                0
-            }
-        }
+    /// Get the data size of a partition in bytes (sum of all keys and values)
+    fn get_partition_data_size(&self, partition_name: &str) -> u64 {
+        self.database.get_partition_data_size(partition_name)
     }
 
     /// Process the status request
@@ -63,7 +31,7 @@ impl StatusOperation {
         // Get top change ID
         let top_change_id = self.database.index().get_top_change()
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
-            .unwrap_or_else(|| "none".to_string());
+            .unwrap_or_else(|| String::new());
         
         // Get change order to count changes in working index
         let change_order = self.database.index().get_change_order()
@@ -89,15 +57,15 @@ impl StatusOperation {
         // Get remote repository URL if present
         let remote_url = self.database.index().get_source()
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
-            .unwrap_or_else(|| "none".to_string());
+            .unwrap_or_else(|| String::new());
         
-        // Get partition sizes
-        let index_partition_size = self.get_partition_size("index") as i64;
-        let refs_partition_size = self.get_partition_size("refs") as i64;
-        let objects_partition_size = self.get_partition_size("objects") as i64;
+        // Get partition data sizes (sum of all keys and values in each partition)
+        let index_partition_size = self.get_partition_data_size("index") as i64;
+        let refs_partition_size = self.get_partition_data_size("refs") as i64;
+        let objects_partition_size = self.get_partition_data_size("objects") as i64;
         
         // Check if we're behind remote (only if we have a source)
-        let pending_updates = if remote_url != "none" {
+        let pending_updates = if !remote_url.is_empty() {
             // TODO: Implement checking remote for pending updates
             // For now, return 0 as we'd need to query the remote
             0i64
@@ -147,8 +115,8 @@ impl StatusOperation {
             }
         }
         
-        // No merged changes found
-        Ok(moor_var::v_str("none"))
+        // No merged changes found - return empty string
+        Ok(moor_var::v_str(""))
     }
 }
 
