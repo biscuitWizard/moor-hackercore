@@ -15,7 +15,9 @@ pub use change::{ChangeCreateOperation, ChangeAbandonOperation, ChangeStatusOper
 pub use object::{ObjectGetOperation, ObjectUpdateOperation, ObjectRenameOperation, ObjectDeleteOperation, ObjectListOperation};
 pub use index::{IndexListOperation, IndexCalcDeltaOperation, IndexUpdateOperation};
 pub use clone_op::CloneOperation;
-pub use user::StatOperation;
+pub use user::{StatOperation, UserCreateOperation, UserDisableOperation, UserEnableOperation, 
+              UserAddPermissionOperation, UserRemovePermissionOperation, UserGenerateApiKeyOperation,
+              UserDeleteApiKeyOperation, UserListOperation};
 pub use workspace::{WorkspaceSubmitOperation, WorkspaceListOperation};
 pub use meta::{MetaAddIgnoredPropertyOperation, MetaAddIgnoredVerbOperation, MetaRemoveIgnoredPropertyOperation, MetaRemoveIgnoredVerbOperation, MetaClearIgnoredPropertiesOperation, MetaClearIgnoredVerbsOperation};
 pub use system::StatusOperation;
@@ -121,6 +123,14 @@ pub fn create_registry_with_config(config: Config) -> Result<(OperationRegistry,
     registry.register(IndexUpdateOperation::new(database.clone()));
     registry.register(CloneOperation::new(database.clone()));
     registry.register(StatOperation);
+    registry.register(UserCreateOperation::new(database.users().clone()));
+    registry.register(UserDisableOperation::new(database.users().clone()));
+    registry.register(UserEnableOperation::new(database.users().clone()));
+    registry.register(UserAddPermissionOperation::new(database.users().clone()));
+    registry.register(UserRemovePermissionOperation::new(database.users().clone()));
+    registry.register(UserGenerateApiKeyOperation::new(database.users().clone()));
+    registry.register(UserDeleteApiKeyOperation::new(database.users().clone()));
+    registry.register(UserListOperation::new(database.users().clone()));
     registry.register(WorkspaceSubmitOperation::new(database.clone()));
     registry.register(WorkspaceListOperation::new(database.clone()));
     registry.register(ChangeSwitchOperation::new(database.clone()));

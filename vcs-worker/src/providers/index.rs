@@ -75,6 +75,19 @@ pub trait IndexProvider: Send + Sync {
     /// Set the source URL for this clone
     fn set_source(&self, url: &str) -> ProviderResult<()>;
     
+    // ===== EXTERNAL USER METHODS =====
+    /// Get the external user API key for outbound requests
+    fn get_external_user_api_key(&self) -> ProviderResult<Option<String>>;
+    
+    /// Set the external user API key for outbound requests
+    fn set_external_user_api_key(&self, key: &str) -> ProviderResult<()>;
+    
+    /// Get the external user ID
+    fn get_external_user_id(&self) -> ProviderResult<Option<String>>;
+    
+    /// Set the external user ID
+    fn set_external_user_id(&self, user_id: &str) -> ProviderResult<()>;
+    
     // ===== CLEAR METHODS =====
     /// Clear all changes and index data
     fn clear(&self) -> ProviderResult<()>;
@@ -131,6 +144,8 @@ impl IndexProviderImpl {
     const ORDER_KEY: &'static str = "change_order";
     const TOP_KEY: &'static str = "top_change";
     const SOURCE_KEY: &'static str = "source_url";
+    const EXTERNAL_USER_API_KEY: &'static str = "external_user_api_key";
+    const EXTERNAL_USER_ID: &'static str = "external_user_id";
     
     // ===== DRY HELPER METHODS =====
     
@@ -544,6 +559,36 @@ impl IndexProvider for IndexProviderImpl {
     fn set_source(&self, url: &str) -> ProviderResult<()> {
         self.working_index.insert(Self::SOURCE_KEY, url.as_bytes())?;
         info!("Set source URL to: {}", url);
+        Ok(())
+    }
+    
+    fn get_external_user_api_key(&self) -> ProviderResult<Option<String>> {
+        if let Some(data) = self.working_index.get(Self::EXTERNAL_USER_API_KEY)? {
+            Ok(Some(String::from_utf8(data.to_vec())
+                .map_err(|e| ProviderError::SerializationError(e.to_string()))?))
+        } else {
+            Ok(None)
+        }
+    }
+    
+    fn set_external_user_api_key(&self, key: &str) -> ProviderResult<()> {
+        self.working_index.insert(Self::EXTERNAL_USER_API_KEY, key.as_bytes())?;
+        info!("Set external user API key");
+        Ok(())
+    }
+    
+    fn get_external_user_id(&self) -> ProviderResult<Option<String>> {
+        if let Some(data) = self.working_index.get(Self::EXTERNAL_USER_ID)? {
+            Ok(Some(String::from_utf8(data.to_vec())
+                .map_err(|e| ProviderError::SerializationError(e.to_string()))?))
+        } else {
+            Ok(None)
+        }
+    }
+    
+    fn set_external_user_id(&self, user_id: &str) -> ProviderResult<()> {
+        self.working_index.insert(Self::EXTERNAL_USER_ID, user_id.as_bytes())?;
+        info!("Set external user ID to: {}", user_id);
         Ok(())
     }
     

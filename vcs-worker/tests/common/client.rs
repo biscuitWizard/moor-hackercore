@@ -330,7 +330,7 @@ impl VcsTestClient {
         // If we have a database reference, call the async version directly
         if let Some(ref db) = self.database {
             let clone_op = moor_vcs_worker::operations::CloneOperation::new(db.clone());
-            match clone_op.import_from_url_async(url).await {
+            match clone_op.import_from_url_async(url, None).await {
                 Ok(result) => {
                     return Ok(json!({
                         "success": true,

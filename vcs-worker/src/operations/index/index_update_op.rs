@@ -125,7 +125,7 @@ impl IndexUpdateOperation {
         info!("Cloning from: {}", clone_url);
         
         // Import from URL (this will clear existing state and import everything)
-        match clone_op.import_from_url_async(&clone_url).await {
+        match clone_op.import_from_url_async(&clone_url, None).await {
             Ok(result) => {
                 info!("Full clone completed successfully");
                 Ok(moor_var::v_str(&result))

@@ -70,6 +70,21 @@ pub trait UserProvider: Send + Sync {
     
     /// Ensure the default "Wizard" user exists with the given API key
     fn ensure_wizard_user(&self, api_key: String) -> ProviderResult<()>;
+    
+    /// Disable a user (prevents authentication)
+    fn disable_user(&self, user_id: &str) -> ProviderResult<()>;
+    
+    /// Enable a user (allows authentication)
+    fn enable_user(&self, user_id: &str) -> ProviderResult<()>;
+    
+    /// Check if a user is disabled
+    fn is_disabled(&self, user_id: &str) -> ProviderResult<bool>;
+    
+    /// Generate a new API key for a user and return it
+    fn generate_api_key(&self, user_id: &str) -> ProviderResult<String>;
+    
+    /// Delete an API key from a user (alias for remove_authorized_key but returns the key if found)
+    fn delete_api_key(&self, user_id: &str, key: &str) -> ProviderResult<bool>;
 }
 
 /// Implementation of UserProvider using Fjall
@@ -331,6 +346,67 @@ impl UserProvider for UserProviderImpl {
         
         Ok(())
     }
+    
+    fn disable_user(&self, user_id: &str) -> ProviderResult<()> {
+        let mut storage = self.load_user_storage()?;
+        
+        let user = storage.users.get_mut(user_id)
+            .ok_or_else(|| ProviderError::InvalidOperation(format!("User '{}' not found", user_id)))?;
+        
+        if user.is_system_user {
+            return Err(ProviderError::InvalidOperation(
+                format!("Cannot disable system user '{}'", user_id)
+            ));
+        }
+        
+        user.is_disabled = true;
+        self.save_user_storage(&storage)?;
+        
+        info!("Disabled user '{}'", user_id);
+        Ok(())
+    }
+    
+    fn enable_user(&self, user_id: &str) -> ProviderResult<()> {
+        let mut storage = self.load_user_storage()?;
+        
+        let user = storage.users.get_mut(user_id)
+            .ok_or_else(|| ProviderError::InvalidOperation(format!("User '{}' not found", user_id)))?;
+        
+        user.is_disabled = false;
+        self.save_user_storage(&storage)?;
+        
+        info!("Enabled user '{}'", user_id);
+        Ok(())
+    }
+    
+    fn is_disabled(&self, user_id: &str) -> ProviderResult<bool> {
+        let storage = self.load_user_storage()?;
+        
+        let user = storage.users.get(user_id)
+            .ok_or_else(|| ProviderError::InvalidOperation(format!("User '{}' not found", user_id)))?;
+        
+        Ok(user.is_disabled)
+    }
+    
+    fn generate_api_key(&self, user_id: &str) -> ProviderResult<String> {
+        use uuid::Uuid;
+        
+        let mut storage = self.load_user_storage()?;
+        
+        let user = storage.users.get_mut(user_id)
+            .ok_or_else(|| ProviderError::InvalidOperation(format!("User '{}' not found", user_id)))?;
+        
+        let api_key = Uuid::new_v4().to_string();
+        user.add_authorized_key(api_key.clone());
+        self.save_user_storage(&storage)?;
+        
+        info!("Generated new API key for user '{}'", user_id);
+        Ok(api_key)
+    }
+    
+    fn delete_api_key(&self, user_id: &str, key: &str) -> ProviderResult<bool> {
+        self.remove_authorized_key(user_id, key)
+    }
 }
 
 // Helper trait extension for Arc wrapping
@@ -397,5 +473,25 @@ impl<T: UserProvider> UserProvider for std::sync::Arc<T> {
     
     fn ensure_wizard_user(&self, api_key: String) -> ProviderResult<()> {
         (**self).ensure_wizard_user(api_key)
+    }
+    
+    fn disable_user(&self, user_id: &str) -> ProviderResult<()> {
+        (**self).disable_user(user_id)
+    }
+    
+    fn enable_user(&self, user_id: &str) -> ProviderResult<()> {
+        (**self).enable_user(user_id)
+    }
+    
+    fn is_disabled(&self, user_id: &str) -> ProviderResult<bool> {
+        (**self).is_disabled(user_id)
+    }
+    
+    fn generate_api_key(&self, user_id: &str) -> ProviderResult<String> {
+        (**self).generate_api_key(user_id)
+    }
+    
+    fn delete_api_key(&self, user_id: &str, key: &str) -> ProviderResult<bool> {
+        (**self).delete_api_key(user_id, key)
     }
 }

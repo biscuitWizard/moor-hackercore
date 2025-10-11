@@ -67,8 +67,54 @@ impl CloneOperation {
         })
     }
     
+    /// Validate external user API key by calling stat on remote server
+    async fn validate_external_user(&self, base_url: &str, api_key: &str) -> Result<(String, String), ObjectsTreeError> {
+        info!("Validating external user API key with remote server: {}", base_url);
+        
+        // Make stat request to validate the API key
+        let client = reqwest::Client::new();
+        let stat_url = format!("{}/api/user/stat", base_url.trim_end_matches('/'));
+        
+        let response = client.get(&stat_url)
+            .header("X-API-Key", api_key)
+            .send()
+            .await
+            .map_err(|e| ObjectsTreeError::SerializationError(format!("Failed to stat remote server: {}", e)))?;
+        
+        if !response.status().is_success() {
+            return Err(ObjectsTreeError::SerializationError(
+                format!("Remote server stat failed with status: {} (invalid API key?)", response.status())
+            ));
+        }
+        
+        let response_json: serde_json::Value = response.json()
+            .await
+            .map_err(|e| ObjectsTreeError::SerializationError(format!("Failed to parse stat response: {}", e)))?;
+        
+        // Extract user info from response
+        // Response format: {"result": [user_id, email, v_obj, permissions], ...}
+        let result = response_json.get("result")
+            .ok_or_else(|| ObjectsTreeError::SerializationError("Stat response missing 'result' field".to_string()))?;
+        
+        if let Some(result_array) = result.as_array() {
+            if result_array.len() >= 4 {
+                let user_id = result_array[0].as_str()
+                    .ok_or_else(|| ObjectsTreeError::SerializationError("Invalid user_id in stat response".to_string()))?
+                    .to_string();
+                let email = result_array[1].as_str()
+                    .ok_or_else(|| ObjectsTreeError::SerializationError("Invalid email in stat response".to_string()))?
+                    .to_string();
+                
+                info!("Validated external user: {} ({})", user_id, email);
+                return Ok((user_id, email));
+            }
+        }
+        
+        Err(ObjectsTreeError::SerializationError("Invalid stat response format".to_string()))
+    }
+    
     /// Import repository state from a URL (async version)
-    pub async fn import_from_url_async(&self, url: &str) -> Result<String, ObjectsTreeError> {
+    pub async fn import_from_url_async(&self, url: &str, external_user_api_key: Option<&str>) -> Result<String, ObjectsTreeError> {
         info!("Importing repository state from URL: {}", url);
         
         // Make GET request to the URL using async client
@@ -111,14 +157,28 @@ impl CloneOperation {
             return Err(ObjectsTreeError::SerializationError(format!("Invalid JSON response: {}", response_text)));
         };
         
+        // Extract base URL from source_url (remove /api/clone or /clone suffix)
+        let base_url = url
+            .trim_end_matches("/api/clone")
+            .trim_end_matches("/clone")
+            .to_string();
+        
+        // If external user API key is provided, validate it and get user info
+        let external_user_info = if let Some(api_key) = external_user_api_key {
+            let (user_id, _email) = self.validate_external_user(&base_url, api_key).await?;
+            Some((api_key.to_string(), user_id))
+        } else {
+            None
+        };
+        
         // Import the data
-        self.import_state(clone_data, url)?;
+        self.import_state(clone_data, url, external_user_info.as_ref())?;
         
         Ok(format!("Successfully cloned from {}", url))
     }
     
     /// Import repository state from a URL (sync wrapper for use in execute())
-    pub fn import_from_url(&self, url: &str) -> Result<String, ObjectsTreeError> {
+    pub fn import_from_url(&self, url: &str, external_user_api_key: Option<String>) -> Result<String, ObjectsTreeError> {
         let url = url.to_string();
         let self_clone = self.clone();
         
@@ -126,7 +186,8 @@ impl CloneOperation {
         let (tx, rx) = std::sync::mpsc::sync_channel(1);
         
         tokio::spawn(async move {
-            let result = self_clone.import_from_url_async(&url).await;
+            let api_key_ref = external_user_api_key.as_deref();
+            let result = self_clone.import_from_url_async(&url, api_key_ref).await;
             let _ = tx.send(result);
         });
         
@@ -135,7 +196,7 @@ impl CloneOperation {
     }
     
     /// Import repository state from CloneData
-    fn import_state(&self, data: CloneData, source_url: &str) -> Result<(), ObjectsTreeError> {
+    fn import_state(&self, data: CloneData, source_url: &str, external_user_info: Option<&(String, String)>) -> Result<(), ObjectsTreeError> {
         let object_count = data.objects.len();
         let refs_count = data.refs.len();
         let changes_count = data.changes.len();
@@ -188,6 +249,16 @@ impl CloneOperation {
         self.database.index().set_source(&base_url)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         
+        // If external user info was provided, store it
+        if let Some((api_key, user_id)) = external_user_info {
+            self.database.index().set_external_user_api_key(api_key)
+                .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+            self.database.index().set_external_user_id(user_id)
+                .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+            
+            info!("Stored external user credentials (user_id: {}) for future operations", user_id);
+        }
+        
         info!("Successfully imported repository from {} (base: {})", source_url, base_url);
         Ok(())
     }
@@ -216,6 +287,11 @@ impl Operation for CloneOperation {
                 name: "url".to_string(),
                 description: "Optional URL to import from. If not provided, exports current state.".to_string(),
                 required: false,
+            },
+            OperationParameter {
+                name: "external_user_api_key".to_string(),
+                description: "Optional API key for authenticating with the remote VCS worker. When provided, validates the key and stores it for future update operations.".to_string(),
+                required: false,
             }
         ]
     }
@@ -234,6 +310,13 @@ impl Operation for CloneOperation {
                 moocode: r#"result = worker_request("vcs", {"clone", "http://source-server:8081/clone"});
 // Imports complete repository from source server
 // Returns success message"#.to_string(),
+                http_curl: None,
+            },
+            OperationExample {
+                description: "Import from a URL with external user API key".to_string(),
+                moocode: r#"result = worker_request("vcs", {"clone", "http://source-server:8081/clone", "external-api-key-123"});
+// Imports repository and validates/stores the API key for future updates
+// The remote server is queried to verify the key and get user info"#.to_string(),
                 http_curl: None,
             }
         ]
@@ -287,8 +370,15 @@ impl Operation for CloneOperation {
             // URL provided, import from URL
             let url = args[0].clone();
             
+            // Get optional external_user_api_key
+            let external_user_api_key = if args.len() > 1 && !args[1].is_empty() {
+                Some(args[1].clone())
+            } else {
+                None
+            };
+            
             // Call the synchronous import_from_url
-            match self.import_from_url(&url) {
+            match self.import_from_url(&url, external_user_api_key) {
                 Ok(result) => {
                     info!("Clone operation completed successfully");
                     moor_var::v_str(&result)

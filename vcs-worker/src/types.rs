@@ -209,6 +209,10 @@ pub enum Permission {
     ApproveChanges,
     SubmitChanges,
     Clone,
+    CreateUser,
+    DisableUser,
+    ManagePermissions,
+    ManageApiKeys,
 }
 
 impl Permission {
@@ -218,6 +222,10 @@ impl Permission {
             Permission::ApproveChanges => "Approve_Changes".to_string(),
             Permission::SubmitChanges => "Submit_Changes".to_string(),
             Permission::Clone => "Clone".to_string(),
+            Permission::CreateUser => "Create_User".to_string(),
+            Permission::DisableUser => "Disable_User".to_string(),
+            Permission::ManagePermissions => "Manage_Permissions".to_string(),
+            Permission::ManageApiKeys => "Manage_Api_Keys".to_string(),
         }
     }
 }
@@ -232,6 +240,8 @@ pub struct User {
     pub permissions: HashSet<Permission>,
     /// Indicates if this is a system user that cannot be deleted
     pub is_system_user: bool,
+    /// Indicates if this user is disabled (cannot authenticate)
+    pub is_disabled: bool,
 }
 
 impl User {
@@ -244,6 +254,7 @@ impl User {
             authorized_keys: Vec::new(),
             permissions: HashSet::new(),
             is_system_user: false,
+            is_disabled: false,
         }
     }
 
@@ -256,6 +267,7 @@ impl User {
             authorized_keys: Vec::new(),
             permissions: HashSet::new(),
             is_system_user: true,
+            is_disabled: false,
         }
     }
     
