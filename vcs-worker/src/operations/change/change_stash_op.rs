@@ -86,6 +86,10 @@ impl Operation for ChangeStashOperation {
         "Stashes the top local change to workspace with Idle status for later resumption. Removes from index. Returns an ObjectDiffModel showing what changes need to be undone. Local only (no remote submission)."
     }
     
+    fn response_content_type(&self) -> &'static str {
+        "text/x-moo"
+    }
+    
     fn philosophy(&self) -> &'static str {
         "Temporarily sets aside your current work without abandoning or submitting it. This is useful when you \
         need to switch contexts quickly - perhaps to work on an urgent fix - but want to preserve your current \

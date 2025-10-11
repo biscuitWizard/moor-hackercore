@@ -77,6 +77,12 @@ pub trait Operation: Send + Sync {
     
     /// Execute the operation with the given arguments and user context, returning a moor Var
     fn execute(&self, args: Vec<String>, user: &User) -> moor_var::Var;
+    
+    /// The response content type for this operation's HTTP responses
+    /// Defaults to "application/json", but can be overridden to "text/x-moo" for MOO code responses
+    fn response_content_type(&self) -> &'static str {
+        "application/json"
+    }
 }
 
 /// Create the default registry with built-in operations

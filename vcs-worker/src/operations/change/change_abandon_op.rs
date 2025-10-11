@@ -76,6 +76,10 @@ impl Operation for ChangeAbandonOperation {
         "Abandons the top local change in the index, removing it from index. Returns an ObjectDiffModel showing what changes need to be undone. Cannot abandon merged changes."
     }
     
+    fn response_content_type(&self) -> &'static str {
+        "text/x-moo"
+    }
+    
     fn philosophy(&self) -> &'static str {
         "Discards your current local changelist completely, removing all tracked changes without submitting them. \
         Use this when you've made changes you don't want to keep - perhaps experimental work that didn't pan out, \

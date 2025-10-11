@@ -237,6 +237,10 @@ impl Operation for ChangeSubmitOperation {
         "Submits the top local change. Requires author to be set. If a source URL is configured (remote index), moves it to workspace with Review status for remote approval. If no source URL is configured (non-remote index), instantly approves and merges the change. Returns an ObjectDiffModel. Optional message argument can be provided to set/override the commit message."
     }
     
+    fn response_content_type(&self) -> &'static str {
+        "text/x-moo"
+    }
+    
     fn philosophy(&self) -> &'static str {
         "Completes the change workflow by submitting your local changelist for permanent inclusion in the \
         repository. The behavior depends on your repository type: For local repositories (no source URL), \

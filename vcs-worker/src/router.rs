@@ -327,17 +327,158 @@ For more details on each operation, see the categorized endpoints below."#))
                 }
             }
             
+            // Get the response content type from the operation
+            let content_type = if let Some(op) = operation_opt.as_ref() {
+                op.response_content_type()
+            } else {
+                "application/json"
+            };
+            
+            // Build response with operation-specific content type
+            let mut response_builder = ResponseBuilder::new()
+                .description("Operation executed successfully");
+            
+            // Add MOO response examples for text/x-moo content type
+            if content_type == "text/x-moo" {
+                let moo_example = if op_name.contains("create") {
+                    r#""Created change 'fix-login-bug' with ID: abc-123...""#
+                } else if op_name.contains("status") || op_name.contains("submit") || 
+                          op_name.contains("approve") || op_name.contains("abandon") ||
+                          op_name.contains("stash") || op_name.contains("switch") {
+                    // ObjectDiffModel structure
+                    r#"["objects_renamed" -> ["old_obj" -> "new_obj"],
+ "objects_deleted" -> {"obj1", "obj2"},
+ "objects_added" -> {"obj3", "obj4"},
+ "objects_modified" -> {"obj5"},
+ "changes" -> {
+   ["obj_id" -> "obj5",
+    "verbs_modified" -> {"verb1"},
+    "verbs_added" -> {"verb2"},
+    "verbs_renamed" -> ["old_verb" -> "new_verb"],
+    "verbs_deleted" -> {},
+    "props_modified" -> {"prop1"},
+    "props_added" -> {},
+    "props_renamed" -> [],
+    "props_deleted" -> {}]
+ }]"#
+                } else {
+                    r#""Operation result in MOO format""#
+                };
+                
+                response_builder = response_builder.content(
+                    content_type, 
+                    ContentBuilder::new()
+                        .example(Some(serde_json::json!(moo_example)))
+                        .build()
+                );
+            } else {
+                response_builder = response_builder.content(
+                    content_type, 
+                    ContentBuilder::new()
+                        .schema(Some(RefOr::Ref(utoipa::openapi::Ref::from_schema_name("OperationResponse"))))
+                        .build()
+                );
+            }
+            
             let mut operation_builder = OperationBuilder::new()
                 .tag(tag)
                 .operation_id(Some(op_name.replace("/", "_")))
                 .summary(Some(op_name.clone()))
                 .description(Some(full_description))
-                .response("200", ResponseBuilder::new()
-                    .description("Operation executed successfully")
-                    .content("application/json", ContentBuilder::new()
-                        .schema(Some(RefOr::Ref(utoipa::openapi::Ref::from_schema_name("OperationResponse"))))
-                        .build())
-                    .build());
+                .response("200", response_builder.build());
+            
+            // Add error responses for text/x-moo operations
+            if content_type == "text/x-moo" {
+                // Add 400 Bad Request response for validation/argument errors
+                let error_400_example = if op_name.contains("status") {
+                    r#"E_INVARG("No local change on top of index - nothing to do")"#
+                } else if op_name.contains("create") {
+                    r#""Error: Already in a local change 'existing-change' (abc-123). Abandon the current change before creating a new one.""#
+                } else if op_name.contains("approve") {
+                    r#"E_INVARG("Error: Cannot approve change 'my-change' - it must be Local or Review status (current: Merged)")"#
+                } else if op_name.contains("submit") {
+                    r#"E_INVARG("Error: Cannot submit change 'my-change' - it is not local (status: Merged)")"#
+                } else if op_name.contains("abandon") {
+                    r#""Error: Cannot abandon merged change 'my-change'""#
+                } else if op_name.contains("stash") {
+                    r#"E_INVARG("Error: Cannot stash change 'my-change' - it is not local (status: Review)")"#
+                } else if op_name.contains("switch") {
+                    r#"E_INVARG("Error: Change 'target-id' not found in workspace")"#
+                } else {
+                    r#"E_INVARG("Error: Invalid operation arguments")"#
+                };
+                
+                operation_builder = operation_builder.response(
+                    "400",
+                    ResponseBuilder::new()
+                        .description("Bad Request - Invalid arguments or operation not allowed in current state")
+                        .content(
+                            content_type,
+                            ContentBuilder::new()
+                                .example(Some(serde_json::json!(error_400_example)))
+                                .build()
+                        )
+                        .build()
+                );
+                
+                // Add 403 Forbidden response for permission errors
+                let error_403_example = if op_name.contains("approve") {
+                    r#"E_INVARG("Error: User 'player123' does not have permission to approve changes")"#
+                } else if op_name.contains("submit") || op_name.contains("stash") {
+                    r#"E_INVARG("Error: User 'player123' does not have permission to submit changes")"#
+                } else {
+                    r#"E_INVARG("Error: Permission denied")"#
+                };
+                
+                operation_builder = operation_builder.response(
+                    "403",
+                    ResponseBuilder::new()
+                        .description("Forbidden - User lacks required permissions")
+                        .content(
+                            content_type,
+                            ContentBuilder::new()
+                                .example(Some(serde_json::json!(error_403_example)))
+                                .build()
+                        )
+                        .build()
+                );
+                
+                // Add 404 Not Found response
+                let error_404_example = if op_name.contains("approve") || op_name.contains("switch") {
+                    r#"E_INVARG("Error: Change 'abc-123-def...' not found in workspace or index")"#
+                } else if op_name.contains("abandon") || op_name.contains("status") {
+                    r#"E_INVARG("Error: No change to abandon")"#
+                } else {
+                    r#"E_INVARG("Error: Resource not found")"#
+                };
+                
+                operation_builder = operation_builder.response(
+                    "404",
+                    ResponseBuilder::new()
+                        .description("Not Found - Requested resource does not exist")
+                        .content(
+                            content_type,
+                            ContentBuilder::new()
+                                .example(Some(serde_json::json!(error_404_example)))
+                                .build()
+                        )
+                        .build()
+                );
+                
+                // Add 500 Internal Server Error response
+                operation_builder = operation_builder.response(
+                    "500",
+                    ResponseBuilder::new()
+                        .description("Internal Server Error - Database or system error")
+                        .content(
+                            content_type,
+                            ContentBuilder::new()
+                                .example(Some(serde_json::json!(r#""Error: Database error: failed to serialize change""#)))
+                                .build()
+                        )
+                        .build()
+                );
+            }
             
             // Add request body if we have one
             if let Some(request_body) = request_body_builder {

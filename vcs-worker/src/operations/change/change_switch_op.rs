@@ -128,6 +128,10 @@ impl Operation for ChangeSwitchOperation {
         "Switches to a different change from workspace. If there's a local change on top of the index, moves it to workspace as Idle. Returns a merged ObjectDiffModel with first the undo diff for the current change (if any), then the apply diff for the target change."
     }
     
+    fn response_content_type(&self) -> &'static str {
+        "text/x-moo"
+    }
+    
     fn philosophy(&self) -> &'static str {
         "Enables working on multiple features simultaneously by switching between workspace changes. This is \
         a key operation for parallel development - when you want to pause work on one feature and start working \

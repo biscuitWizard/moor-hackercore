@@ -84,6 +84,10 @@ impl Operation for ChangeStatusOperation {
         "Lists all objects that have been modified in the current change (added, modified, deleted, renamed)"
     }
     
+    fn response_content_type(&self) -> &'static str {
+        "text/x-moo"
+    }
+    
     fn philosophy(&self) -> &'static str {
         "Provides a summary of all pending changes in your current local changelist. This is your primary \
         tool for reviewing what you've done before submitting - it shows which objects have been added, \

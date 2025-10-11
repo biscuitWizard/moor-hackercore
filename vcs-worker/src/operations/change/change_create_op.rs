@@ -83,6 +83,10 @@ impl Operation for ChangeCreateOperation {
         "Creates a new change with the given name, description, and author. Fails if already in a local change."
     }
     
+    fn response_content_type(&self) -> &'static str {
+        "text/x-moo"
+    }
+    
     fn philosophy(&self) -> &'static str {
         "Creates a new changelist for organizing your work. In the VCS workflow, changes are the fundamental \
         unit of work organization - similar to branches in git, but lighter weight. When you create a change, \

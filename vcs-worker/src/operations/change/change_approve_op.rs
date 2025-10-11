@@ -167,6 +167,10 @@ impl Operation for ChangeApproveOperation {
         "Approves a change (Local or Review status) by marking it as merged. If the change is in workspace (Review status), it's added back to the index. If it's already in the index (Local status), it's updated in place. Returns a ChangeDiff showing what was approved."
     }
     
+    fn response_content_type(&self) -> &'static str {
+        "text/x-moo"
+    }
+    
     fn philosophy(&self) -> &'static str {
         "Finalizes the review workflow by approving a submitted change and merging it into the repository \
         history. This operation is typically used by reviewers or administrators to accept changes that have \
