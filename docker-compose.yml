@@ -112,6 +112,7 @@ services:
     environment:
       - RUST_BACKTRACE=1
       - VCS_REPOSITORY_URL=git@github.com:biscuitWizard/moor-hackercore-core.git
+      - VCS_DB_PATH=/game
     working_dir: /moor
     volumes:
       - ./game:/game
