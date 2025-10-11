@@ -41,7 +41,116 @@ fn generate_openapi_spec(registry: &OperationRegistry) -> utoipa::openapi::OpenA
     openapi.info = InfoBuilder::new()
         .title("VCS Worker API")
         .version("0.9.0-alpha")
-        .description(Some("A worker for handling version control of MOO entities"))
+        .description(Some(r#"A worker for handling version control of MOO entities.
+
+## Overview
+
+The VCS Worker provides version control capabilities for MOO (Multi-User Object Oriented) environments. Unlike traditional RESTful APIs, this service operates as an **RPC (Remote Procedure Call) system** where POST requests execute specific operations by name.
+
+## Key Concepts
+
+### What is a Change?
+
+A **change** is a logical unit of work containing a set of modifications to MOO objects. Think of it as a commit or a feature branch in traditional version control systems. A change can include:
+
+- **Added objects**: New MOO objects being introduced
+- **Modified objects**: Existing MOO objects being updated
+- **Deleted objects**: MOO objects being removed
+- **Renamed objects**: MOO objects being given new names
+
+Typically, a change represents a complete feature or fix, such as:
+- A bug fix
+- A new game system
+- A rebalance
+- A refactoring effort
+
+### What is a Changelist (History)?
+
+The **changelist** (also called the **working set** or **working index**) is the chronological order of changes that have been applied to the repository. It represents the complete history of modifications, showing how the repository evolved over time.
+
+### What is an Index?
+
+The **index** is a compilation of all changes in the repository, including:
+- Changes that have been merged (permanent history)
+- Changes that are currently being worked on (local changes)
+- Changes awaiting review (submitted but not yet approved)
+
+The index maintains the state of the repository and tracks which changes are active.
+
+### Change States
+
+A change can be in one of several states:
+
+- **Local**: Currently being worked on. This is your active changelist where you're making modifications. Only one change can be Local at a time.
+
+- **Idle**: Saved for later. The change has been stashed or set aside, preserving your work without it being active. Use `change/switch` to resume an Idle change.
+
+- **Review**: Submitted for approval. The change has been submitted (typically to a remote repository) and is awaiting review and approval before being merged.
+
+- **Merged**: Permanently committed to history. The change has been approved and is now part of the repository's permanent record. Merged changes cannot be modified or abandoned.
+
+### Workspace
+
+The **workspace** is where non-active changes are stored, including:
+- Idle changes (stashed work)
+- Changes in Review (awaiting approval)
+- Recently merged changes (for reference)
+
+Use workspace operations to manage these changes.
+
+## API Architecture: RPC, Not REST
+
+This API follows an **RPC (Remote Procedure Call)** pattern rather than traditional REST:
+
+### RPC Request Structure
+
+All operations use a consistent request format:
+
+```json
+{
+  "operation": "operation/name",
+  "args": ["arg1", "arg2", ...]
+}
+```
+
+**Example:**
+```json
+{
+  "operation": "object/update",
+  "args": ["$player", ["obj $player", "parent #1", "..."]]
+}
+```
+
+### From MOOCode
+
+When calling from MOO, use the `worker_request` function:
+
+```moo
+result = worker_request("vcs", {"operation/name", arg1, arg2, ...});
+```
+
+**Example:**
+```moo
+result = worker_request("vcs", {"object/update", "$player", objdef_lines});
+```
+
+## Typical Workflow
+
+1. **Create a change**: `change/create` - Start a new changelist for your feature
+2. **Modify objects**: `object/update`, `object/rename`, `object/delete` - Make your changes
+3. **Check status**: `change/status` - Review what you've changed
+4. **Submit**: `change/submit` - Submit for review (remote) or merge (local)
+5. **Switch contexts**: `change/switch` or `change/stash` - Work on multiple features
+
+## Getting Started
+
+1. **Check your permissions**: `user/stat` - Verify you have the necessary permissions
+2. **Create your first change**: `change/create` with a descriptive name
+3. **Start modifying objects**: Use `object/update` to save object definitions
+4. **Review your work**: Use `change/status` to see pending changes
+5. **Submit when ready**: Use `change/submit` to finalize
+
+For more details on each operation, see the categorized endpoints below."#))
         .build();
     
     // Add tags with descriptions for each category
