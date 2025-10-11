@@ -1,4 +1,4 @@
-use crate::operations::{Operation, OperationRoute};
+use crate::operations::{Operation, OperationRoute, OperationParameter, OperationExample};
 use axum::http::Method;
 use tracing::{error, info};
 
@@ -125,6 +125,46 @@ impl Operation for ChangeSwitchOperation {
     
     fn description(&self) -> &'static str {
         "Switches to a different change from workspace. If there's a local change on top of the index, moves it to workspace as Idle. Returns a merged ObjectDiffModel with first the undo diff for the current change (if any), then the apply diff for the target change."
+    }
+    
+    fn philosophy(&self) -> &'static str {
+        "Enables working on multiple features simultaneously by switching between workspace changes. This is \
+        a key operation for parallel development - when you want to pause work on one feature and start working \
+        on another, use change/switch to swap your active change. The current local change (if any) is saved \
+        to the workspace with 'Idle' status, preserving all your work. Then the target change is loaded from \
+        the workspace and made active. The operation returns a diff that shows what objects need to be updated \
+        in your MOO to reflect the switch - you'll typically want to apply this diff to synchronize your \
+        database state with the new change."
+    }
+    
+    fn parameters(&self) -> Vec<OperationParameter> {
+        vec![
+            OperationParameter {
+                name: "change_id".to_string(),
+                description: "The ID of the workspace change to switch to (get IDs from workspace/list)".to_string(),
+                required: true,
+            }
+        ]
+    }
+    
+    fn examples(&self) -> Vec<OperationExample> {
+        vec![
+            OperationExample {
+                description: "Switch to a different change from the workspace".to_string(),
+                moocode: r#"// First, list workspace changes to get the ID
+workspace_json = worker_request("vcs", {"workspace/list"});
+changes = parse_json(workspace_json)["changes"];
+target_id = changes[1]["id"];
+
+// Switch to that change
+diff_json = worker_request("vcs", {"change/switch", target_id});
+// Returns an ObjectDiffModel showing what needs to be updated
+// You can now work on this change instead"#.to_string(),
+                http_curl: Some(r#"curl -X POST http://localhost:8081/change/switch \
+  -H "Content-Type: application/json" \
+  -d '{"operation": "change/switch", "args": ["abc-123-def..."]}'"#.to_string()),
+            }
+        ]
     }
     
     fn routes(&self) -> Vec<OperationRoute> {

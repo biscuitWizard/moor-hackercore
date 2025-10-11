@@ -1,4 +1,4 @@
-use crate::operations::{Operation, OperationRoute};
+use crate::operations::{Operation, OperationRoute, OperationParameter, OperationExample};
 use axum::http::Method;
 use tracing::{error, info, warn};
 use serde::{Deserialize, Serialize};
@@ -174,6 +174,18 @@ impl Operation for IndexCalcDeltaOperation {
         ]
     }
     
+    fn philosophy(&self) -> &'static str {
+        "Documentation for this operation is being prepared."
+    }
+    
+    fn parameters(&self) -> Vec<OperationParameter> {
+        vec![]
+    }
+    
+    fn examples(&self) -> Vec<OperationExample> {
+        vec![]
+    }
+
     fn execute(&self, args: Vec<String>, _user: &User) -> moor_var::Var {
         info!("Index calc delta operation received {} arguments: {:?}", args.len(), args);
         

@@ -1,4 +1,4 @@
-use crate::operations::{Operation, OperationRoute};
+use crate::operations::{Operation, OperationRoute, OperationParameter, OperationExample};
 use axum::http::Method;
 use tracing::{error, info, debug};
 use serde::{Deserialize, Serialize};
@@ -255,6 +255,50 @@ impl Operation for ObjectUpdateOperation {
     
     fn description(&self) -> &'static str {
         "Updates a MOO object definition by parsing a list of vars and compiling them into an ObjectDefinition"
+    }
+    
+    fn philosophy(&self) -> &'static str {
+        "Updates or adds a MOO object definition to the current changelist. This operation is central to \
+        the VCS workflow - when you modify an object in your MOO database and want to track that change, \
+        you use this operation to commit it to version control. The operation automatically tracks whether \
+        this is a new object (adding it to added_objects) or a modification of an existing object (adding \
+        it to modified_objects). Changes are staged in your current changelist and won't be permanently \
+        committed until you submit the change. If meta filtering is configured for the object, ignored \
+        properties and verbs are automatically filtered out before storage."
+    }
+    
+    fn parameters(&self) -> Vec<OperationParameter> {
+        vec![
+            OperationParameter {
+                name: "object_name".to_string(),
+                description: "The name of the MOO object to update (e.g., '$player', '#123')".to_string(),
+                required: true,
+            },
+            OperationParameter {
+                name: "vars".to_string(),
+                description: "List of strings representing the MOO object dump in objdef format. \
+                             Each string is a line of the object definition.".to_string(),
+                required: true,
+            }
+        ]
+    }
+    
+    fn examples(&self) -> Vec<OperationExample> {
+        vec![
+            OperationExample {
+                description: "Update an object definition".to_string(),
+                moocode: "// First, get the object definition lines\nobjdef_lines = {\"obj number-123\", \"parent number-1\", \"name \\\"My Object\\\"\", \"owner number-2\"};\nresult = worker_request(\"vcs\", {\"object/update\", \"number-123\", objdef_lines});\n// Returns: \"Object 'number-123' updated successfully with version 2\"".to_string(),
+                http_curl: Some("curl -X POST http://localhost:8081/object/update \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"operation\": \"object/update\", \"args\": [\"number-123\", [\"obj number-123\", \"parent number-1\"]]}'".to_string()),
+            },
+            OperationExample {
+                description: "Create a new object in version control".to_string(),
+                moocode: r#"// Define a new object
+new_obj = {"obj $my_new_object", "parent $container", "name \"New Container\""};
+result = worker_request("vcs", {"object/update", "$my_new_object", new_obj});
+// The object is now tracked in your current changelist"#.to_string(),
+                http_curl: None,
+            }
+        ]
     }
     
     fn routes(&self) -> Vec<OperationRoute> {

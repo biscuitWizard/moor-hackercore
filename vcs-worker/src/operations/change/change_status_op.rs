@@ -1,4 +1,4 @@
-use crate::operations::{Operation, OperationRoute};
+use crate::operations::{Operation, OperationRoute, OperationParameter, OperationExample};
 use axum::http::Method;
 use tracing::{error, info};
 use serde::{Deserialize, Serialize};
@@ -82,6 +82,34 @@ impl Operation for ChangeStatusOperation {
     
     fn description(&self) -> &'static str {
         "Lists all objects that have been modified in the current change (added, modified, deleted, renamed)"
+    }
+    
+    fn philosophy(&self) -> &'static str {
+        "Provides a summary of all pending changes in your current local changelist. This is your primary \
+        tool for reviewing what you've done before submitting - it shows which objects have been added, \
+        modified, deleted, or renamed. The operation returns an ObjectDiffModel that categorizes all your \
+        changes, making it easy to verify your work is correct before submission. Use this regularly during \
+        development to track your progress and ensure you haven't accidentally modified objects you didn't \
+        intend to change."
+    }
+    
+    fn parameters(&self) -> Vec<OperationParameter> {
+        vec![]
+    }
+    
+    fn examples(&self) -> Vec<OperationExample> {
+        vec![
+            OperationExample {
+                description: "Get status of current change".to_string(),
+                moocode: r#"diff = worker_request("vcs", {"change/status"});
+// Returns an ObjectDiffModel map like:
+// [#<added_objects => {object_name => objdef}, ...>, #<modified_objects => {...}>, ...]
+player:tell("Added: ", length(diff["added_objects"]), " objects");
+player:tell("Modified: ", length(diff["modified_objects"]), " objects");
+player:tell("Deleted: ", length(diff["deleted_objects"]), " objects");"#.to_string(),
+                http_curl: Some(r#"curl -X GET http://localhost:8081/change/status"#.to_string()),
+            }
+        ]
     }
     
     fn routes(&self) -> Vec<OperationRoute> {

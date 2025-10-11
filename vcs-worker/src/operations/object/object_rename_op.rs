@@ -1,4 +1,4 @@
-use crate::operations::{Operation, OperationRoute};
+use crate::operations::{Operation, OperationRoute, OperationParameter, OperationExample};
 use axum::http::Method;
 use tracing::{error, info};
 
@@ -329,6 +329,48 @@ impl Operation for ObjectRenameOperation {
     
     fn description(&self) -> &'static str {
         "Renames an object from one name to another within the current change"
+    }
+    
+    fn philosophy(&self) -> &'static str {
+        "Tracks the renaming of MOO objects within the version control system. This operation is essential \
+        when refactoring your code and need to change object names while preserving their history. The \
+        rename is tracked in the current changelist and will be applied when the change is submitted. The \
+        system intelligently handles complex rename scenarios including rename chains, rename-backs (undoing \
+        a rename), and interactions with added/modified objects. Any associated meta objects are automatically \
+        renamed as well to maintain consistency."
+    }
+    
+    fn parameters(&self) -> Vec<OperationParameter> {
+        vec![
+            OperationParameter {
+                name: "from_name".to_string(),
+                description: "The current name of the object to rename (e.g., '$old_name', '#123')".to_string(),
+                required: true,
+            },
+            OperationParameter {
+                name: "to_name".to_string(),
+                description: "The new name for the object (e.g., '$new_name', '#456')".to_string(),
+                required: true,
+            }
+        ]
+    }
+    
+    fn examples(&self) -> Vec<OperationExample> {
+        vec![
+            OperationExample {
+                description: "Rename an object to a new name".to_string(),
+                moocode: r#"result = worker_request("vcs", {"object/rename", "$old_utility", "$new_utility"});
+// Returns: "Object '$old_utility' rename to '$new_utility' queued successfully in change 'local'""#.to_string(),
+                http_curl: Some(r#"curl -X POST http://localhost:8081/object/rename \
+  -H "Content-Type: application/json" \
+  -d '{"operation": "object/rename", "args": ["$old_utility", "$new_utility"]}'"#.to_string()),
+            },
+            OperationExample {
+                description: "Rename an object by number".to_string(),
+                moocode: "result = worker_request(\"vcs\", {\"object/rename\", \"num-123\", \"num-456\"});\n// The rename is tracked and will be applied on submit".to_string(),
+                http_curl: None,
+            }
+        ]
     }
     
     fn routes(&self) -> Vec<OperationRoute> {

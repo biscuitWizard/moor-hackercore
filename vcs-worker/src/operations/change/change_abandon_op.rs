@@ -1,4 +1,4 @@
-use crate::operations::{Operation, OperationRoute};
+use crate::operations::{Operation, OperationRoute, OperationParameter, OperationExample};
 use axum::http::Method;
 use tracing::{error, info};
 
@@ -74,6 +74,32 @@ impl Operation for ChangeAbandonOperation {
     
     fn description(&self) -> &'static str {
         "Abandons the top local change in the index, removing it from index. Returns an ObjectDiffModel showing what changes need to be undone. Cannot abandon merged changes."
+    }
+    
+    fn philosophy(&self) -> &'static str {
+        "Discards your current local changelist completely, removing all tracked changes without submitting them. \
+        Use this when you've made changes you don't want to keep - perhaps experimental work that didn't pan out, \
+        or changes made in error. The operation returns a diff showing what needs to be undone in your MOO database \
+        to revert to the previous state. Abandoned changes are permanently deleted and cannot be recovered. You \
+        cannot abandon changes that have already been merged into the repository; this operation only works on \
+        local (unsubmitted) changes."
+    }
+    
+    fn parameters(&self) -> Vec<OperationParameter> {
+        vec![]
+    }
+    
+    fn examples(&self) -> Vec<OperationExample> {
+        vec![
+            OperationExample {
+                description: "Abandon the current change".to_string(),
+                moocode: r#"diff = worker_request("vcs", {"change/abandon"});
+// Returns an ObjectDiffModel showing what to undo
+// Apply this diff to revert your MOO database to previous state
+player:tell("Change abandoned. You need to revert ", length(diff["modified_objects"]), " objects");"#.to_string(),
+                http_curl: Some(r#"curl -X POST http://localhost:8081/change/abandon"#.to_string()),
+            }
+        ]
     }
     
     fn routes(&self) -> Vec<OperationRoute> {

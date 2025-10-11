@@ -1,4 +1,4 @@
-use crate::operations::{Operation, OperationRoute};
+use crate::operations::{Operation, OperationRoute, OperationParameter, OperationExample};
 use axum::http::Method;
 use tracing::{error, info, warn};
 
@@ -235,6 +235,48 @@ impl Operation for ChangeSubmitOperation {
     
     fn description(&self) -> &'static str {
         "Submits the top local change. Requires author to be set. If a source URL is configured (remote index), moves it to workspace with Review status for remote approval. If no source URL is configured (non-remote index), instantly approves and merges the change. Returns an ObjectDiffModel. Optional message argument can be provided to set/override the commit message."
+    }
+    
+    fn philosophy(&self) -> &'static str {
+        "Completes the change workflow by submitting your local changelist for permanent inclusion in the \
+        repository. The behavior depends on your repository type: For local repositories (no source URL), \
+        the change is instantly approved and merged into history. For remote repositories (with source URL), \
+        the change is submitted for review and must be approved before merging. In either case, this finalizes \
+        your work and makes it part of the permanent record. After submission, the change is removed from your \
+        local working state - use change/switch if you want to continue working on other changes. Always verify \
+        your changes with change/status before submitting."
+    }
+    
+    fn parameters(&self) -> Vec<OperationParameter> {
+        vec![
+            OperationParameter {
+                name: "message".to_string(),
+                description: "Optional commit message describing the change (overrides the change description)".to_string(),
+                required: false,
+            }
+        ]
+    }
+    
+    fn examples(&self) -> Vec<OperationExample> {
+        vec![
+            OperationExample {
+                description: "Submit the current change".to_string(),
+                moocode: r#"// First verify what you're submitting
+worker_request("vcs", {"change/status"});
+
+// Then submit
+diff = worker_request("vcs", {"change/submit"});
+// For local repos: change is merged immediately
+// For remote repos: change is sent for review"#.to_string(),
+                http_curl: Some(r#"curl -X POST http://localhost:8081/change/submit"#.to_string()),
+            },
+            OperationExample {
+                description: "Submit with a custom commit message".to_string(),
+                moocode: r#"diff = worker_request("vcs", {"change/submit", "Fixed critical bug in login system"});
+// The message becomes part of the permanent change record"#.to_string(),
+                http_curl: None,
+            }
+        ]
     }
     
     fn routes(&self) -> Vec<OperationRoute> {

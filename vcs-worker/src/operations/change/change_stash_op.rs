@@ -1,4 +1,4 @@
-use crate::operations::{Operation, OperationRoute};
+use crate::operations::{Operation, OperationRoute, OperationParameter, OperationExample};
 use axum::http::Method;
 use tracing::{error, info};
 
@@ -84,6 +84,39 @@ impl Operation for ChangeStashOperation {
     
     fn description(&self) -> &'static str {
         "Stashes the top local change to workspace with Idle status for later resumption. Removes from index. Returns an ObjectDiffModel showing what changes need to be undone. Local only (no remote submission)."
+    }
+    
+    fn philosophy(&self) -> &'static str {
+        "Temporarily sets aside your current work without abandoning or submitting it. This is useful when you \
+        need to switch contexts quickly - perhaps to work on an urgent fix - but want to preserve your current \
+        changes for later. Unlike change/switch, stash doesn't require switching to another specific change; it \
+        simply saves your current work to the workspace with 'Idle' status and clears your working state. You \
+        can resume a stashed change later with change/switch. The operation returns a diff showing what needs \
+        to be undone in your MOO database. This is purely a local operation and doesn't involve remote submission."
+    }
+    
+    fn parameters(&self) -> Vec<OperationParameter> {
+        vec![]
+    }
+    
+    fn examples(&self) -> Vec<OperationExample> {
+        vec![
+            OperationExample {
+                description: "Stash the current change for later".to_string(),
+                moocode: r#"// You're working on a feature but need to switch contexts
+diff = worker_request("vcs", {"change/stash"});
+// Current change is saved to workspace, working state is cleared
+// Apply the diff to revert your MOO database to clean state
+
+// Later, resume with change/switch
+workspace_json = worker_request("vcs", {"workspace/list"});
+changes = parse_json(workspace_json)["changes"];
+// Find your stashed change (it has Idle status)
+stashed_id = changes[1]["id"];
+worker_request("vcs", {"change/switch", stashed_id});"#.to_string(),
+                http_curl: Some(r#"curl -X POST http://localhost:8081/change/stash"#.to_string()),
+            }
+        ]
     }
     
     fn routes(&self) -> Vec<OperationRoute> {

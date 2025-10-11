@@ -1,4 +1,4 @@
-use crate::operations::{Operation, OperationRoute};
+use crate::operations::{Operation, OperationRoute, OperationParameter, OperationExample};
 use axum::http::Method;
 use tracing::{error, info};
 use serde::{Deserialize, Serialize};
@@ -58,6 +58,36 @@ impl Operation for ObjectListOperation {
     
     fn description(&self) -> &'static str {
         "Lists all objects by walking through the entire change history chronologically, tracking names, renames, additions, and deletions"
+    }
+    
+    fn philosophy(&self) -> &'static str {
+        "Provides a complete view of all MOO objects currently in the version control repository. This \
+        operation walks through the entire change history chronologically, computing the current state by \
+        applying all additions, modifications, renames, and deletions. The result reflects what objects \
+        exist right now, taking into account all submitted changes and your current working changelist. \
+        This is useful for getting an overview of your repository contents, synchronizing with the MOO \
+        database, or building tools that need to operate on the full object set."
+    }
+    
+    fn parameters(&self) -> Vec<OperationParameter> {
+        vec![]
+    }
+    
+    fn examples(&self) -> Vec<OperationExample> {
+        vec![
+            OperationExample {
+                description: "List all objects in the repository".to_string(),
+                moocode: r#"json_str = worker_request("vcs", {"object/list"});
+// Returns JSON with list of objects: {"objects": [{"object_type": "MooObject", "name": "$player", "version": 3}, ...]}
+obj_list = parse_json(json_str)["objects"];
+for obj in (obj_list)
+  player:tell("Object: ", obj["name"], " (v", obj["version"], ")");
+endfor"#.to_string(),
+                http_curl: Some(r#"curl -X POST http://localhost:8081/object/list \
+  -H "Content-Type: application/json" \
+  -d '{"operation": "object/list", "args": []}'"#.to_string()),
+            }
+        ]
     }
     
     fn routes(&self) -> Vec<OperationRoute> {

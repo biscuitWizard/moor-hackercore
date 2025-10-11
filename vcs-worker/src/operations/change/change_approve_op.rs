@@ -1,4 +1,4 @@
-use crate::operations::{Operation, OperationRoute};
+use crate::operations::{Operation, OperationRoute, OperationParameter, OperationExample};
 use axum::http::Method;
 use tracing::{error, info};
 
@@ -164,6 +164,45 @@ impl Operation for ChangeApproveOperation {
     
     fn description(&self) -> &'static str {
         "Approves a change (Local or Review status) by marking it as merged. If the change is in workspace (Review status), it's added back to the index. If it's already in the index (Local status), it's updated in place. Returns a ChangeDiff showing what was approved."
+    }
+    
+    fn philosophy(&self) -> &'static str {
+        "Finalizes the review workflow by approving a submitted change and merging it into the repository \
+        history. This operation is typically used by reviewers or administrators to accept changes that have \
+        been submitted for review (with 'Review' status). Once approved, the change becomes part of the permanent \
+        repository history with 'Merged' status. For changes in workspace (submitted remotely), approval adds \
+        them to the index. For local changes, approval updates them in place. This is a privileged operation - \
+        users must have the ApproveChanges permission to execute it."
+    }
+    
+    fn parameters(&self) -> Vec<OperationParameter> {
+        vec![
+            OperationParameter {
+                name: "change_id".to_string(),
+                description: "The ID of the change to approve (get from workspace/list)".to_string(),
+                required: true,
+            }
+        ]
+    }
+    
+    fn examples(&self) -> Vec<OperationExample> {
+        vec![
+            OperationExample {
+                description: "Approve a change that's been submitted for review".to_string(),
+                moocode: r#"// List workspace changes to find the one to approve
+workspace_json = worker_request("vcs", {"workspace/list"});
+changes = parse_json(workspace_json)["changes"];
+// Find a change with Review status
+change_id = changes[1]["id"];
+
+// Approve it
+diff = worker_request("vcs", {"change/approve", change_id});
+// Change is now merged into repository history"#.to_string(),
+                http_curl: Some(r#"curl -X POST http://localhost:8081/change/approve \
+  -H "Content-Type: application/json" \
+  -d '{"operation": "change/approve", "args": ["abc-123-def..."]}'"#.to_string()),
+            }
+        ]
     }
     
     fn routes(&self) -> Vec<OperationRoute> {

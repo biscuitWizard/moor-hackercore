@@ -1,4 +1,4 @@
-use crate::operations::{Operation, OperationRoute};
+use crate::operations::{Operation, OperationRoute, OperationParameter, OperationExample};
 use axum::http::Method;
 use tracing::{error, info};
 
@@ -151,6 +151,18 @@ impl Operation for WorkspaceListOperation {
         ]
     }
     
+    fn philosophy(&self) -> &'static str {
+        "Documentation for this operation is being prepared."
+    }
+    
+    fn parameters(&self) -> Vec<OperationParameter> {
+        vec![]
+    }
+    
+    fn examples(&self) -> Vec<OperationExample> {
+        vec![]
+    }
+
     fn execute(&self, args: Vec<String>, user: &User) -> moor_var::Var {
         info!("Workspace list operation received {} arguments for user: {}", args.len(), user.id);
         

@@ -36,12 +36,37 @@ pub struct OperationRoute {
     pub is_json: bool, // Whether to expect JSON body vs query params
 }
 
+/// Describes a parameter for an operation
+#[derive(Debug, Clone)]
+pub struct OperationParameter {
+    pub name: String,
+    pub description: String,
+    pub required: bool,
+}
+
+/// Provides an example of how to use an operation
+#[derive(Debug, Clone)]
+pub struct OperationExample {
+    pub description: String,
+    pub moocode: String,
+    pub http_curl: Option<String>,
+}
+
 pub trait Operation: Send + Sync {
     /// The name of the operation (used for RPC)
     fn name(&self) -> &'static str;
     
     /// Description of what the operation does
     fn description(&self) -> &'static str;
+    
+    /// Philosophy/intent of the operation and how it fits into the VCS workflow
+    fn philosophy(&self) -> &'static str;
+    
+    /// Detailed parameter descriptions
+    fn parameters(&self) -> Vec<OperationParameter>;
+    
+    /// Examples showing how to use this operation
+    fn examples(&self) -> Vec<OperationExample>;
     
     /// HTTP routing information for this operation
     fn routes(&self) -> Vec<OperationRoute>;

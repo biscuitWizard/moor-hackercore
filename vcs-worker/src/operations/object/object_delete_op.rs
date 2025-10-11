@@ -1,4 +1,4 @@
-use crate::operations::{Operation, OperationRoute};
+use crate::operations::{Operation, OperationRoute, OperationParameter, OperationExample};
 use axum::http::Method;
 use tracing::{error, info};
 
@@ -154,6 +154,43 @@ impl Operation for ObjectDeleteOperation {
     
     fn description(&self) -> &'static str {
         "Marks an object for deletion within the current change"
+    }
+    
+    fn philosophy(&self) -> &'static str {
+        "Stages a MOO object for deletion from the version control repository. This operation adds the \
+        object to the deleted_objects list in your current changelist. The deletion won't be permanent \
+        until you submit the change. If you delete an object that was added in the same changelist, it's \
+        simply removed from the changelist entirely (as if it never existed). Any pending renames for the \
+        object are cancelled, and associated meta objects are automatically marked for deletion as well. \
+        This maintains consistency between MOO objects and their metadata."
+    }
+    
+    fn parameters(&self) -> Vec<OperationParameter> {
+        vec![
+            OperationParameter {
+                name: "object_name".to_string(),
+                description: "The name of the object to delete (e.g., '$player', '#123')".to_string(),
+                required: true,
+            }
+        ]
+    }
+    
+    fn examples(&self) -> Vec<OperationExample> {
+        vec![
+            OperationExample {
+                description: "Delete an object from version control".to_string(),
+                moocode: r#"result = worker_request("vcs", {"object/delete", "$obsolete_object"});
+// Returns: "Object '$obsolete_object' deletion queued successfully in change 'local'""#.to_string(),
+                http_curl: Some(r#"curl -X POST http://localhost:8081/object/delete \
+  -H "Content-Type: application/json" \
+  -d '{"operation": "object/delete", "args": ["$obsolete_object"]}'"#.to_string()),
+            },
+            OperationExample {
+                description: "Delete an object by number".to_string(),
+                moocode: "result = worker_request(\"vcs\", {\"object/delete\", \"num-999\"});\n// Object is marked for deletion in current change".to_string(),
+                http_curl: None,
+            }
+        ]
     }
     
     fn routes(&self) -> Vec<OperationRoute> {

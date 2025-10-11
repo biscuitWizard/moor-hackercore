@@ -1,4 +1,4 @@
-use crate::operations::{Operation, OperationRoute};
+use crate::operations::{Operation, OperationRoute, OperationParameter, OperationExample};
 use axum::http::Method;
 use tracing::{error, info};
 
@@ -200,6 +200,43 @@ impl Operation for CloneOperation {
     
     fn description(&self) -> &'static str {
         "Export repository state (no URL) or import from a URL"
+    }
+    
+    fn philosophy(&self) -> &'static str {
+        "Enables repository replication and synchronization. Export mode (no URL) serializes the entire \
+        repository state including all objects, refs, and merged changes into a portable JSON format. Import \
+        mode (with URL) fetches repository data from a remote source and loads it locally. This is essential \
+        for setting up new repository clones, creating backups, or synchronizing between different MOO \
+        instances. The operation preserves complete history and maintains referential integrity across the clone."
+    }
+    
+    fn parameters(&self) -> Vec<OperationParameter> {
+        vec![
+            OperationParameter {
+                name: "url".to_string(),
+                description: "Optional URL to import from. If not provided, exports current state.".to_string(),
+                required: false,
+            }
+        ]
+    }
+    
+    fn examples(&self) -> Vec<OperationExample> {
+        vec![
+            OperationExample {
+                description: "Export repository state".to_string(),
+                moocode: r#"json_data = worker_request("vcs", {"clone"});
+// Returns complete repository as JSON string
+// Save this for backup or transfer to another system"#.to_string(),
+                http_curl: Some(r#"curl -X GET http://localhost:8081/clone > backup.json"#.to_string()),
+            },
+            OperationExample {
+                description: "Import from a URL".to_string(),
+                moocode: r#"result = worker_request("vcs", {"clone", "http://source-server:8081/clone"});
+// Imports complete repository from source server
+// Returns success message"#.to_string(),
+                http_curl: None,
+            }
+        ]
     }
     
     fn routes(&self) -> Vec<OperationRoute> {

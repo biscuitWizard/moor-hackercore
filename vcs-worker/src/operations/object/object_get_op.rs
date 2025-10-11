@@ -1,4 +1,4 @@
-use crate::operations::{Operation, OperationRoute};
+use crate::operations::{Operation, OperationRoute, OperationParameter, OperationExample};
 use axum::http::Method;
 use tracing::{error, info};
 use serde::{Deserialize, Serialize};
@@ -131,6 +131,42 @@ impl Operation for ObjectGetOperation {
     
     fn description(&self) -> &'static str {
         "Retrieves a MOO object definition by name from the database"
+    }
+    
+    fn philosophy(&self) -> &'static str {
+        "Retrieves the current state of a MOO object definition from the version control system. \
+        This operation returns the object dump (in objdef format) after applying any meta filtering \
+        rules that may be configured for the object. This is useful for examining object definitions, \
+        downloading them for local editing, or synchronizing with the MOO database. The returned \
+        definition reflects the most recent version of the object in the repository."
+    }
+    
+    fn parameters(&self) -> Vec<OperationParameter> {
+        vec![
+            OperationParameter {
+                name: "object_name".to_string(),
+                description: "The name of the MOO object to retrieve (e.g., '$player', '#123')".to_string(),
+                required: true,
+            }
+        ]
+    }
+    
+    fn examples(&self) -> Vec<OperationExample> {
+        vec![
+            OperationExample {
+                description: "Retrieve an object definition by name".to_string(),
+                moocode: r#"objdef = worker_request("vcs", {"object/get", "$player"});
+// Returns the object definition as a string"#.to_string(),
+                http_curl: Some(r#"curl -X POST http://localhost:8081/object/get \
+  -H "Content-Type: application/json" \
+  -d '{"operation": "object/get", "args": ["$player"]}'"#.to_string()),
+            },
+            OperationExample {
+                description: "Retrieve an object by object number".to_string(),
+                moocode: "objdef = worker_request(\"vcs\", {\"object/get\", \"#123\"});\n// Returns the object definition for object #123".to_string(),
+                http_curl: None,
+            }
+        ]
     }
     
     fn routes(&self) -> Vec<OperationRoute> {

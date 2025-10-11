@@ -88,11 +88,58 @@ fn generate_openapi_spec(registry: &OperationRegistry) -> utoipa::openapi::OpenA
         let mut path_item = PathItemBuilder::new();
         
         for (op_name, method, description) in ops {
+            // Get the full operation to extract detailed documentation
+            let operation_opt = registry.get_operation(&op_name);
+            
+            // Build comprehensive description with philosophy, parameters, and examples
+            let mut full_description = description.clone();
+            
+            if let Some(op) = operation_opt {
+                // Add philosophy section
+                let philosophy = op.philosophy();
+                if !philosophy.is_empty() {
+                    full_description.push_str("\n\n## Philosophy\n\n");
+                    full_description.push_str(philosophy);
+                }
+                
+                // Add parameters section
+                let params = op.parameters();
+                if !params.is_empty() {
+                    full_description.push_str("\n\n## Parameters\n\n");
+                    for param in params {
+                        full_description.push_str(&format!(
+                            "- **{}** {}: {}\n",
+                            param.name,
+                            if param.required { "(required)" } else { "(optional)" },
+                            param.description
+                        ));
+                    }
+                }
+                
+                // Add examples section
+                let examples = op.examples();
+                if !examples.is_empty() {
+                    full_description.push_str("\n\n## Examples\n\n");
+                    for example in examples {
+                        full_description.push_str(&format!("### {}\n\n", example.description));
+                        full_description.push_str("**MOOCode:**\n```moo\n");
+                        full_description.push_str(&example.moocode);
+                        full_description.push_str("\n```\n\n");
+                        
+                        if let Some(ref curl) = example.http_curl {
+                            full_description.push_str("**HTTP (curl):**\n```bash\n");
+                            full_description.push_str(curl);
+                            full_description.push_str("\n```\n\n");
+                        }
+                    }
+                }
+            }
+            
             let operation = OperationBuilder::new()
                 .tag("vcs-worker")
                 .operation_id(Some(op_name.replace("/", "_")))
                 .summary(Some(op_name.clone()))
-                .description(Some(description))
+                .description(Some(full_description))
                 .response("200", ResponseBuilder::new()
                     .description("Operation executed successfully")
                     .content("application/json", ContentBuilder::new()

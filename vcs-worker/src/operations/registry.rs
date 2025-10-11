@@ -114,6 +114,11 @@ impl OperationRegistry {
     pub fn get_operation_description(&self, name: &str) -> Option<&'static str> {
         self.operations.get(name).map(|op| op.description())
     }
+    
+    /// Get an operation by name (returns a reference to the boxed trait object)
+    pub fn get_operation(&self, name: &str) -> Option<&Box<dyn Operation>> {
+        self.operations.get(name)
+    }
 }
 
 /// Convert a moor Var to a JSON Value for HTTP responses
