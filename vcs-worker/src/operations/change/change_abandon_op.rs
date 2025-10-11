@@ -58,9 +58,10 @@ impl ChangeAbandonOperation {
             info!("Successfully abandoned change '{}' ({}), created undo delta", change.name, change.id);
             Ok(undo_delta)
         } else {
-            info!("No current change to abandon");
-            // Return empty delta model when no change to abandon
-            Ok(ObjectDiffModel::new())
+            error!("No current change to abandon");
+            return Err(ObjectsTreeError::SerializationError(
+                "Error: No change to abandon".to_string()
+            ));
         }
     }
 
