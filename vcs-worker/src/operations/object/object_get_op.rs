@@ -243,7 +243,7 @@ end""#
             }
             Err(e) => {
                 error!("Object get operation failed: {}", e);
-                v_error(E_INVARG.msg(&format!("{e}")))
+                v_error(E_INVARG.msg(format!("{e}")))
             }
         }
     }

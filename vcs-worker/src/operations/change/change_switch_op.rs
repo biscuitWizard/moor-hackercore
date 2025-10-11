@@ -32,7 +32,7 @@ impl ChangeSwitchOperation {
         let mut target_change = self.database.workspace().get_workspace_change(&target_change_id)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
             .ok_or_else(|| ObjectsTreeError::SerializationError(
-                format!("Change '{}' not found in workspace", target_change_id)
+                format!("Change '{target_change_id}' not found in workspace")
             ))?;
         
         info!("Found target change '{}' in workspace (status: {:?})", target_change.name, target_change.status);
@@ -49,7 +49,7 @@ impl ChangeSwitchOperation {
             let mut current_change = self.database.index().get_change(&current_change_id)
                 .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
                 .ok_or_else(|| ObjectsTreeError::SerializationError(
-                    format!("Current change '{}' not found", current_change_id)
+                    format!("Current change '{current_change_id}' not found")
                 ))?;
             
             // Only handle local changes - can't switch away from merged/review changes
@@ -226,7 +226,7 @@ player:tell("Need to update ", length(diff["modified_objects"]), " objects");"#.
             }
             Err(e) => {
                 error!("Workspace change switch operation failed: {}", e);
-                v_error(E_INVARG.msg(&format!("Error: {e}")))
+                v_error(E_INVARG.msg(format!("Error: {e}")))
             }
         }
     }

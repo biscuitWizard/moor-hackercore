@@ -225,11 +225,11 @@ impl Database {
         
         match matches.len() {
             0 => Err(ObjectsTreeError::SerializationError(
-                format!("Change ID '{}' not found", short_or_full)
+                format!("Change ID '{short_or_full}' not found")
             )),
             1 => Ok(matches[0].clone()),
             _ => Err(ObjectsTreeError::SerializationError(
-                format!("Ambiguous change ID prefix '{}' matches multiple changes. Please provide more characters.", short_or_full)
+                format!("Ambiguous change ID prefix '{short_or_full}' matches multiple changes. Please provide more characters.")
             )),
         }
     }

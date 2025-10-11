@@ -29,7 +29,7 @@ impl ChangeAbandonOperation {
         if let Some(change_id) = top_change_id {
             let change = self.database.index().get_change(&change_id)
                 .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
-                .ok_or_else(|| ObjectsTreeError::SerializationError(format!("Top change '{}' not found", change_id)))?;
+                .ok_or_else(|| ObjectsTreeError::SerializationError(format!("Top change '{change_id}' not found")))?;
             
             info!("Attempting to abandon current change: {}", change.id);
             
@@ -59,9 +59,9 @@ impl ChangeAbandonOperation {
             Ok(undo_delta)
         } else {
             error!("No current change to abandon");
-            return Err(ObjectsTreeError::SerializationError(
+            Err(ObjectsTreeError::SerializationError(
                 "Error: No change to abandon".to_string()
-            ));
+            ))
         }
     }
 
@@ -154,7 +154,7 @@ player:tell("Change abandoned. You need to revert ", length(diff["modified_objec
             }
             Err(e) => {
                 error!("Change abandon operation failed: {}", e);
-                moor_var::v_error(moor_var::E_INVARG.msg(&format!("Error: {e}")))
+                moor_var::v_error(moor_var::E_INVARG.msg(format!("Error: {e}")))
             }
         }
     }

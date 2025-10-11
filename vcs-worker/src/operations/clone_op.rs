@@ -80,7 +80,7 @@ impl CloneOperation {
             .header("X-API-Key", api_key)
             .send()
             .await
-            .map_err(|e| ObjectsTreeError::SerializationError(format!("Failed to stat remote server: {}", e)))?;
+            .map_err(|e| ObjectsTreeError::SerializationError(format!("Failed to stat remote server: {e}")))?;
         
         if !response.status().is_success() {
             return Err(ObjectsTreeError::SerializationError(
@@ -90,7 +90,7 @@ impl CloneOperation {
         
         let response_json: serde_json::Value = response.json()
             .await
-            .map_err(|e| ObjectsTreeError::SerializationError(format!("Failed to parse stat response: {}", e)))?;
+            .map_err(|e| ObjectsTreeError::SerializationError(format!("Failed to parse stat response: {e}")))?;
         
         // Extract user info from response
         // Response format: {"result": [user_id, email, v_obj, permissions], ...}
@@ -123,7 +123,7 @@ impl CloneOperation {
         let response = client.get(url)
             .send()
             .await
-            .map_err(|e| ObjectsTreeError::SerializationError(format!("HTTP request failed: {}", e)))?;
+            .map_err(|e| ObjectsTreeError::SerializationError(format!("HTTP request failed: {e}")))?;
         
         if !response.status().is_success() {
             return Err(ObjectsTreeError::SerializationError(
@@ -133,7 +133,7 @@ impl CloneOperation {
         
         let response_text = response.text()
             .await
-            .map_err(|e| ObjectsTreeError::SerializationError(format!("Failed to read response: {}", e)))?;
+            .map_err(|e| ObjectsTreeError::SerializationError(format!("Failed to read response: {e}")))?;
         
         // Try to parse as OperationResponse first (HTTP API response)
         let clone_data: CloneData = if let Ok(op_response) = serde_json::from_str::<serde_json::Value>(&response_text) {
@@ -142,20 +142,20 @@ impl CloneOperation {
                 if let Some(result_str) = result_field.as_str() {
                     // The result is a JSON string, parse it as CloneData
                     serde_json::from_str(result_str)
-                        .map_err(|e| ObjectsTreeError::SerializationError(format!("Failed to parse CloneData from result: {}", e)))?
+                        .map_err(|e| ObjectsTreeError::SerializationError(format!("Failed to parse CloneData from result: {e}")))?
                 } else {
                     // The result might be a direct object
                     serde_json::from_value(result_field.clone())
-                        .map_err(|e| ObjectsTreeError::SerializationError(format!("Failed to parse CloneData from result object: {}", e)))?
+                        .map_err(|e| ObjectsTreeError::SerializationError(format!("Failed to parse CloneData from result object: {e}")))?
                 }
             } else {
                 // No result field, try to parse the whole response as CloneData
                 serde_json::from_value(op_response)
-                    .map_err(|e| ObjectsTreeError::SerializationError(format!("Failed to parse CloneData: {}", e)))?
+                    .map_err(|e| ObjectsTreeError::SerializationError(format!("Failed to parse CloneData: {e}")))?
             }
         } else {
             // Not valid JSON, return error
-            return Err(ObjectsTreeError::SerializationError(format!("Invalid JSON response: {}", response_text)));
+            return Err(ObjectsTreeError::SerializationError(format!("Invalid JSON response: {response_text}")));
         };
         
         // Extract base URL from source_url (remove /api/clone or /clone suffix)
@@ -175,7 +175,7 @@ impl CloneOperation {
         // Import the data
         self.import_state(clone_data, url, external_user_info.as_ref())?;
         
-        Ok(format!("Successfully cloned from {}", url))
+        Ok(format!("Successfully cloned from {url}"))
     }
     
     /// Import repository state from a URL (sync wrapper for use in execute())
@@ -224,7 +224,7 @@ impl CloneOperation {
         
         // Import refs
         for (obj_info, sha256) in &data.refs {
-            self.database.refs().update_ref(obj_info.object_type, &obj_info.name, obj_info.version, &sha256)
+            self.database.refs().update_ref(obj_info.object_type, &obj_info.name, obj_info.version, sha256)
                 .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         }
         info!("Imported {} refs", refs_count);
@@ -396,13 +396,13 @@ impl Operation for CloneOperation {
                         }
                         Err(e) => {
                             error!("Failed to serialize clone data: {}", e);
-                            v_error(E_INVARG.msg(&format!("Failed to serialize: {}", e)))
+                            v_error(E_INVARG.msg(format!("Failed to serialize: {e}")))
                         }
                     }
                 }
                 Err(e) => {
                     error!("Failed to export repository state: {}", e);
-                    v_error(E_INVARG.msg(&format!("{}", e)))
+                    v_error(E_INVARG.msg(format!("{e}")))
                 }
             }
         } else {
@@ -424,7 +424,7 @@ impl Operation for CloneOperation {
                 }
                 Err(e) => {
                     error!("Clone operation failed: {}", e);
-                    v_error(E_INVARG.msg(&format!("{}", e)))
+                    v_error(E_INVARG.msg(format!("{e}")))
                 }
             }
         }

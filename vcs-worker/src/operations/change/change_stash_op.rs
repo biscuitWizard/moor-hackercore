@@ -39,7 +39,7 @@ impl ChangeStashOperation {
         // Get the change
         let mut change = self.database.index().get_change(&top_change_id)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
-            .ok_or_else(|| ObjectsTreeError::SerializationError(format!("Change '{}' not found", top_change_id)))?;
+            .ok_or_else(|| ObjectsTreeError::SerializationError(format!("Change '{top_change_id}' not found")))?;
 
         info!("User '{}' attempting to stash change: {} ({})", user.id, change.name, change.id);
 
@@ -174,7 +174,7 @@ worker_request("vcs", {"change/switch", stashed_id});"#.to_string(),
             }
             Err(e) => {
                 error!("Change stash operation failed: {}", e);
-                v_error(E_INVARG.msg(&format!("Error: {e}")))
+                v_error(E_INVARG.msg(format!("Error: {e}")))
             }
         }
     }

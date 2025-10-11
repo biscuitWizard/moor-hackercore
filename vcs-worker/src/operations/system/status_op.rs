@@ -31,7 +31,7 @@ impl StatusOperation {
         // Get top change ID
         let top_change_id = self.database.index().get_top_change()
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
-            .unwrap_or_else(|| String::new());
+            .unwrap_or_else(String::new);
         
         // Get change order to count changes in working index
         let change_order = self.database.index().get_change_order()
@@ -60,7 +60,7 @@ impl StatusOperation {
         // Get remote repository URL if present
         let remote_url = self.database.index().get_source()
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
-            .unwrap_or_else(|| String::new());
+            .unwrap_or_else(String::new);
         
         // Get partition data sizes (sum of all keys and values in each partition)
         let index_partition_size = self.get_partition_data_size("index") as i64;
@@ -225,7 +225,7 @@ impl Operation for StatusOperation {
             }
             Err(e) => {
                 error!("System status operation failed: {}", e);
-                moor_var::v_str(&format!("Error: {}", e))
+                moor_var::v_str(&format!("Error: {e}"))
             }
         }
     }

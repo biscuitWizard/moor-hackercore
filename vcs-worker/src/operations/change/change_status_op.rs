@@ -47,7 +47,7 @@ impl ChangeStatusOperation {
             // Get the actual change object
             let current_change = self.database.index().get_change(&change_id)
                 .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
-                .ok_or_else(|| ObjectsTreeError::SerializationError(format!("Change '{}' not found", change_id)))?;
+                .ok_or_else(|| ObjectsTreeError::SerializationError(format!("Change '{change_id}' not found")))?;
             
             // Check if the top change is local status
             if current_change.status != ChangeStatus::Local {
@@ -68,7 +68,7 @@ impl ChangeStatusOperation {
             Ok(status_map)
         } else {
             info!("No top change found, returning error");
-            return Ok(v_error(E_INVARG.msg("No change on top of index - nothing to do")));
+            Ok(v_error(E_INVARG.msg("No change on top of index - nothing to do")))
         }
     }
     
@@ -161,7 +161,7 @@ player:tell("Deleted: ", length(diff["deleted_objects"]), " objects");"#.to_stri
             }
             Err(e) => {
                 error!("Change status operation failed: {}", e);
-                moor_var::v_error(moor_var::E_INVARG.msg(&format!("Error: {e}")))
+                moor_var::v_error(moor_var::E_INVARG.msg(format!("Error: {e}")))
             }
         }
     }

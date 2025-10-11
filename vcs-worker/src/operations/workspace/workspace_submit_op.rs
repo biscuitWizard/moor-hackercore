@@ -32,7 +32,7 @@ impl WorkspaceSubmitOperation {
         // Deserialize the change from the provided string
         let change: Change = serde_json::from_str(serialized_change)
             .map_err(|e| ObjectsTreeError::SerializationError(
-                format!("Failed to deserialize change: {}", e)
+                format!("Failed to deserialize change: {e}")
             ))?;
 
         info!("User '{}' submitting change for review: {} ({})", user.id, change.name, change.id);
@@ -129,7 +129,7 @@ impl Operation for WorkspaceSubmitOperation {
             }
             Err(e) => {
                 error!("Workspace submit operation failed: {}", e);
-                v_error(E_INVARG.msg(&format!("{e}")))
+                v_error(E_INVARG.msg(format!("{e}")))
             }
         }
     }

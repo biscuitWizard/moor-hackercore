@@ -451,7 +451,7 @@ impl Operation for ObjectRenameOperation {
             }
             Err(e) => {
                 error!("Object rename operation failed: {}", e);
-                v_error(E_INVARG.msg(&e.to_string()))
+                v_error(E_INVARG.msg(e.to_string()))
             }
         }
     }

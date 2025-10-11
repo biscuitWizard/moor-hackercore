@@ -56,7 +56,7 @@ impl IndexCalcDeltaOperation {
             None => {
                 error!("Change '{}' not found in index order", change_id);
                 return Err(ObjectsTreeError::SerializationError(
-                    format!("Change '{}' does not exist in index", change_id)
+                    format!("Change '{change_id}' does not exist in index")
                 ));
             }
         };
@@ -237,7 +237,7 @@ impl Operation for IndexCalcDeltaOperation {
             }
             Err(e) => {
                 error!("Index calc delta operation failed: {}", e);
-                v_error(E_INVARG.msg(&format!("{e}")))
+                v_error(E_INVARG.msg(format!("{e}")))
             }
         }
     }

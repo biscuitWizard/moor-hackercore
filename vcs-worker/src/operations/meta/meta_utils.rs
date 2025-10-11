@@ -11,7 +11,7 @@ pub fn validate_object_exists(
 ) -> Result<(), ObjectsTreeError> {
     database.refs().get_ref(VcsObjectType::MooObject, object_name, None)
         .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
-        .ok_or_else(|| ObjectsTreeError::ObjectNotFound(format!("Object '{}' not found", object_name)))?;
+        .ok_or_else(|| ObjectsTreeError::ObjectNotFound(format!("Object '{object_name}' not found")))?;
     Ok(())
 }
 

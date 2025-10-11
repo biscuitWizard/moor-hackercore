@@ -127,7 +127,7 @@ endfor"##.to_string(),
             }
             Err(e) => {
                 error!("Object list operation failed: {}", e);
-                v_error(E_INVARG.msg(&format!("{e}")))
+                v_error(E_INVARG.msg(format!("{e}")))
             }
         }
     }

@@ -117,11 +117,11 @@ impl Operation for UserEnableOperation {
         match self.user_provider.enable_user(target_user_id) {
             Ok(()) => {
                 info!("Enabled user '{}'", target_user_id);
-                moor_var::v_str(&format!("Successfully enabled user '{}'", target_user_id))
+                moor_var::v_str(&format!("Successfully enabled user '{target_user_id}'"))
             }
             Err(e) => {
                 error!("Failed to enable user: {}", e);
-                moor_var::v_error(moor_var::E_INVARG.msg(&format!("Error: {}", e)))
+                moor_var::v_error(moor_var::E_INVARG.msg(format!("Error: {e}")))
             }
         }
     }

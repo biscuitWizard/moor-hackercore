@@ -262,11 +262,9 @@ impl RefsProvider for RefsProviderImpl {
     
     fn get_data_size(&self) -> u64 {
         let mut total_size = 0u64;
-        for result in self.refs_tree.iter() {
-            if let Ok((key, value)) = result {
-                total_size += key.len() as u64;
-                total_size += value.len() as u64;
-            }
+        for (key, value) in self.refs_tree.iter().flatten() {
+            total_size += key.len() as u64;
+            total_size += value.len() as u64;
         }
         total_size
     }

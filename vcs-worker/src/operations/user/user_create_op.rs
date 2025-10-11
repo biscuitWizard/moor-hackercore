@@ -131,7 +131,7 @@ impl Operation for UserCreateOperation {
             Ok(n) => n,
             Err(_) => {
                 error!("Invalid v_obj: {}", v_obj_str);
-                return moor_var::v_error(moor_var::E_INVARG.msg(&format!("Error: Invalid v_obj '{}', must be an integer", v_obj_str)));
+                return moor_var::v_error(moor_var::E_INVARG.msg(format!("Error: Invalid v_obj '{v_obj_str}', must be an integer")));
             }
         };
         
@@ -142,11 +142,11 @@ impl Operation for UserCreateOperation {
             Ok(created_user) => {
                 info!("Created user '{}' with email '{}' and v_obj {:?}", 
                       created_user.id, created_user.email, created_user.v_obj);
-                moor_var::v_str(&format!("Successfully created user '{}'", user_id))
+                moor_var::v_str(&format!("Successfully created user '{user_id}'"))
             }
             Err(e) => {
                 error!("Failed to create user: {}", e);
-                moor_var::v_error(moor_var::E_INVARG.msg(&format!("Error: {}", e)))
+                moor_var::v_error(moor_var::E_INVARG.msg(format!("Error: {e}")))
             }
         }
     }

@@ -159,7 +159,7 @@ impl Operation for IndexListOperation {
         let mut page = None;
         
         // Parse optional limit parameter
-        if args.len() > 0 && !args[0].is_empty() {
+        if !args.is_empty() && !args[0].is_empty() {
             if let Ok(parsed_limit) = args[0].parse::<usize>() {
                 limit = Some(parsed_limit);
             } else {
@@ -185,7 +185,7 @@ impl Operation for IndexListOperation {
             }
             Err(e) => {
                 error!("Index list operation failed: {}", e);
-                v_error(E_INVARG.msg(&format!("{e}")))
+                v_error(E_INVARG.msg(format!("{e}")))
             }
         }
     }

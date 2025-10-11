@@ -26,7 +26,7 @@ impl UserRemovePermissionOperation {
             "DisableUser" | "Disable_User" => Ok(Permission::DisableUser),
             "ManagePermissions" | "Manage_Permissions" => Ok(Permission::ManagePermissions),
             "ManageApiKeys" | "Manage_Api_Keys" => Ok(Permission::ManageApiKeys),
-            _ => Err(format!("Unknown permission: {}", perm_str)),
+            _ => Err(format!("Unknown permission: {perm_str}")),
         }
     }
 }
@@ -137,7 +137,7 @@ impl Operation for UserRemovePermissionOperation {
             Ok(p) => p,
             Err(e) => {
                 error!("Invalid permission: {}", e);
-                return moor_var::v_error(moor_var::E_INVARG.msg(&format!("Error: {}", e)));
+                return moor_var::v_error(moor_var::E_INVARG.msg(format!("Error: {e}")));
             }
         };
         
@@ -146,17 +146,15 @@ impl Operation for UserRemovePermissionOperation {
             Ok(removed) => {
                 if removed {
                     info!("Removed permission {:?} from user '{}'", permission, target_user_id);
-                    moor_var::v_str(&format!("Successfully removed permission '{}' from user '{}'", 
-                                            permission_str, target_user_id))
+                    moor_var::v_str(&format!("Successfully removed permission '{permission_str}' from user '{target_user_id}'"))
                 } else {
                     info!("User '{}' did not have permission {:?}", target_user_id, permission);
-                    moor_var::v_str(&format!("User '{}' did not have permission '{}'", 
-                                            target_user_id, permission_str))
+                    moor_var::v_str(&format!("User '{target_user_id}' did not have permission '{permission_str}'"))
                 }
             }
             Err(e) => {
                 error!("Failed to remove permission: {}", e);
-                moor_var::v_error(moor_var::E_INVARG.msg(&format!("Error: {}", e)))
+                moor_var::v_error(moor_var::E_INVARG.msg(format!("Error: {e}")))
             }
         }
     }

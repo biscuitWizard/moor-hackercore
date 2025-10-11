@@ -66,12 +66,12 @@ impl WorkspaceProviderImpl {
     
     /// Helper function to convert change to workspace format
     fn change_to_workspace_key(change_id: &str) -> Vec<u8> {
-        format!("change:{}", change_id).as_bytes().to_vec()
+        format!("change:{change_id}").as_bytes().to_vec()
     }
     
     /// Helper function to convert status to search key prefix
     fn status_to_prefix(status: ChangeStatus) -> String {
-        format!("status:{:?}:", status).to_lowercase()
+        format!("status:{status:?}:").to_lowercase()
     }
 }
 
@@ -202,7 +202,7 @@ impl WorkspaceProvider for WorkspaceProviderImpl {
     
     fn promote_change_to_index(&self, change_id: &str) -> ProviderResult<Change> {
         let change = self.get_workspace_change(change_id)?
-            .ok_or_else(|| ProviderError::InvalidOperation(format!("Workspace change '{}' not found", change_id)))?;
+            .ok_or_else(|| ProviderError::InvalidOperation(format!("Workspace change '{change_id}' not found")))?;
         
         info!("Promoting workspace change '{}' to index", change_id);
         
@@ -235,7 +235,7 @@ impl WorkspaceProvider for WorkspaceProviderImpl {
     
     fn update_approval_status(&self, change_id: &str, status: ChangeStatus) -> ProviderResult<()> {
         let mut change = self.get_workspace_change(change_id)?
-            .ok_or_else(|| ProviderError::InvalidOperation(format!("Workspace change '{}' not found", change_id)))?;
+            .ok_or_else(|| ProviderError::InvalidOperation(format!("Workspace change '{change_id}' not found")))?;
         
         let old_status = change.status.clone();
         change.status = status.clone();

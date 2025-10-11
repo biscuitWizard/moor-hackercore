@@ -1,5 +1,4 @@
 /// Utility functions for working with timestamps, time-related operations, and hashing
-
 /// Get the current Unix timestamp in seconds
 pub fn current_unix_timestamp() -> u64 {
     std::time::SystemTime::now()
@@ -60,8 +59,7 @@ pub fn resolve_hash(
         0 => Ok(None),
         1 => Ok(Some(matches.remove(0))),
         _ => Err(format!(
-            "Ambiguous hash prefix '{}' matches multiple changes. Please provide more characters.",
-            short_or_full
+            "Ambiguous hash prefix '{short_or_full}' matches multiple changes. Please provide more characters."
         )
         .into()),
     }

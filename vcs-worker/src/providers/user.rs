@@ -13,6 +13,12 @@ pub struct UserStorage {
     pub users: std::collections::HashMap<String, User>,
 }
 
+impl Default for UserStorage {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl UserStorage {
     pub fn new() -> Self {
         Self {
@@ -128,9 +134,9 @@ impl UserProviderImpl {
     
     /// Create the default "Everyone" user
     fn create_everyone_user() -> User {
-        let user = User::new_system_user("Everyone".to_string(), "everyone@system".to_string(), Obj::mk_id(0));
+        
         // Everyone user has no permissions by default
-        user
+        User::new_system_user("Everyone".to_string(), "everyone@system".to_string(), Obj::mk_id(0))
     }
 
     /// Create the default "Wizard" user with all permissions
@@ -152,17 +158,17 @@ impl UserProvider for UserProviderImpl {
         
         // Check if user already exists
         if storage.users.contains_key(&id) {
-            return Err(ProviderError::InvalidOperation(format!("User '{}' already exists", id)));
+            return Err(ProviderError::InvalidOperation(format!("User '{id}' already exists")));
         }
         
         // Check if email is already taken
         if storage.users.values().any(|u| u.email == email) {
-            return Err(ProviderError::InvalidOperation(format!("Email '{}' is already taken", email)));
+            return Err(ProviderError::InvalidOperation(format!("Email '{email}' is already taken")));
         }
         
         // Check if v_obj is already taken
         if storage.users.values().any(|u| u.v_obj == v_obj) {
-            return Err(ProviderError::InvalidOperation(format!("v_obj {:?} is already taken", v_obj)));
+            return Err(ProviderError::InvalidOperation(format!("v_obj {v_obj:?} is already taken")));
         }
         
         let user = User::new(id.clone(), email, v_obj);
@@ -210,7 +216,7 @@ impl UserProvider for UserProviderImpl {
         if let Some(user) = storage.users.get(user_id) {
             if user.is_system_user {
                 return Err(ProviderError::InvalidOperation(
-                    format!("Cannot delete system user '{}'", user_id)
+                    format!("Cannot delete system user '{user_id}'")
                 ));
             }
         }
@@ -233,7 +239,7 @@ impl UserProvider for UserProviderImpl {
         let mut storage = self.load_user_storage()?;
         
         let user = storage.users.get_mut(user_id)
-            .ok_or_else(|| ProviderError::InvalidOperation(format!("User '{}' not found", user_id)))?;
+            .ok_or_else(|| ProviderError::InvalidOperation(format!("User '{user_id}' not found")))?;
         
         user.add_authorized_key(key.clone());
         self.save_user_storage(&storage)?;
@@ -246,7 +252,7 @@ impl UserProvider for UserProviderImpl {
         let mut storage = self.load_user_storage()?;
         
         let user = storage.users.get_mut(user_id)
-            .ok_or_else(|| ProviderError::InvalidOperation(format!("User '{}' not found", user_id)))?;
+            .ok_or_else(|| ProviderError::InvalidOperation(format!("User '{user_id}' not found")))?;
         
         let removed = user.remove_authorized_key(key);
         if removed {
@@ -261,7 +267,7 @@ impl UserProvider for UserProviderImpl {
         let mut storage = self.load_user_storage()?;
         
         let user = storage.users.get_mut(user_id)
-            .ok_or_else(|| ProviderError::InvalidOperation(format!("User '{}' not found", user_id)))?;
+            .ok_or_else(|| ProviderError::InvalidOperation(format!("User '{user_id}' not found")))?;
         
         user.add_permission(permission.clone());
         self.save_user_storage(&storage)?;
@@ -274,7 +280,7 @@ impl UserProvider for UserProviderImpl {
         let mut storage = self.load_user_storage()?;
         
         let user = storage.users.get_mut(user_id)
-            .ok_or_else(|| ProviderError::InvalidOperation(format!("User '{}' not found", user_id)))?;
+            .ok_or_else(|| ProviderError::InvalidOperation(format!("User '{user_id}' not found")))?;
         
         let removed = user.remove_permission(permission);
         if removed {
@@ -289,7 +295,7 @@ impl UserProvider for UserProviderImpl {
         let storage = self.load_user_storage()?;
         
         let user = storage.users.get(user_id)
-            .ok_or_else(|| ProviderError::InvalidOperation(format!("User '{}' not found", user_id)))?;
+            .ok_or_else(|| ProviderError::InvalidOperation(format!("User '{user_id}' not found")))?;
         
         Ok(user.has_permission(permission))
     }
@@ -351,11 +357,11 @@ impl UserProvider for UserProviderImpl {
         let mut storage = self.load_user_storage()?;
         
         let user = storage.users.get_mut(user_id)
-            .ok_or_else(|| ProviderError::InvalidOperation(format!("User '{}' not found", user_id)))?;
+            .ok_or_else(|| ProviderError::InvalidOperation(format!("User '{user_id}' not found")))?;
         
         if user.is_system_user {
             return Err(ProviderError::InvalidOperation(
-                format!("Cannot disable system user '{}'", user_id)
+                format!("Cannot disable system user '{user_id}'")
             ));
         }
         
@@ -370,7 +376,7 @@ impl UserProvider for UserProviderImpl {
         let mut storage = self.load_user_storage()?;
         
         let user = storage.users.get_mut(user_id)
-            .ok_or_else(|| ProviderError::InvalidOperation(format!("User '{}' not found", user_id)))?;
+            .ok_or_else(|| ProviderError::InvalidOperation(format!("User '{user_id}' not found")))?;
         
         user.is_disabled = false;
         self.save_user_storage(&storage)?;
@@ -383,7 +389,7 @@ impl UserProvider for UserProviderImpl {
         let storage = self.load_user_storage()?;
         
         let user = storage.users.get(user_id)
-            .ok_or_else(|| ProviderError::InvalidOperation(format!("User '{}' not found", user_id)))?;
+            .ok_or_else(|| ProviderError::InvalidOperation(format!("User '{user_id}' not found")))?;
         
         Ok(user.is_disabled)
     }
@@ -394,7 +400,7 @@ impl UserProvider for UserProviderImpl {
         let mut storage = self.load_user_storage()?;
         
         let user = storage.users.get_mut(user_id)
-            .ok_or_else(|| ProviderError::InvalidOperation(format!("User '{}' not found", user_id)))?;
+            .ok_or_else(|| ProviderError::InvalidOperation(format!("User '{user_id}' not found")))?;
         
         let api_key = Uuid::new_v4().to_string();
         user.add_authorized_key(api_key.clone());

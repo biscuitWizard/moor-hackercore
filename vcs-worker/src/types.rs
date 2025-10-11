@@ -215,18 +215,18 @@ pub enum Permission {
     ManageApiKeys,
 }
 
-impl Permission {
-    /// Convert permission to string for storage
-    pub fn to_string(&self) -> String {
-        match self {
-            Permission::ApproveChanges => "Approve_Changes".to_string(),
-            Permission::SubmitChanges => "Submit_Changes".to_string(),
-            Permission::Clone => "Clone".to_string(),
-            Permission::CreateUser => "Create_User".to_string(),
-            Permission::DisableUser => "Disable_User".to_string(),
-            Permission::ManagePermissions => "Manage_Permissions".to_string(),
-            Permission::ManageApiKeys => "Manage_Api_Keys".to_string(),
-        }
+impl std::fmt::Display for Permission {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            Permission::ApproveChanges => "Approve_Changes",
+            Permission::SubmitChanges => "Submit_Changes",
+            Permission::Clone => "Clone",
+            Permission::CreateUser => "Create_User",
+            Permission::DisableUser => "Disable_User",
+            Permission::ManagePermissions => "Manage_Permissions",
+            Permission::ManageApiKeys => "Manage_Api_Keys",
+        };
+        write!(f, "{s}")
     }
 }
 

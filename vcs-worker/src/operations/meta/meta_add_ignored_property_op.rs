@@ -136,7 +136,7 @@ impl Operation for MetaAddIgnoredPropertyOperation {
             }
             Err(e) => {
                 error!("Meta add ignored property operation failed: {}", e);
-                moor_var::v_error(moor_var::E_INVARG.msg(&format!("Error: {e}")))
+                moor_var::v_error(moor_var::E_INVARG.msg(format!("Error: {e}")))
             }
         }
     }

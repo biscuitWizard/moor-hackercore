@@ -119,11 +119,11 @@ impl Operation for UserDisableOperation {
         match self.user_provider.disable_user(target_user_id) {
             Ok(()) => {
                 info!("Disabled user '{}'", target_user_id);
-                moor_var::v_str(&format!("Successfully disabled user '{}'", target_user_id))
+                moor_var::v_str(&format!("Successfully disabled user '{target_user_id}'"))
             }
             Err(e) => {
                 error!("Failed to disable user: {}", e);
-                moor_var::v_error(moor_var::E_INVARG.msg(&format!("Error: {}", e)))
+                moor_var::v_error(moor_var::E_INVARG.msg(format!("Error: {e}")))
             }
         }
     }

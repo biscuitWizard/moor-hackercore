@@ -6,18 +6,10 @@ use crate::types::{OperationRequest, OperationResponse};
 use crate::providers::user::UserProvider;
 
 /// Registry that holds all registered operations
+#[derive(Default)]
 pub struct OperationRegistry {
     operations: HashMap<String, Box<dyn Operation>>,
     user_provider: Option<std::sync::Arc<dyn UserProvider>>,
-}
-
-impl Default for OperationRegistry {
-    fn default() -> Self {
-        Self {
-            operations: HashMap::new(),
-            user_provider: None,
-        }
-    }
 }
 
 impl OperationRegistry {
@@ -116,8 +108,8 @@ impl OperationRegistry {
     }
     
     /// Get an operation by name (returns a reference to the boxed trait object)
-    pub fn get_operation(&self, name: &str) -> Option<&Box<dyn Operation>> {
-        self.operations.get(name)
+    pub fn get_operation(&self, name: &str) -> Option<&dyn Operation> {
+        self.operations.get(name).map(|b| &**b)
     }
 }
 
@@ -149,7 +141,7 @@ pub fn var_to_json_value(var: moor_var::Var) -> serde_json::Value {
                 s.to_string()
             } else {
                 // Convert non-string keys to their debug representation
-                format!("{:?}", k)
+                format!("{k:?}")
             };
             obj.insert(key_str, var_to_json_value(v.clone()));
         }
@@ -160,6 +152,6 @@ pub fn var_to_json_value(var: moor_var::Var) -> serde_json::Value {
         Value::Null
     } else {
         // For other types (Symbol, Binary, Lambda, etc.), convert to debug string
-        Value::String(format!("{:?}", var))
+        Value::String(format!("{var:?}"))
     }
 }

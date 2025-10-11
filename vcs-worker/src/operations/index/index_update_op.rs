@@ -78,7 +78,7 @@ impl IndexUpdateOperation {
         let delta_str = delta_result.as_string()
             .ok_or_else(|| ObjectsTreeError::SerializationError("Expected string delta result".to_string()))?;
         let delta_data: serde_json::Value = serde_json::from_str(delta_str)
-            .map_err(|e| ObjectsTreeError::SerializationError(format!("Failed to parse delta: {}", e)))?;
+            .map_err(|e| ObjectsTreeError::SerializationError(format!("Failed to parse delta: {e}")))?;
         
         let change_ids = delta_data.get("change_ids")
             .and_then(|v| v.as_array())
@@ -118,9 +118,9 @@ impl IndexUpdateOperation {
         
         // Construct the full clone endpoint URL (source_url is the base URL)
         let clone_url = if source_url.ends_with('/') {
-            format!("{}api/clone", source_url)
+            format!("{source_url}api/clone")
         } else {
-            format!("{}/api/clone", source_url)
+            format!("{source_url}/api/clone")
         };
         
         info!("Cloning from: {}", clone_url);
@@ -144,9 +144,9 @@ impl IndexUpdateOperation {
         
         // Construct the RPC URL
         let rpc_url = if source_url.ends_with('/') {
-            format!("{}rpc", source_url.trim_end_matches('/'))
+            format!("{source_url}rpc")
         } else {
-            format!("{}/rpc", source_url)
+            format!("{source_url}/rpc")
         };
         
         info!("Fetching delta from: {}", rpc_url);
@@ -162,7 +162,7 @@ impl IndexUpdateOperation {
             .json(&request_body)
             .send()
             .await
-            .map_err(|e| ObjectsTreeError::SerializationError(format!("HTTP request failed: {}", e)))?;
+            .map_err(|e| ObjectsTreeError::SerializationError(format!("HTTP request failed: {e}")))?;
         
         if !response.status().is_success() {
             return Err(ObjectsTreeError::SerializationError(
@@ -172,7 +172,7 @@ impl IndexUpdateOperation {
         
         let response_json: serde_json::Value = response.json()
             .await
-            .map_err(|e| ObjectsTreeError::SerializationError(format!("Failed to read response: {}", e)))?;
+            .map_err(|e| ObjectsTreeError::SerializationError(format!("Failed to read response: {e}")))?;
         
         // Extract result from RPC response
         let result = response_json.get("result")
@@ -180,7 +180,7 @@ impl IndexUpdateOperation {
         
         // Convert result to JSON string for compatibility
         let result_str = serde_json::to_string(result)
-            .map_err(|e| ObjectsTreeError::SerializationError(format!("Failed to serialize result: {}", e)))?;
+            .map_err(|e| ObjectsTreeError::SerializationError(format!("Failed to serialize result: {e}")))?;
         
         info!("Successfully fetched delta from remote");
         Ok(moor_var::v_str(&result_str))
@@ -198,7 +198,7 @@ impl IndexUpdateOperation {
         };
         
         let _delta_data: serde_json::Value = serde_json::from_str(&delta_str)
-            .map_err(|e| ObjectsTreeError::SerializationError(format!("Failed to parse delta: {}", e)))?;
+            .map_err(|e| ObjectsTreeError::SerializationError(format!("Failed to parse delta: {e}")))?;
         
         // Extract change IDs, ref pairs, and objects from delta
         let empty_vec = vec![];

@@ -26,7 +26,7 @@ impl UserAddPermissionOperation {
             "DisableUser" | "Disable_User" => Ok(Permission::DisableUser),
             "ManagePermissions" | "Manage_Permissions" => Ok(Permission::ManagePermissions),
             "ManageApiKeys" | "Manage_Api_Keys" => Ok(Permission::ManageApiKeys),
-            _ => Err(format!("Unknown permission: {}", perm_str)),
+            _ => Err(format!("Unknown permission: {perm_str}")),
         }
     }
 }
@@ -145,7 +145,7 @@ impl Operation for UserAddPermissionOperation {
             Ok(p) => p,
             Err(e) => {
                 error!("Invalid permission: {}", e);
-                return moor_var::v_error(moor_var::E_INVARG.msg(&format!("Error: {}", e)));
+                return moor_var::v_error(moor_var::E_INVARG.msg(format!("Error: {e}")));
             }
         };
         
@@ -153,12 +153,11 @@ impl Operation for UserAddPermissionOperation {
         match self.user_provider.add_permission(target_user_id, permission.clone()) {
             Ok(()) => {
                 info!("Added permission {:?} to user '{}'", permission, target_user_id);
-                moor_var::v_str(&format!("Successfully added permission '{}' to user '{}'", 
-                                        permission_str, target_user_id))
+                moor_var::v_str(&format!("Successfully added permission '{permission_str}' to user '{target_user_id}'"))
             }
             Err(e) => {
                 error!("Failed to add permission: {}", e);
-                moor_var::v_error(moor_var::E_INVARG.msg(&format!("Error: {}", e)))
+                moor_var::v_error(moor_var::E_INVARG.msg(format!("Error: {e}")))
             }
         }
     }

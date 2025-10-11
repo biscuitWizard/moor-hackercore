@@ -45,7 +45,7 @@ impl ChangeApproveOperation {
                 self.database.index().get_change(&change_id)
                     .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
                     .ok_or_else(|| ObjectsTreeError::SerializationError(
-                        format!("Change '{}' not found in workspace or index", change_id)
+                        format!("Change '{change_id}' not found in workspace or index")
                     ))?
             }
         };
@@ -268,7 +268,7 @@ player:tell("Added: ", length(diff["added_objects"]), " objects");"#.to_string()
             }
             Err(e) => {
                 error!("Change approve operation failed: {}", e);
-                v_error(E_INVARG.msg(&format!("Error: {e}")))
+                v_error(E_INVARG.msg(format!("Error: {e}")))
             }
         }
     }

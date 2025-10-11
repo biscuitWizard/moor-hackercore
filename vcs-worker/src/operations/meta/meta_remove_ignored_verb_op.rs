@@ -132,7 +132,7 @@ impl Operation for MetaRemoveIgnoredVerbOperation {
             }
             Err(e) => {
                 error!("Meta remove ignored verb operation failed: {}", e);
-                moor_var::v_error(moor_var::E_INVARG.msg(&format!("Error: {e}")))
+                moor_var::v_error(moor_var::E_INVARG.msg(format!("Error: {e}")))
             }
         }
     }

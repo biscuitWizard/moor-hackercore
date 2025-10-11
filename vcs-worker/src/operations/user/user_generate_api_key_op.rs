@@ -139,7 +139,7 @@ player:tell("New API key for alice: ", api_key);"#.to_string(),
             }
             Err(e) => {
                 error!("Failed to generate API key: {}", e);
-                moor_var::v_error(moor_var::E_INVARG.msg(&format!("Error: {}", e)))
+                moor_var::v_error(moor_var::E_INVARG.msg(format!("Error: {e}")))
             }
         }
     }

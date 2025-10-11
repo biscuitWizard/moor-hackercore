@@ -259,11 +259,11 @@ pub fn compare_object_versions(database: &DatabaseRef, obj_name: &str, local_ver
     // Get the local version content
     let local_sha256 = database.refs().get_ref(VcsObjectType::MooObject, obj_name, Some(local_version))
         .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
-        .ok_or_else(|| ObjectsTreeError::SerializationError(format!("Local version {} of object '{}' not found", local_version, obj_name)))?;
+        .ok_or_else(|| ObjectsTreeError::SerializationError(format!("Local version {local_version} of object '{obj_name}' not found")))?;
     
     let local_content = database.objects().get(&local_sha256)
         .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
-        .ok_or_else(|| ObjectsTreeError::SerializationError(format!("Object content for SHA256 '{}' not found", local_sha256)))?;
+        .ok_or_else(|| ObjectsTreeError::SerializationError(format!("Object content for SHA256 '{local_sha256}' not found")))?;
     
     // Parse local object definition
     let local_def = database.objects().parse_object_dump(&local_content)
@@ -272,7 +272,7 @@ pub fn compare_object_versions(database: &DatabaseRef, obj_name: &str, local_ver
     // Get the baseline version (previous version)
     // For version 1 (new object), there is no baseline (version 0 doesn't exist)
     // For version 2+, the baseline is the previous version
-    let baseline_version = if local_version > 1 { local_version - 1 } else { 0 };
+    let baseline_version = local_version.saturating_sub(1);
     let baseline_sha256 = database.refs().get_ref(VcsObjectType::MooObject, obj_name, Some(baseline_version))
         .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
     
@@ -280,7 +280,7 @@ pub fn compare_object_versions(database: &DatabaseRef, obj_name: &str, local_ver
         // Get baseline content and parse it
         let baseline_content = database.objects().get(&baseline_sha256)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
-            .ok_or_else(|| ObjectsTreeError::SerializationError(format!("Baseline object content for SHA256 '{}' not found", baseline_sha256)))?;
+            .ok_or_else(|| ObjectsTreeError::SerializationError(format!("Baseline object content for SHA256 '{baseline_sha256}' not found")))?;
         
         let baseline_def = database.objects().parse_object_dump(&baseline_content)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;

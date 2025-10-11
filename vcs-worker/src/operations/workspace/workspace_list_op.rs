@@ -216,7 +216,7 @@ impl Operation for WorkspaceListOperation {
                 "idle" => Some(ChangeStatus::Idle),
                 _ => {
                     error!("Invalid status filter: {}. Valid options: review, idle", args[0]);
-                    return v_error(E_INVARG.msg(&format!("Invalid status filter: {}. Valid options: review, idle", args[0])));
+                    return v_error(E_INVARG.msg(format!("Invalid status filter: {}. Valid options: review, idle", args[0])));
                 }
             }
         };
@@ -232,7 +232,7 @@ impl Operation for WorkspaceListOperation {
             }
             Err(e) => {
                 error!("Workspace list operation failed: {}", e);
-                v_error(E_INVARG.msg(&format!("{e}")))
+                v_error(E_INVARG.msg(format!("{e}")))
             }
         }
     }

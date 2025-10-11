@@ -3,7 +3,6 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 use tracing::info;
 use utoipa::OpenApi;
-use serde_json;
 use utoipa::openapi::{
     PathsBuilder, InfoBuilder, ResponseBuilder, ContentBuilder, RefOr,
     path::{PathItemBuilder, OperationBuilder},
@@ -220,7 +219,7 @@ For more details on each operation, see the categorized endpoints below."#))
         if let Some(operation) = operations_list.iter().find(|&name| name == &op_name) {
             if let Some(desc) = registry.get_operation_description(operation) {
                 operation_routes.entry(route.path.clone())
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push((op_name.clone(), route.method.clone(), desc.to_string()));
             }
         }
@@ -374,7 +373,7 @@ For more details on each operation, see the categorized endpoints below."#))
                     }
                     
                     operation_builder = operation_builder.response(
-                        &response.status_code.to_string(),
+                        response.status_code.to_string(),
                         response_builder.build()
                     );
                 }

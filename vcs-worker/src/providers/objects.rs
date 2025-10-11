@@ -158,11 +158,9 @@ impl ObjectsProvider for ObjectsProviderImpl {
     
     fn get_data_size(&self) -> u64 {
         let mut total_size = 0u64;
-        for result in self.objects_tree.iter() {
-            if let Ok((key, value)) = result {
-                total_size += key.len() as u64;
-                total_size += value.len() as u64;
-            }
+        for (key, value) in self.objects_tree.iter().flatten() {
+            total_size += key.len() as u64;
+            total_size += value.len() as u64;
         }
         total_size
     }

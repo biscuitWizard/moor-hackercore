@@ -145,15 +145,15 @@ impl Operation for UserDeleteApiKeyOperation {
             Ok(deleted) => {
                 if deleted {
                     info!("Deleted API key from user '{}'", target_user_id);
-                    moor_var::v_str(&format!("Successfully deleted API key from user '{}'", target_user_id))
+                    moor_var::v_str(&format!("Successfully deleted API key from user '{target_user_id}'"))
                 } else {
                     info!("API key not found for user '{}'", target_user_id);
-                    moor_var::v_str(&format!("API key not found for user '{}'", target_user_id))
+                    moor_var::v_str(&format!("API key not found for user '{target_user_id}'"))
                 }
             }
             Err(e) => {
                 error!("Failed to delete API key: {}", e);
-                moor_var::v_error(moor_var::E_INVARG.msg(&format!("Error: {}", e)))
+                moor_var::v_error(moor_var::E_INVARG.msg(format!("Error: {e}")))
             }
         }
     }

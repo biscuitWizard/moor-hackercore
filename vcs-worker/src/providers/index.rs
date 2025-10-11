@@ -326,7 +326,7 @@ impl IndexProvider for IndexProviderImpl {
         // Clear top_change if we removed it (don't automatically set to last item)
         // top_change should only point to Local changes, not Merged ones
         if let Some(top_change) = self.working_index.get(Self::TOP_KEY)? {
-            if &top_change.to_vec() == change_id.as_bytes() {
+            if top_change.to_vec() == change_id.as_bytes() {
                 self.working_index.remove(Self::TOP_KEY)?;
                 info!("Cleared top_change pointer");
             }
@@ -339,7 +339,7 @@ impl IndexProvider for IndexProviderImpl {
     fn clear_top_change_if(&self, change_id: &str) -> ProviderResult<()> {
         // Only clear top_change if it currently points to this change
         if let Some(top_change) = self.working_index.get(Self::TOP_KEY)? {
-            if &top_change.to_vec() == change_id.as_bytes() {
+            if top_change.to_vec() == change_id.as_bytes() {
                 self.working_index.remove(Self::TOP_KEY)?;
                 info!("Cleared top_change pointer (was '{}')", change_id);
             }
@@ -621,22 +621,18 @@ impl IndexProvider for IndexProviderImpl {
     
     fn get_index_data_size(&self) -> u64 {
         let mut total_size = 0u64;
-        for result in self.working_index.iter() {
-            if let Ok((key, value)) = result {
-                total_size += key.len() as u64;
-                total_size += value.len() as u64;
-            }
+        for (key, value) in self.working_index.iter().flatten() {
+            total_size += key.len() as u64;
+            total_size += value.len() as u64;
         }
         total_size
     }
     
     fn get_changes_data_size(&self) -> u64 {
         let mut total_size = 0u64;
-        for result in self.history_storage.iter() {
-            if let Ok((key, value)) = result {
-                total_size += key.len() as u64;
-                total_size += value.len() as u64;
-            }
+        for (key, value) in self.history_storage.iter().flatten() {
+            total_size += key.len() as u64;
+            total_size += value.len() as u64;
         }
         total_size
     }

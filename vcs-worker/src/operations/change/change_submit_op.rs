@@ -39,7 +39,7 @@ impl ChangeSubmitOperation {
         // Get the change
         let mut change = self.database.index().get_change(&top_change_id)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
-            .ok_or_else(|| ObjectsTreeError::SerializationError(format!("Change '{}' not found", top_change_id)))?;
+            .ok_or_else(|| ObjectsTreeError::SerializationError(format!("Change '{top_change_id}' not found")))?;
 
         info!("User '{}' attempting to submit change: {} ({})", user.id, change.name, change.id);
 
@@ -167,16 +167,16 @@ impl ChangeSubmitOperation {
     fn submit_to_remote(&self, source_url: &str, change: &crate::types::Change, _user: &User) -> Result<(), ObjectsTreeError> {
         // Build the URL for the remote workspace/submit endpoint
         let submit_url = if source_url.ends_with('/') {
-            format!("{}workspace/submit", source_url)
+            format!("{source_url}workspace/submit")
         } else {
-            format!("{}/workspace/submit", source_url)
+            format!("{source_url}/workspace/submit")
         };
 
         info!("Submitting change '{}' to remote URL: {}", change.id, submit_url);
 
         // Serialize the change to a JSON string
         let serialized_change = serde_json::to_string(change)
-            .map_err(|e| ObjectsTreeError::SerializationError(format!("Failed to serialize change: {}", e)))?;
+            .map_err(|e| ObjectsTreeError::SerializationError(format!("Failed to serialize change: {e}")))?;
 
         // Prepare the payload for the workspace/submit operation
         // The operation expects args[0] to be the serialized change
@@ -195,21 +195,21 @@ impl ChangeSubmitOperation {
             let client = reqwest::blocking::Client::builder()
                 .timeout(std::time::Duration::from_secs(30))
                 .build()
-                .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+                .map_err(|e| format!("Failed to create HTTP client: {e}"))?;
 
             // Make the PUT request to workspace/submit
             let response = client
                 .put(&url_clone)
                 .json(&payload_clone)
                 .send()
-                .map_err(|e| format!("HTTP request failed: {}", e))?;
+                .map_err(|e| format!("HTTP request failed: {e}"))?;
 
             if response.status().is_success() {
                 Ok(())
             } else {
                 let status = response.status();
                 let error_text = response.text().unwrap_or_else(|_| "Unknown error".to_string());
-                Err(format!("Remote submission failed with status {}: {}", status, error_text))
+                Err(format!("Remote submission failed with status {status}: {error_text}"))
             }
         })
         .join()
@@ -346,7 +346,7 @@ diff = worker_request("vcs", {"change/submit"});
             }
             Err(e) => {
                 error!("Change submit operation failed: {}", e);
-                v_error(E_INVARG.msg(&format!("Error: {e}")))
+                v_error(E_INVARG.msg(format!("Error: {e}")))
             }
         }
     }

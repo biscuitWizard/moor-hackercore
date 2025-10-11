@@ -52,11 +52,7 @@ impl ObjectDeleteOperation {
         
         // Get the current version of the object being deleted
         let object_version = self.database.refs().get_ref(VcsObjectType::MooObject, &original_name, None)
-            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
-            .and_then(|_| {
-                // For now, we'll use version 1 as a placeholder - this should be improved
-                Some(1u64)
-            }).unwrap_or(1);
+            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?.map(|_| 1u64).unwrap_or(1);
         
         // Handle change tracking - remove from added/modified lists if present (filter to MooObject types)
         let was_in_added = current_change.added_objects.iter()
@@ -236,7 +232,7 @@ impl Operation for ObjectDeleteOperation {
     fn execute(&self, args: Vec<String>, user: &User) -> moor_var::Var {
         info!("Object delete operation received {} arguments: {:?}", args.len(), args);
         
-        if args.len() < 1 {
+        if args.is_empty() {
             error!("Object delete operation requires object name");
             return v_error(E_INVARG.msg("Object name is required"));
         }
@@ -254,7 +250,7 @@ impl Operation for ObjectDeleteOperation {
             }
             Err(e) => {
                 error!("Object delete operation failed: {}", e);
-                v_error(E_INVARG.msg(&format!("{e}")))
+                v_error(E_INVARG.msg(format!("{e}")))
             }
         }
     }

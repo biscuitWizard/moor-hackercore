@@ -113,7 +113,7 @@ impl ObjectUpdateOperation {
         let existing_sha256 = self.database.refs().get_ref(VcsObjectType::MooObject, &request.object_name, None)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         
-        let is_duplicate_content = existing_sha256.map_or(false, |existing| existing == sha256_key);
+        let is_duplicate_content = existing_sha256.is_some_and(|existing| existing == sha256_key);
         
         if is_duplicate_content {
             info!("Object '{}' content is unchanged (same SHA256), skipping version increment", request.object_name);
@@ -409,7 +409,7 @@ result = worker_request("vcs", {"object/update", "$my_new_object", new_obj});
             }
             Err(e) => {
                 error!("Object update operation failed: {}", e);
-                v_error(E_INVARG.msg(&e.to_string()))
+                v_error(E_INVARG.msg(e.to_string()))
             }
         }
     }
