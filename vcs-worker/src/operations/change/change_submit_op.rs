@@ -282,11 +282,6 @@ diff = worker_request("vcs", {"change/submit"});
     fn routes(&self) -> Vec<OperationRoute> {
         vec![
             OperationRoute {
-                path: "/change/submit".to_string(),
-                method: Method::POST,
-                is_json: false, // No body needed
-            },
-            OperationRoute {
                 path: "/api/change/submit".to_string(),
                 method: Method::POST,
                 is_json: false,

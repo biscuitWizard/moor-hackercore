@@ -196,11 +196,6 @@ impl Operation for ObjectDeleteOperation {
     fn routes(&self) -> Vec<OperationRoute> {
         vec![
             OperationRoute {
-                path: "/object/delete".to_string(),
-                method: Method::POST,
-                is_json: true, // Expects JSON body with object_name
-            },
-            OperationRoute {
                 path: "/api/object/delete".to_string(),
                 method: Method::POST,
                 is_json: true,

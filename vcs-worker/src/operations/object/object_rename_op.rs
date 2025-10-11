@@ -376,11 +376,6 @@ impl Operation for ObjectRenameOperation {
     fn routes(&self) -> Vec<OperationRoute> {
         vec![
             OperationRoute {
-                path: "/object/rename".to_string(),
-                method: Method::POST,
-                is_json: true, // Expects JSON body with from_name and to_name
-            },
-            OperationRoute {
                 path: "/api/object/rename".to_string(),
                 method: Method::POST,
                 is_json: true,

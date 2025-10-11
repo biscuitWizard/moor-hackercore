@@ -61,11 +61,6 @@ impl Operation for MetaRemoveIgnoredVerbOperation {
     fn routes(&self) -> Vec<OperationRoute> {
         vec![
             OperationRoute {
-                path: "/meta/remove_ignored_verb".to_string(),
-                method: Method::POST,
-                is_json: true,
-            },
-            OperationRoute {
                 path: "/api/meta/remove_ignored_verb".to_string(),
                 method: Method::POST,
                 is_json: true,

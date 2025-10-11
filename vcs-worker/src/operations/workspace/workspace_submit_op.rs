@@ -59,11 +59,6 @@ impl Operation for WorkspaceSubmitOperation {
     fn routes(&self) -> Vec<OperationRoute> {
         vec![
             OperationRoute {
-                path: "/workspace/submit".to_string(),
-                method: Method::PUT,
-                is_json: true,
-            },
-            OperationRoute {
                 path: "/api/workspace/submit".to_string(),
                 method: Method::PUT,
                 is_json: true,

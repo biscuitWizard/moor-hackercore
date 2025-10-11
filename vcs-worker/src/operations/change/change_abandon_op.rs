@@ -105,11 +105,6 @@ player:tell("Change abandoned. You need to revert ", length(diff["modified_objec
     fn routes(&self) -> Vec<OperationRoute> {
         vec![
             OperationRoute {
-                path: "/change/abandon".to_string(),
-                method: Method::POST,
-                is_json: false, // No body needed
-            },
-            OperationRoute {
                 path: "/api/change/abandon".to_string(),
                 method: Method::POST,
                 is_json: false,

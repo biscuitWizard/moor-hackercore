@@ -209,11 +209,6 @@ player:tell("Added: ", length(diff["added_objects"]), " objects");"#.to_string()
     fn routes(&self) -> Vec<OperationRoute> {
         vec![
             OperationRoute {
-                path: "/change/approve".to_string(),
-                method: Method::POST,
-                is_json: true,
-            },
-            OperationRoute {
                 path: "/api/change/approve".to_string(),
                 method: Method::POST,
                 is_json: true,

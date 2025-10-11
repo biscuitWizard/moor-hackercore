@@ -106,11 +106,6 @@ impl Operation for IndexListOperation {
     fn routes(&self) -> Vec<OperationRoute> {
         vec![
             OperationRoute {
-                path: "/index/list".to_string(),
-                method: Method::GET,
-                is_json: false, // Uses query parameters for pagination
-            },
-            OperationRoute {
                 path: "/api/index/list".to_string(),
                 method: Method::GET,
                 is_json: false,

@@ -304,11 +304,6 @@ result = worker_request("vcs", {"object/update", "$my_new_object", new_obj});
     fn routes(&self) -> Vec<OperationRoute> {
         vec![
             OperationRoute {
-                path: "/object/update".to_string(),
-                method: Method::POST,
-                is_json: true, // Expects JSON body with object_name and vars
-            },
-            OperationRoute {
                 path: "/api/object/update".to_string(),
                 method: Method::POST,
                 is_json: true,

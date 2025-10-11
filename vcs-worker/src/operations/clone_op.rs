@@ -242,16 +242,6 @@ impl Operation for CloneOperation {
     fn routes(&self) -> Vec<OperationRoute> {
         vec![
             OperationRoute {
-                path: "/clone".to_string(),
-                method: Method::GET,
-                is_json: false,
-            },
-            OperationRoute {
-                path: "/clone".to_string(),
-                method: Method::POST,
-                is_json: true,
-            },
-            OperationRoute {
                 path: "/api/clone".to_string(),
                 method: Method::GET,
                 is_json: false,

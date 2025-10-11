@@ -162,11 +162,6 @@ impl Operation for IndexCalcDeltaOperation {
     fn routes(&self) -> Vec<OperationRoute> {
         vec![
             OperationRoute {
-                path: "/index/calc_delta".to_string(),
-                method: Method::GET,
-                is_json: false, // Uses query parameters
-            },
-            OperationRoute {
                 path: "/api/index/calc_delta".to_string(),
                 method: Method::GET,
                 is_json: false,

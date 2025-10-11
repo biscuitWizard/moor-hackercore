@@ -172,11 +172,6 @@ player:tell("Need to update ", length(diff["modified_objects"]), " objects");"#.
     fn routes(&self) -> Vec<OperationRoute> {
         vec![
             OperationRoute {
-                path: "/change/switch".to_string(),
-                method: Method::POST,
-                is_json: true,
-            },
-            OperationRoute {
                 path: "/api/change/switch".to_string(),
                 method: Method::POST,
                 is_json: true,

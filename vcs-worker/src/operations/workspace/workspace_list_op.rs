@@ -139,11 +139,6 @@ impl Operation for WorkspaceListOperation {
     fn routes(&self) -> Vec<OperationRoute> {
         vec![
             OperationRoute {
-                path: "/workspace/list".to_string(),
-                method: Method::GET,
-                is_json: false,
-            },
-            OperationRoute {
                 path: "/api/workspace/list".to_string(),
                 method: Method::GET,
                 is_json: false,

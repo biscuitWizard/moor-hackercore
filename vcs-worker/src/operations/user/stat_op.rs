@@ -45,11 +45,6 @@ player:tell("Permissions: ", tostr(user_info[4]));"#.to_string(),
     fn routes(&self) -> Vec<OperationRoute> {
         vec![
             OperationRoute {
-                path: "/user/stat".to_string(),
-                method: Method::GET,
-                is_json: false, // No body needed
-            },
-            OperationRoute {
                 path: "/api/user/stat".to_string(),
                 method: Method::GET,
                 is_json: false,

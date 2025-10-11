@@ -288,11 +288,6 @@ impl Operation for IndexUpdateOperation {
     fn routes(&self) -> Vec<OperationRoute> {
         vec![
             OperationRoute {
-                path: "/index/update".to_string(),
-                method: Method::POST,
-                is_json: false,
-            },
-            OperationRoute {
                 path: "/api/index/update".to_string(),
                 method: Method::POST,
                 is_json: false,

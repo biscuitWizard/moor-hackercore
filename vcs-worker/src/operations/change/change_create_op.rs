@@ -127,11 +127,6 @@ impl Operation for ChangeCreateOperation {
     fn routes(&self) -> Vec<OperationRoute> {
         vec![
             OperationRoute {
-                path: "/change/create".to_string(),
-                method: Method::POST,
-                is_json: true, // Expects JSON body with name, description, author
-            },
-            OperationRoute {
                 path: "/api/change/create".to_string(),
                 method: Method::POST,
                 is_json: true,

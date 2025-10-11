@@ -92,11 +92,6 @@ player:tell("Object list: ", result);"#.to_string(),
     fn routes(&self) -> Vec<OperationRoute> {
         vec![
             OperationRoute {
-                path: "/object/list".to_string(),
-                method: Method::POST,
-                is_json: true,
-            },
-            OperationRoute {
                 path: "/api/object/list".to_string(),
                 method: Method::POST,
                 is_json: true,

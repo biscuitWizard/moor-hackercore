@@ -172,11 +172,6 @@ impl Operation for ObjectGetOperation {
     fn routes(&self) -> Vec<OperationRoute> {
         vec![
             OperationRoute {
-                path: "/object/get".to_string(),
-                method: Method::POST,
-                is_json: true, // Expects JSON body with object_name
-            },
-            OperationRoute {
                 path: "/api/object/get".to_string(),
                 method: Method::POST,
                 is_json: true,

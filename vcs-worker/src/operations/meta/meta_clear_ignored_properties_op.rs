@@ -63,11 +63,6 @@ impl Operation for MetaClearIgnoredPropertiesOperation {
     fn routes(&self) -> Vec<OperationRoute> {
         vec![
             OperationRoute {
-                path: "/meta/clear_ignored_properties".to_string(),
-                method: Method::POST,
-                is_json: true,
-            },
-            OperationRoute {
                 path: "/api/meta/clear_ignored_properties".to_string(),
                 method: Method::POST,
                 is_json: true,

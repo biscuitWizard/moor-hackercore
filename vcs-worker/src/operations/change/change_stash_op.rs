@@ -122,11 +122,6 @@ worker_request("vcs", {"change/switch", stashed_id});"#.to_string(),
     fn routes(&self) -> Vec<OperationRoute> {
         vec![
             OperationRoute {
-                path: "/change/stash".to_string(),
-                method: Method::POST,
-                is_json: false, // No body needed
-            },
-            OperationRoute {
                 path: "/api/change/stash".to_string(),
                 method: Method::POST,
                 is_json: false,

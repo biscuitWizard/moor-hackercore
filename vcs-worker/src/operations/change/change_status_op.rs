@@ -115,11 +115,6 @@ player:tell("Deleted: ", length(diff["deleted_objects"]), " objects");"#.to_stri
     fn routes(&self) -> Vec<OperationRoute> {
         vec![
             OperationRoute {
-                path: "/change/status".to_string(),
-                method: Method::GET,
-                is_json: false, // No body needed
-            },
-            OperationRoute {
                 path: "/api/change/status".to_string(),
                 method: Method::GET,
                 is_json: false,

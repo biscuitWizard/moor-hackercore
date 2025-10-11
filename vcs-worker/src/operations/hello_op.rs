@@ -39,11 +39,6 @@ impl Operation for HelloOperation {
     fn routes(&self) -> Vec<OperationRoute> {
         vec![
             OperationRoute {
-                path: "/hello".to_string(),
-                method: Method::GET,
-                is_json: false, // No body needed
-            },
-            OperationRoute {
                 path: "/api/hello".to_string(),
                 method: Method::GET,
                 is_json: false,

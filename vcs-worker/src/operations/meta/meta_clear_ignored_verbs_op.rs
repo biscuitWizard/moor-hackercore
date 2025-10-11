@@ -67,11 +67,6 @@ impl Operation for MetaClearIgnoredVerbsOperation {
                 method: Method::POST,
                 is_json: true,
             },
-            OperationRoute {
-                path: "/api/meta/clear_ignored_verbs".to_string(),
-                method: Method::POST,
-                is_json: true,
-            }
         ]
     }
     
