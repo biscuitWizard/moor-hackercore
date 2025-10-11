@@ -139,6 +139,10 @@ impl Operation for StatusOperation {
         "status"
     }
     
+    fn response_content_type(&self) -> &'static str {
+        "text/x-moo"
+    }
+
     fn description(&self) -> &'static str {
         "Get comprehensive repository status including game name, change counts, partition sizes, and remote repository information"
     }

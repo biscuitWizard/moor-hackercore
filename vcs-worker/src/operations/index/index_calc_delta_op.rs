@@ -158,6 +158,10 @@ impl Operation for IndexCalcDeltaOperation {
         "index/calc_delta"
     }
     
+    fn response_content_type(&self) -> &'static str {
+        "text/x-moo"
+    }
+
     fn description(&self) -> &'static str {
         "Calculates delta information for changes chronologically after a specified change ID, returning change IDs, ref pairs, and objects added to the database"
     }

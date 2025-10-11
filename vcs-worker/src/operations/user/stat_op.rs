@@ -13,6 +13,10 @@ impl Operation for StatOperation {
         "user/stat"
     }
     
+    fn response_content_type(&self) -> &'static str {
+        "text/x-moo"
+    }
+
     fn description(&self) -> &'static str {
         "Returns the current user's permissions and information"
     }

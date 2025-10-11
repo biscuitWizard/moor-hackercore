@@ -269,6 +269,10 @@ impl Operation for CloneOperation {
         "clone"
     }
     
+    fn response_content_type(&self) -> &'static str {
+        "text/x-moo"
+    }
+
     fn description(&self) -> &'static str {
         "Export repository state (no URL) or import from a URL"
     }

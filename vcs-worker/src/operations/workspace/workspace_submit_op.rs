@@ -52,6 +52,10 @@ impl Operation for WorkspaceSubmitOperation {
         "workspace/submit"
     }
     
+    fn response_content_type(&self) -> &'static str {
+        "text/x-moo"
+    }
+
     fn description(&self) -> &'static str {
         "Submits a serialized change to the workspace for review. Takes a JSON-serialized Change object and stores it in the workspace."
     }

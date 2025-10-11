@@ -23,6 +23,10 @@ impl Operation for UserDisableOperation {
         "user/disable"
     }
     
+    fn response_content_type(&self) -> &'static str {
+        "text/x-moo"
+    }
+
     fn description(&self) -> &'static str {
         "Disable a user to prevent authentication"
     }

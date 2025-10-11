@@ -23,6 +23,10 @@ impl Operation for UserDeleteApiKeyOperation {
         "user/delete_api_key"
     }
     
+    fn response_content_type(&self) -> &'static str {
+        "text/x-moo"
+    }
+
     fn description(&self) -> &'static str {
         "Delete an API key from a user"
     }

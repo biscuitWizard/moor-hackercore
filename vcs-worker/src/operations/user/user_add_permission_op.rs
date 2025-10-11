@@ -36,6 +36,10 @@ impl Operation for UserAddPermissionOperation {
         "user/add_permission"
     }
     
+    fn response_content_type(&self) -> &'static str {
+        "text/x-moo"
+    }
+
     fn description(&self) -> &'static str {
         "Add a permission to a user"
     }

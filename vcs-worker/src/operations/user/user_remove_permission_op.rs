@@ -36,6 +36,10 @@ impl Operation for UserRemovePermissionOperation {
         "user/remove_permission"
     }
     
+    fn response_content_type(&self) -> &'static str {
+        "text/x-moo"
+    }
+
     fn description(&self) -> &'static str {
         "Remove a permission from a user"
     }

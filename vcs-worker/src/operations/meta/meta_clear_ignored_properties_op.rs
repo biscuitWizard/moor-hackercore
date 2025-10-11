@@ -56,6 +56,10 @@ impl Operation for MetaClearIgnoredPropertiesOperation {
         "meta/clear_ignored_properties"
     }
     
+    fn response_content_type(&self) -> &'static str {
+        "text/x-moo"
+    }
+
     fn description(&self) -> &'static str {
         "Clears all ignored properties from the object's meta"
     }

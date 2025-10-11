@@ -257,6 +257,10 @@ impl Operation for ObjectUpdateOperation {
         "Updates a MOO object definition by parsing a list of vars and compiling them into an ObjectDefinition"
     }
     
+    fn response_content_type(&self) -> &'static str {
+        "text/x-moo"
+    }
+    
     fn philosophy(&self) -> &'static str {
         "Updates or adds a MOO object definition to the current changelist. This operation is central to \
         the VCS workflow - when you modify an object in your MOO database and want to track that change, \

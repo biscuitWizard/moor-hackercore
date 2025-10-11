@@ -390,20 +390,36 @@ For more details on each operation, see the categorized endpoints below."#))
             // Add error responses for text/x-moo operations
             if content_type == "text/x-moo" {
                 // Add 400 Bad Request response for validation/argument errors
-                let error_400_example = if op_name.contains("status") {
-                    r#"E_INVARG("No local change on top of index - nothing to do")"#
-                } else if op_name.contains("create") {
-                    r#""Error: Already in a local change 'existing-change' (abc-123). Abandon the current change before creating a new one.""#
-                } else if op_name.contains("approve") {
-                    r#"E_INVARG("Error: Cannot approve change 'my-change' - it must be Local or Review status (current: Merged)")"#
-                } else if op_name.contains("submit") {
-                    r#"E_INVARG("Error: Cannot submit change 'my-change' - it is not local (status: Merged)")"#
-                } else if op_name.contains("abandon") {
-                    r#""Error: Cannot abandon merged change 'my-change'""#
-                } else if op_name.contains("stash") {
-                    r#"E_INVARG("Error: Cannot stash change 'my-change' - it is not local (status: Review)")"#
-                } else if op_name.contains("switch") {
-                    r#"E_INVARG("Error: Change 'target-id' not found in workspace")"#
+                let error_400_example = if op_name.starts_with("change/") {
+                    match op_name.as_str() {
+                        "change/status" => r#"E_INVARG("No local change on top of index - nothing to do")"#,
+                        "change/create" => r#""Error: Already in a local change 'existing-change' (abc-123). Abandon the current change before creating a new one.""#,
+                        "change/approve" => r#"E_INVARG("Error: Cannot approve change 'my-change' - it must be Local or Review status (current: Merged)")"#,
+                        "change/submit" => r#"E_INVARG("Error: Cannot submit change 'my-change' - it is not local (status: Merged)")"#,
+                        "change/abandon" => r#""Error: Cannot abandon merged change 'my-change'""#,
+                        "change/stash" => r#"E_INVARG("Error: Cannot stash change 'my-change' - it is not local (status: Review)")"#,
+                        "change/switch" => r#"E_INVARG("Error: Change 'target-id' not found in workspace")"#,
+                        _ => r#"E_INVARG("Error: Invalid arguments")"#
+                    }
+                } else if op_name.starts_with("object/") {
+                    match op_name.as_str() {
+                        "object/get" => r#""Error: Object 'object_name' not found or has been deleted""#,
+                        "object/update" => r#""Error: At least one var is required""#,
+                        "object/delete" => r#""Error: Object 'object_name' not found""#,
+                        "object/rename" => r#""Error: Both old and new names are required""#,
+                        "object/list" => r#""Error: Invalid list parameters""#,
+                        _ => r#""Error: Invalid object operation arguments""#
+                    }
+                } else if op_name.starts_with("index/") {
+                    r#"E_INVARG("Error: Invalid index operation arguments")"#
+                } else if op_name.starts_with("workspace/") {
+                    r#""Error: Invalid workspace operation arguments""#
+                } else if op_name.starts_with("meta/") {
+                    r#""Error: Invalid meta operation arguments""#
+                } else if op_name.starts_with("user/") {
+                    r#""Error: Invalid user operation arguments""#
+                } else if op_name == "clone" {
+                    r#""Error: Invalid source URL""#
                 } else {
                     r#"E_INVARG("Error: Invalid operation arguments")"#
                 };
@@ -422,12 +438,11 @@ For more details on each operation, see the categorized endpoints below."#))
                 );
                 
                 // Add 403 Forbidden response for permission errors
-                let error_403_example = if op_name.contains("approve") {
-                    r#"E_INVARG("Error: User 'player123' does not have permission to approve changes")"#
-                } else if op_name.contains("submit") || op_name.contains("stash") {
-                    r#"E_INVARG("Error: User 'player123' does not have permission to submit changes")"#
-                } else {
-                    r#"E_INVARG("Error: Permission denied")"#
+                let error_403_example = match op_name.as_str() {
+                    "change/approve" => r#"E_INVARG("Error: User 'player123' does not have permission to approve changes")"#,
+                    "change/submit" | "change/stash" => r#"E_INVARG("Error: User 'player123' does not have permission to submit changes")"#,
+                    _ if op_name.starts_with("user/") => r#""Error: User 'player123' does not have permission to manage users""#,
+                    _ => r#"E_INVARG("Error: Permission denied")"#
                 };
                 
                 operation_builder = operation_builder.response(
@@ -444,10 +459,20 @@ For more details on each operation, see the categorized endpoints below."#))
                 );
                 
                 // Add 404 Not Found response
-                let error_404_example = if op_name.contains("approve") || op_name.contains("switch") {
-                    r#"E_INVARG("Error: Change 'abc-123-def...' not found in workspace or index")"#
-                } else if op_name.contains("abandon") || op_name.contains("status") {
-                    r#"E_INVARG("Error: No change to abandon")"#
+                let error_404_example = if op_name.starts_with("change/") {
+                    match op_name.as_str() {
+                        "change/approve" | "change/switch" => r#"E_INVARG("Error: Change 'abc-123-def...' not found in workspace or index")"#,
+                        "change/abandon" | "change/status" => r#"E_INVARG("Error: No change to abandon")"#,
+                        _ => r#"E_INVARG("Error: Change not found")"#
+                    }
+                } else if op_name.starts_with("object/") {
+                    r#""Error: Object not found or has been deleted""#
+                } else if op_name.starts_with("user/") {
+                    r#""Error: User not found""#
+                } else if op_name.starts_with("workspace/") {
+                    r#""Error: Workspace item not found""#
+                } else if op_name.starts_with("meta/") {
+                    r#""Error: Meta object not found""#
                 } else {
                     r#"E_INVARG("Error: Resource not found")"#
                 };

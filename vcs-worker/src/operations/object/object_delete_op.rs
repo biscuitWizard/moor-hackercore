@@ -156,6 +156,10 @@ impl Operation for ObjectDeleteOperation {
         "Marks an object for deletion within the current change"
     }
     
+    fn response_content_type(&self) -> &'static str {
+        "text/x-moo"
+    }
+    
     fn philosophy(&self) -> &'static str {
         "Stages a MOO object for deletion from the version control repository. This operation adds the \
         object to the deleted_objects list in your current changelist. The deletion won't be permanent \

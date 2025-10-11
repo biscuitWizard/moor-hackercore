@@ -23,6 +23,10 @@ impl Operation for UserCreateOperation {
         "user/create"
     }
     
+    fn response_content_type(&self) -> &'static str {
+        "text/x-moo"
+    }
+
     fn description(&self) -> &'static str {
         "Create a new user in the system"
     }

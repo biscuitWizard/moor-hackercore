@@ -281,6 +281,10 @@ impl Operation for IndexUpdateOperation {
         "index/update"
     }
     
+    fn response_content_type(&self) -> &'static str {
+        "text/x-moo"
+    }
+
     fn description(&self) -> &'static str {
         "Updates the local index with changes from the remote source URL and returns an object diff of the changes"
     }

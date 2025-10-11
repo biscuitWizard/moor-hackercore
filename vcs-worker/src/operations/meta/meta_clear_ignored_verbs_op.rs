@@ -56,6 +56,10 @@ impl Operation for MetaClearIgnoredVerbsOperation {
         "meta/clear_ignored_verbs"
     }
     
+    fn response_content_type(&self) -> &'static str {
+        "text/x-moo"
+    }
+
     fn description(&self) -> &'static str {
         "Clears all ignored verbs from the object's meta"
     }

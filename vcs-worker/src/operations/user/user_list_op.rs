@@ -23,6 +23,10 @@ impl Operation for UserListOperation {
         "user/list"
     }
     
+    fn response_content_type(&self) -> &'static str {
+        "text/x-moo"
+    }
+
     fn description(&self) -> &'static str {
         "List all users in the system with their permissions"
     }

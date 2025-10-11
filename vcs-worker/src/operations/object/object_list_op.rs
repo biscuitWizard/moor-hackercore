@@ -60,6 +60,10 @@ impl Operation for ObjectListOperation {
         "Lists all objects by walking through the entire change history chronologically, tracking names, renames, additions, and deletions"
     }
     
+    fn response_content_type(&self) -> &'static str {
+        "text/x-moo"
+    }
+    
     fn philosophy(&self) -> &'static str {
         "Provides a complete view of all MOO objects currently in the version control repository. This \
         operation walks through the entire change history chronologically, computing the current state by \

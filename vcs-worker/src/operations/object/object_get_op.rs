@@ -133,6 +133,10 @@ impl Operation for ObjectGetOperation {
         "Retrieves a MOO object definition by name from the database"
     }
     
+    fn response_content_type(&self) -> &'static str {
+        "text/x-moo"
+    }
+    
     fn philosophy(&self) -> &'static str {
         "Retrieves the current state of a MOO object definition from the version control system. \
         This operation returns the object dump (in objdef format) after applying any meta filtering \

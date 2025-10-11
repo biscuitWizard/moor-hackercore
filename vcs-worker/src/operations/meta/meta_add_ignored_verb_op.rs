@@ -54,6 +54,10 @@ impl Operation for MetaAddIgnoredVerbOperation {
         "meta/add_ignored_verb"
     }
     
+    fn response_content_type(&self) -> &'static str {
+        "text/x-moo"
+    }
+
     fn description(&self) -> &'static str {
         "Adds a verb to the ignored verbs list in the object's meta"
     }

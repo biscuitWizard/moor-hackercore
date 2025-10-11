@@ -331,6 +331,10 @@ impl Operation for ObjectRenameOperation {
         "Renames an object from one name to another within the current change"
     }
     
+    fn response_content_type(&self) -> &'static str {
+        "text/x-moo"
+    }
+    
     fn philosophy(&self) -> &'static str {
         "Tracks the renaming of MOO objects within the version control system. This operation is essential \
         when refactoring your code and need to change object names while preserving their history. The \

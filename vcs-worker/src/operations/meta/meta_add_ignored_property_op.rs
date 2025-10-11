@@ -54,6 +54,10 @@ impl Operation for MetaAddIgnoredPropertyOperation {
         "meta/add_ignored_property"
     }
     
+    fn response_content_type(&self) -> &'static str {
+        "text/x-moo"
+    }
+
     fn description(&self) -> &'static str {
         "Adds a property to the ignored properties list in the object's meta"
     }

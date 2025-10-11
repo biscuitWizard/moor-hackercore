@@ -23,6 +23,10 @@ impl Operation for UserEnableOperation {
         "user/enable"
     }
     
+    fn response_content_type(&self) -> &'static str {
+        "text/x-moo"
+    }
+
     fn description(&self) -> &'static str {
         "Enable a previously disabled user"
     }

@@ -101,6 +101,10 @@ impl Operation for IndexListOperation {
         "index/list"
     }
     
+    fn response_content_type(&self) -> &'static str {
+        "text/x-moo"
+    }
+    
     fn description(&self) -> &'static str {
         "Lists changes in chronological order (oldest first, newest last) with optional pagination (limit/page)"
     }

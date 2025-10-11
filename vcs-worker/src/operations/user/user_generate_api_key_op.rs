@@ -23,6 +23,10 @@ impl Operation for UserGenerateApiKeyOperation {
         "user/generate_api_key"
     }
     
+    fn response_content_type(&self) -> &'static str {
+        "text/x-moo"
+    }
+
     fn description(&self) -> &'static str {
         "Generate a new API key for a user"
     }

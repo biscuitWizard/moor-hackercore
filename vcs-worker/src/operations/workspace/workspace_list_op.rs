@@ -133,6 +133,10 @@ impl Operation for WorkspaceListOperation {
         "workspace/list"
     }
     
+    fn response_content_type(&self) -> &'static str {
+        "text/x-moo"
+    }
+
     fn description(&self) -> &'static str {
         "Lists all changes in the workspace. Optionally filter by status (Review, Idle). Usage: workspace/list [status]"
     }
