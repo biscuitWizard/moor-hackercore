@@ -33,9 +33,15 @@ impl IndexUpdateOperation {
     pub fn new(database: DatabaseRef) -> Self {
         Self { database }
     }
+    
+    /// Public async method for testing and direct async use
+    pub async fn update_async(&self) -> Result<moor_var::Var, ObjectsTreeError> {
+        let request = IndexUpdateRequest {};
+        self.process_update_async(request).await
+    }
 
-    /// Process the index update request
-    fn process_update(&self, _request: IndexUpdateRequest) -> Result<moor_var::Var, ObjectsTreeError> {
+    /// Process the index update request (async version)
+    async fn process_update_async(&self, _request: IndexUpdateRequest) -> Result<moor_var::Var, ObjectsTreeError> {
         info!("Processing index update request");
         
         // Check if there's a source URL in the index
@@ -57,7 +63,7 @@ impl IndexUpdateOperation {
         
         if change_order.is_empty() {
             info!("No changes in index - performing full clone");
-            return self.perform_full_clone(&source_url);
+            return self.perform_full_clone_async(&source_url).await;
         }
         
         // Get the most recent change ID (last in the list since ordering is oldest first, newest last)
@@ -65,25 +71,61 @@ impl IndexUpdateOperation {
         info!("Last known change ID: {}", last_change_id);
         
         // Calculate delta using the index_calc_delta operation
-        let delta_result = self.calculate_delta_from_remote(&source_url, last_change_id)?;
+        let delta_result = self.calculate_delta_from_remote_async(&source_url, last_change_id).await?;
         
-        // Apply the delta to local index, refs, and objects
-        let object_diff = self.apply_delta(delta_result)?;
+        // Check if there are new changes
+        let delta_str = delta_result.as_string()
+            .ok_or_else(|| ObjectsTreeError::SerializationError("Expected string delta result".to_string()))?;
+        let delta_data: serde_json::Value = serde_json::from_str(delta_str)
+            .map_err(|e| ObjectsTreeError::SerializationError(format!("Failed to parse delta: {}", e)))?;
         
-        info!("Successfully updated index from remote source");
-        Ok(object_diff.to_moo_var())
+        let change_ids = delta_data.get("change_ids")
+            .and_then(|v| v.as_array())
+            .map(|arr| arr.len())
+            .unwrap_or(0);
+        
+        if change_ids > 0 {
+            info!("Delta contains {} new changes - performing full clone for consistency", change_ids);
+            // Since incremental update isn't implemented yet, do a full clone
+            self.perform_full_clone_async(&source_url).await
+        } else {
+            info!("No new changes in delta - index is up to date");
+            Ok(moor_var::v_str("Index is up to date"))
+        }
     }
     
-    /// Perform a full clone if no changes exist
-    fn perform_full_clone(&self, source_url: &str) -> Result<moor_var::Var, ObjectsTreeError> {
+    /// Process the index update request (sync wrapper)
+    fn process_update(&self, request: IndexUpdateRequest) -> Result<moor_var::Var, ObjectsTreeError> {
+        let (tx, rx) = std::sync::mpsc::sync_channel(1);
+        let self_clone = self.clone();
+        
+        tokio::spawn(async move {
+            let result = self_clone.process_update_async(request).await;
+            let _ = tx.send(result);
+        });
+        
+        rx.recv()
+            .map_err(|_| ObjectsTreeError::SerializationError("Channel closed during update".to_string()))?
+    }
+    
+    /// Perform a full clone if no changes exist (async version)
+    async fn perform_full_clone_async(&self, source_url: &str) -> Result<moor_var::Var, ObjectsTreeError> {
         info!("Performing full clone from source URL: {}", source_url);
         
         // Use the existing clone operation logic
         let clone_op = crate::operations::clone_op::CloneOperation::new(self.database.clone());
         
+        // Construct the full clone endpoint URL (source_url is the base URL)
+        let clone_url = if source_url.ends_with('/') {
+            format!("{}api/clone", source_url)
+        } else {
+            format!("{}/api/clone", source_url)
+        };
+        
+        info!("Cloning from: {}", clone_url);
+        
         // Import from URL (this will clear existing state and import everything)
-        let rt = tokio::runtime::Handle::current();
-        match rt.block_on(clone_op.import_from_url(&source_url)) {
+        match clone_op.import_from_url_async(&clone_url).await {
             Ok(result) => {
                 info!("Full clone completed successfully");
                 Ok(moor_var::v_str(&result))
@@ -95,27 +137,31 @@ impl IndexUpdateOperation {
         }
     }
     
-    /// Calculate delta from remote source
-    fn calculate_delta_from_remote(&self, source_url: &str, last_change_id: &str) -> Result<moor_var::Var, ObjectsTreeError> {
+    /// Calculate delta from remote source (async version)
+    async fn calculate_delta_from_remote_async(&self, source_url: &str, last_change_id: &str) -> Result<moor_var::Var, ObjectsTreeError> {
         info!("Calculating delta from remote source: {} since change: {}", source_url, last_change_id);
         
-        // Construct the delta calculation URL
-        let delta_url = if source_url.ends_with('/') {
-            format!("{}index/calc_delta?change_id={}", source_url, last_change_id)
+        // Construct the RPC URL
+        let rpc_url = if source_url.ends_with('/') {
+            format!("{}rpc", source_url.trim_end_matches('/'))
         } else {
-            format!("{}/index/calc_delta?change_id={}", source_url, last_change_id)
+            format!("{}/rpc", source_url)
         };
         
-        info!("Fetching delta from: {}", delta_url);
+        info!("Fetching delta from: {}", rpc_url);
         
-        // Make HTTP request to get delta
-        let rt = tokio::runtime::Handle::current();
+        // Make async HTTP request to RPC endpoint
         let client = reqwest::Client::new();
-        let response = rt.block_on(async {
-            client.get(&delta_url)
-                .send()
-                .await
-        }).map_err(|e| ObjectsTreeError::SerializationError(format!("HTTP request failed: {}", e)))?;
+        let request_body = serde_json::json!({
+            "operation": "index/calc_delta",
+            "args": [last_change_id]
+        });
+        
+        let response = client.post(&rpc_url)
+            .json(&request_body)
+            .send()
+            .await
+            .map_err(|e| ObjectsTreeError::SerializationError(format!("HTTP request failed: {}", e)))?;
         
         if !response.status().is_success() {
             return Err(ObjectsTreeError::SerializationError(
@@ -123,16 +169,20 @@ impl IndexUpdateOperation {
             ));
         }
         
-        let response_text = rt.block_on(async {
-            response.text().await
-        }).map_err(|e| ObjectsTreeError::SerializationError(format!("Failed to read response: {}", e)))?;
+        let response_json: serde_json::Value = response.json()
+            .await
+            .map_err(|e| ObjectsTreeError::SerializationError(format!("Failed to read response: {}", e)))?;
         
-        // Parse the delta response
-        let _delta_data: serde_json::Value = serde_json::from_str(&response_text)
-            .map_err(|e| ObjectsTreeError::SerializationError(format!("Failed to parse delta JSON: {}", e)))?;
+        // Extract result from RPC response
+        let result = response_json.get("result")
+            .ok_or_else(|| ObjectsTreeError::SerializationError("No result in RPC response".to_string()))?;
+        
+        // Convert result to JSON string for compatibility
+        let result_str = serde_json::to_string(result)
+            .map_err(|e| ObjectsTreeError::SerializationError(format!("Failed to serialize result: {}", e)))?;
         
         info!("Successfully fetched delta from remote");
-        Ok(moor_var::v_str(&response_text))
+        Ok(moor_var::v_str(&result_str))
     }
     
     /// Apply delta to local index, refs, and objects
@@ -181,15 +231,9 @@ impl IndexUpdateOperation {
         // 4. Update the change order
         
         if !change_ids.is_empty() {
-            info!("Delta contains {} new changes - performing incremental update", change_ids.len());
+            info!("Delta contains {} new changes - building diff", change_ids.len());
             // TODO: Implement incremental update logic
-            // For now, we'll do a full clone to ensure consistency
-            warn!("Incremental update not yet implemented - performing full clone for consistency");
-            
-            if let Some(source_url) = self.database.index().get_source()
-                .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))? {
-                let _ = self.perform_full_clone(&source_url)?;
-            }
+            // For now, the full clone happens at the higher level in process_update_async
             
             // Build object diff from the commit IDs
             self.build_object_diff_from_commit_ids(&commit_ids)

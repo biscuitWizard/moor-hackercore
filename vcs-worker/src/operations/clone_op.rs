@@ -3,7 +3,7 @@ use axum::http::Method;
 use tracing::{error, info};
 
 use crate::database::{DatabaseRef, ObjectsTreeError};
-use crate::types::{User, CloneData};
+use crate::types::{User, CloneData, ObjectInfo};
 use crate::providers::refs::RefsProvider;
 use crate::providers::objects::ObjectsProvider;
 use crate::providers::index::IndexProvider;
@@ -24,9 +24,10 @@ impl CloneOperation {
     fn export_state(&self) -> Result<CloneData, ObjectsTreeError> {
         info!("Exporting repository state");
         
-        // Export refs directly
-        let refs = self.database.refs().get_all_refs()
+        // Export refs directly as Vec
+        let refs_map = self.database.refs().get_all_refs()
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+        let refs: Vec<(ObjectInfo, String)> = refs_map.into_iter().collect();
         info!("Exported {} refs", refs.len());
         
         // Export objects directly
@@ -66,11 +67,11 @@ impl CloneOperation {
         })
     }
     
-    /// Import repository state from a URL
-    pub async fn import_from_url(&self, url: &str) -> Result<String, ObjectsTreeError> {
+    /// Import repository state from a URL (async version)
+    pub async fn import_from_url_async(&self, url: &str) -> Result<String, ObjectsTreeError> {
         info!("Importing repository state from URL: {}", url);
         
-        // Make GET request to the URL
+        // Make GET request to the URL using async client
         let client = reqwest::Client::new();
         let response = client.get(url)
             .send()
@@ -87,13 +88,50 @@ impl CloneOperation {
             .await
             .map_err(|e| ObjectsTreeError::SerializationError(format!("Failed to read response: {}", e)))?;
         
-        let clone_data: CloneData = serde_json::from_str(&response_text)
-            .map_err(|e| ObjectsTreeError::SerializationError(format!("Failed to parse JSON: {}", e)))?;
+        // Try to parse as OperationResponse first (HTTP API response)
+        let clone_data: CloneData = if let Ok(op_response) = serde_json::from_str::<serde_json::Value>(&response_text) {
+            // Check if this is an operation response with a result field
+            if let Some(result_field) = op_response.get("result") {
+                if let Some(result_str) = result_field.as_str() {
+                    // The result is a JSON string, parse it as CloneData
+                    serde_json::from_str(result_str)
+                        .map_err(|e| ObjectsTreeError::SerializationError(format!("Failed to parse CloneData from result: {}", e)))?
+                } else {
+                    // The result might be a direct object
+                    serde_json::from_value(result_field.clone())
+                        .map_err(|e| ObjectsTreeError::SerializationError(format!("Failed to parse CloneData from result object: {}", e)))?
+                }
+            } else {
+                // No result field, try to parse the whole response as CloneData
+                serde_json::from_value(op_response)
+                    .map_err(|e| ObjectsTreeError::SerializationError(format!("Failed to parse CloneData: {}", e)))?
+            }
+        } else {
+            // Not valid JSON, return error
+            return Err(ObjectsTreeError::SerializationError(format!("Invalid JSON response: {}", response_text)));
+        };
         
         // Import the data
         self.import_state(clone_data, url)?;
         
         Ok(format!("Successfully cloned from {}", url))
+    }
+    
+    /// Import repository state from a URL (sync wrapper for use in execute())
+    pub fn import_from_url(&self, url: &str) -> Result<String, ObjectsTreeError> {
+        let url = url.to_string();
+        let self_clone = self.clone();
+        
+        // Spawn an async task and wait for it
+        let (tx, rx) = std::sync::mpsc::sync_channel(1);
+        
+        tokio::spawn(async move {
+            let result = self_clone.import_from_url_async(&url).await;
+            let _ = tx.send(result);
+        });
+        
+        rx.recv()
+            .map_err(|_| ObjectsTreeError::SerializationError("Channel closed during clone import".to_string()))?
     }
     
     /// Import repository state from CloneData
@@ -123,7 +161,7 @@ impl CloneOperation {
         info!("Imported {} objects", object_count);
         
         // Import refs
-        for (obj_info, sha256) in data.refs {
+        for (obj_info, sha256) in &data.refs {
             self.database.refs().update_ref(obj_info.object_type, &obj_info.name, obj_info.version, &sha256)
                 .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         }
@@ -140,11 +178,17 @@ impl CloneOperation {
         self.database.index().set_change_order(data.change_order)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         
-        // Set the source URL
-        self.database.index().set_source(source_url)
+        // Extract base URL from source_url (remove /api/clone or /clone suffix)
+        let base_url = source_url
+            .trim_end_matches("/api/clone")
+            .trim_end_matches("/clone")
+            .to_string();
+        
+        // Set the source URL (base URL only, for use with /rpc endpoint)
+        self.database.index().set_source(&base_url)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         
-        info!("Successfully imported repository from {}", source_url);
+        info!("Successfully imported repository from {} (base: {})", source_url, base_url);
         Ok(())
     }
 }
@@ -216,9 +260,8 @@ impl Operation for CloneOperation {
             // URL provided, import from URL
             let url = args[0].clone();
             
-            // We need to use async runtime here
-            let rt = tokio::runtime::Handle::current();
-            match rt.block_on(self.import_from_url(&url)) {
+            // Call the synchronous import_from_url
+            match self.import_from_url(&url) {
                 Ok(result) => {
                     info!("Clone operation completed successfully");
                     moor_var::v_str(&result)

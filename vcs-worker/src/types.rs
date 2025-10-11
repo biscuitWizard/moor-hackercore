@@ -195,7 +195,7 @@ pub struct CloneRequest {
 /// Data structure for clone export/import
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CloneData {
-    pub refs: std::collections::HashMap<ObjectInfo, String>, // ObjectInfo -> sha256
+    pub refs: Vec<(ObjectInfo, String)>, // List of (ObjectInfo, sha256) pairs
     pub objects: std::collections::HashMap<String, String>, // sha256 -> object data
     pub changes: Vec<Change>, // All changes
     pub change_order: Vec<String>, // Order of changes

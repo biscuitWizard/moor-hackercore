@@ -14,6 +14,8 @@ mod workspace_operations;
 mod meta;
 mod index_operations;
 mod workspace_approve_tests;
+mod clone_tests;
+mod index_update_tests;
 
 // Future test modules:
 

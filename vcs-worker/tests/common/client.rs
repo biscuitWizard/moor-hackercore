@@ -11,6 +11,17 @@ use crate::common::*;
 /// High-level test client for VCS worker operations
 pub struct VcsTestClient {
     base_url: String,
+    database: Option<DatabaseRef>,
+}
+
+impl VcsTestClient {
+    /// Create a client with database reference for direct operations
+    pub fn with_database(server: &TestServer) -> Self {
+        Self {
+            base_url: server.base_url(),
+            database: Some(server.database().clone()),
+        }
+    }
 }
 
 impl VcsTestClient {
@@ -18,6 +29,7 @@ impl VcsTestClient {
     pub fn new(server: &TestServer) -> Self {
         Self {
             base_url: server.base_url(),
+            database: Some(server.database().clone()),
         }
     }
     
@@ -239,6 +251,84 @@ impl VcsTestClient {
         }
         
         self.rpc_call("index/list", args).await
+    }
+    
+    /// Calculate delta from a specific change ID
+    pub async fn index_calc_delta(
+        &self,
+        change_id: &str,
+    ) -> Result<Value, Box<dyn std::error::Error>> {
+        // Use RPC call with change_id as argument
+        self.rpc_call("index/calc_delta", vec![Value::String(change_id.to_string())]).await
+    }
+    
+    /// Update index from remote source
+    pub async fn index_update(&self) -> Result<Value, Box<dyn std::error::Error>> {
+        // If we have a database reference, call the async version directly
+        if let Some(ref db) = self.database {
+            let update_op = moor_vcs_worker::operations::IndexUpdateOperation::new(db.clone());
+            match update_op.update_async().await {
+                Ok(result_var) => {
+                    // Convert Var to string result
+                    let result_str = if let Some(s) = result_var.as_string() {
+                        s.to_string()
+                    } else {
+                        format!("{:?}", result_var)
+                    };
+                    
+                    let success = !result_str.starts_with("Error:");
+                    return Ok(json!({
+                        "success": success,
+                        "result": result_str,
+                        "operation": "index/update"
+                    }));
+                }
+                Err(e) => {
+                    return Ok(json!({
+                        "success": false,
+                        "result": format!("Error: {}", e),
+                        "operation": "index/update"
+                    }));
+                }
+            }
+        }
+        
+        // Fallback to HTTP request
+        self.rpc_call("index/update", vec![]).await
+    }
+    
+    // ==================== Clone Operations ====================
+    
+    /// Export the current repository state (clone export)
+    pub async fn clone_export(&self) -> Result<Value, Box<dyn std::error::Error>> {
+        self.rpc_call("clone", vec![]).await
+    }
+    
+    /// Import repository state from a remote URL (clone import)
+    pub async fn clone_import(&self, url: &str) -> Result<Value, Box<dyn std::error::Error>> {
+        // If we have a database reference, call the async version directly
+        if let Some(ref db) = self.database {
+            let clone_op = moor_vcs_worker::operations::CloneOperation::new(db.clone());
+            match clone_op.import_from_url_async(url).await {
+                Ok(result) => {
+                    return Ok(json!({
+                        "success": true,
+                        "result": result,
+                        "operation": "clone"
+                    }));
+                }
+                Err(e) => {
+                    return Ok(json!({
+                        "success": false,
+                        "result": format!("Error: {}", e),
+                        "operation": "clone"
+                    }));
+                }
+            }
+        }
+        
+        // Fallback to HTTP request
+        self.rpc_call("clone", vec![Value::String(url.to_string())]).await
     }
     
     // ==================== Low-level RPC ====================
