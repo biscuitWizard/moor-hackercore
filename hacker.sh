@@ -398,6 +398,11 @@ rebuild_images() {
 
     # Save get heads on successful rebuild
     save_git_heads
+    
+    # Clean build cache to prevent bloat
+    print_info "Cleaning Docker build cache..."
+    docker builder prune -a --force
+    print_success "Docker build cache cleaned!"
 }
 
 # Function to clean and rebuild
@@ -406,6 +411,7 @@ clean_rebuild() {
     clean_docker
     rebuild_images
     print_success "Clean rebuild completed!"
+    print_info "Note: Docker build cache was automatically cleaned during rebuild."
 }
 
 # Function to follow logs
