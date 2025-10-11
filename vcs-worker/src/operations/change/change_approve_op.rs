@@ -66,10 +66,12 @@ impl ChangeApproveOperation {
         let top_change_id = self.database.index().get_top_change()
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
         
-        if let Some(top_id) = top_change_id {
-            if top_id != change_id {
+        let is_top_change = top_change_id.as_ref() == Some(&change_id);
+        
+        if let Some(top_id) = &top_change_id {
+            if top_id != &change_id {
                 // There's a different change on top - check if it's local
-                if let Some(top_change) = self.database.index().get_change(&top_id)
+                if let Some(top_change) = self.database.index().get_change(top_id)
                     .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))? {
                     if top_change.status == ChangeStatus::Local {
                         error!("Cannot approve change '{}' - there's already a local change '{}' on top of the index", 
@@ -84,7 +86,15 @@ impl ChangeApproveOperation {
         }
         
         // Build the ObjectDiffModel before changing the status
-        let diff_model = build_object_diff_from_change(&self.database, &change)?;
+        // If this is the top change (current working change), return an empty diff
+        // because there are no NEW changes relative to the current state
+        let diff_model = if is_top_change {
+            info!("Approving top change - returning empty diff (no new changes relative to current state)");
+            ObjectDiffModel::new()
+        } else {
+            info!("Approving non-top change - building diff model");
+            build_object_diff_from_change(&self.database, &change)?
+        };
         
         // Remember original status to determine if we need to add to change_order
         let was_in_workspace = change.status == ChangeStatus::Review;

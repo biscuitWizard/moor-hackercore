@@ -6,7 +6,7 @@ use crate::database::{DatabaseRef, ObjectsTreeError};
 use crate::providers::index::IndexProvider;
 use crate::providers::workspace::WorkspaceProvider;
 use crate::types::{ChangeSubmitRequest, ChangeStatus, User, Permission};
-use crate::object_diff::{ObjectDiffModel, build_abandon_diff_from_change, build_object_diff_from_change};
+use crate::object_diff::{ObjectDiffModel, build_abandon_diff_from_change};
 use moor_var::{v_error, E_INVARG};
 
 /// Change submit operation that submits a local change for review
@@ -129,8 +129,12 @@ impl ChangeSubmitOperation {
             // NON-REMOTE INDEX: Instantly approve the change
             info!("No source URL configured, instantly approving change");
             
-            // Build the diff model showing what was approved
-            let diff_model = build_object_diff_from_change(&self.database, &change)?;
+            // When submitting the top change (current working change), return an empty diff
+            // because there are no NEW changes relative to the current state - the change
+            // is already in the working state, so merging it doesn't introduce new changes
+            let diff_model = ObjectDiffModel::new();
+            
+            info!("Returning empty diff for top change submission (no new changes relative to current state)");
             
             // Update the change status to Merged
             change.status = ChangeStatus::Merged;

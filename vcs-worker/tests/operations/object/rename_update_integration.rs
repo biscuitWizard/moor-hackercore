@@ -420,3 +420,253 @@ async fn test_rename_back_after_rename_and_add_deletes_added_object_with_cleanup
     println!("\n✅ Test passed: Rename back deletes added object with full cleanup, returning to original state");
 }
 
+#[tokio::test]
+async fn test_approve_empty_change_returns_empty_diff() {
+    let server = TestServer::start().await.expect("Failed to start test server");
+    let client = server.client();
+    
+    println!("Test: Approve empty change (no modifications) returns empty diff");
+    println!("Expected: Diff model with no objects added/modified/deleted/renamed\n");
+    
+    // Step 1: Create an empty change explicitly
+    println!("Step 1: Creating an empty change...");
+    
+    client.change_create("empty_test_change", "test_author", Some("Empty change for testing"))
+        .await
+        .expect("Failed to create change")
+        .assert_success("Change creation");
+    
+    println!("✅ Empty change created");
+    
+    // Step 2: Verify the change exists and is empty
+    println!("\nStep 2: Verifying change is empty...");
+    
+    let change_id = server.database().index().get_top_change()
+        .expect("Failed to get top change")
+        .expect("Should have a change");
+    
+    let change = server.database().index().get_change(&change_id)
+        .expect("Failed to get change")
+        .expect("Change should exist");
+    
+    assert_eq!(change.added_objects.len(), 0, "Should have no added objects");
+    assert_eq!(change.deleted_objects.len(), 0, "Should have no deleted objects");
+    assert_eq!(change.modified_objects.len(), 0, "Should have no modified objects");
+    assert_eq!(change.renamed_objects.len(), 0, "Should have no renamed objects");
+    println!("✅ Change is empty");
+    
+    // Step 3: Approve the empty change
+    println!("\nStep 3: Approving the empty change...");
+    
+    let result = client.change_approve(&change_id)
+        .await
+        .expect("Failed to approve change");
+    
+    println!("✅ Approve operation completed");
+    
+    // Step 4: Verify the result is a successful empty diff
+    println!("\nStep 4: Verifying empty diff was returned...");
+    
+    result.assert_success("Approve empty change");
+    
+    // Extract the diff from the result
+    // Result structure: {"success": true, "result": "{\"objects_renamed\": ..., \"objects_deleted\": ..., ...}"}
+    // Or: {"success": true, "result": <MOO var representing the diff>}
+    // The diff is serialized as a MOO var which becomes JSON
+    
+    // Get the result field - this is the serialized diff model
+    let result_field = result.get("result")
+        .expect("Should have result field");
+    
+    // Parse the result as a JSON object (the diff model)
+    let diff_map = if let Some(result_str) = result_field.as_str() {
+        // If it's a string, parse it as JSON
+        serde_json::from_str::<serde_json::Value>(result_str)
+            .expect("Result should be valid JSON")
+    } else {
+        // If it's already an object, use it directly
+        result_field.clone()
+    };
+    
+    // Verify all object collections are empty
+    let objects_added = diff_map.get("objects_added")
+        .expect("Should have objects_added field");
+    assert_eq!(objects_added.as_array().expect("Should be an array").len(), 0, 
+               "objects_added should be empty");
+    
+    let objects_deleted = diff_map.get("objects_deleted")
+        .expect("Should have objects_deleted field");
+    assert_eq!(objects_deleted.as_array().expect("Should be an array").len(), 0, 
+               "objects_deleted should be empty");
+    
+    let objects_modified = diff_map.get("objects_modified")
+        .expect("Should have objects_modified field");
+    assert_eq!(objects_modified.as_array().expect("Should be an array").len(), 0, 
+               "objects_modified should be empty");
+    
+    let objects_renamed = diff_map.get("objects_renamed")
+        .expect("Should have objects_renamed field");
+    assert_eq!(objects_renamed.as_object().expect("Should be an object").len(), 0, 
+               "objects_renamed should be empty");
+    
+    let changes = diff_map.get("changes")
+        .expect("Should have changes field");
+    assert_eq!(changes.as_array().expect("Should be an array").len(), 0, 
+               "changes list should be empty");
+    
+    println!("✅ Empty diff returned: no objects added, deleted, modified, or renamed");
+    
+    // Step 5: Verify the change was still marked as merged
+    println!("\nStep 5: Verifying change was marked as merged...");
+    
+    let change = server.database().index().get_change(&change_id)
+        .expect("Failed to get change")
+        .expect("Change should still exist");
+    
+    assert_eq!(change.status, moor_vcs_worker::types::ChangeStatus::Merged, 
+               "Change should be marked as Merged");
+    println!("✅ Change marked as Merged");
+    
+    // Step 6: Verify no local change exists
+    println!("\nStep 6: Verifying no local change exists after approval...");
+    
+    let top_change = server.database().index().get_top_change()
+        .expect("Failed to get top change");
+    assert!(top_change.is_none(), "Should have no local change after approving");
+    println!("✅ No local change exists");
+    
+    println!("\n✅ Test passed: Approving empty change returns empty diff");
+}
+
+#[tokio::test]
+async fn test_submit_on_local_index_auto_approves_and_returns_no_diff() {
+    let server = TestServer::start().await.expect("Failed to start test server");
+    let client = server.client();
+    let db = server.db_assertions();
+    
+    println!("Test: Submit on local (non-remote) index auto-approves and returns successful diff");
+    println!("Expected: Change is auto-approved and returns no diff\n");
+    
+    // Step 1: Verify index is non-remote (no source URL)
+    println!("Step 1: Verifying index is non-remote...");
+    
+    let source = server.database().index().get_source()
+        .expect("Failed to get source");
+    
+    assert!(source.is_none(), "Index should have no source URL (non-remote)");
+    println!("✅ Index is non-remote (no source URL)");
+    
+    // Step 2: Create a change with an object
+    println!("\nStep 2: Creating change with an object...");
+    
+    client.change_create("test_submit_change", "test_author", Some("Test auto-approval"))
+        .await
+        .expect("Failed to create change")
+        .assert_success("Change creation");
+    
+    let object_name = "submit_test_object";
+    client.object_update_from_file(object_name, "test_object.moo")
+        .await
+        .expect("Failed to create object")
+        .assert_success("Object creation");
+    
+    println!("✅ Change created with object: {}", object_name);
+    
+    // Verify we have a local change
+    let (change_id, change) = db.require_top_change();
+    assert_eq!(change.status, moor_vcs_worker::types::ChangeStatus::Local);
+    assert_eq!(change.added_objects.len(), 1, "Should have one added object");
+    println!("✅ Local change exists with one added object");
+    
+    // Step 3: Submit the change (should auto-approve on non-remote index)
+    println!("\nStep 3: Submitting change (should auto-approve)...");
+    
+    let result = client.change_submit()
+        .await
+        .expect("Failed to submit change");
+    
+    println!("✅ Submit operation completed");
+    
+    // Step 4: Verify the result is a successful empty diff
+    // When submitting the top change (current working change), there are no NEW changes
+    // relative to the current state, so an empty diff should be returned
+    println!("\nStep 4: Verifying empty diff was returned...");
+    
+    result.assert_success("Submit with auto-approve");
+    
+    // Extract the diff from the result
+    let result_field = result.get("result")
+        .expect("Should have result field");
+    
+    // Parse the result as a JSON object (the diff model)
+    let diff_map = if let Some(result_str) = result_field.as_str() {
+        // If it's a string, parse it as JSON
+        serde_json::from_str::<serde_json::Value>(result_str)
+            .expect("Result should be valid JSON")
+    } else {
+        // If it's already an object, use it directly
+        result_field.clone()
+    };
+    
+    // Verify all collections are empty (no new changes relative to current state)
+    let objects_added = diff_map.get("objects_added")
+        .expect("Should have objects_added field");
+    assert_eq!(objects_added.as_array().expect("Should be an array").len(), 0, 
+               "objects_added should be empty - no new changes");
+    
+    let objects_deleted = diff_map.get("objects_deleted")
+        .expect("Should have objects_deleted field");
+    assert_eq!(objects_deleted.as_array().expect("Should be an array").len(), 0, 
+               "objects_deleted should be empty");
+    
+    let objects_modified = diff_map.get("objects_modified")
+        .expect("Should have objects_modified field");
+    assert_eq!(objects_modified.as_array().expect("Should be an array").len(), 0, 
+               "objects_modified should be empty");
+    
+    let objects_renamed = diff_map.get("objects_renamed")
+        .expect("Should have objects_renamed field");
+    assert_eq!(objects_renamed.as_object().expect("Should be an object").len(), 0, 
+               "objects_renamed should be empty");
+    
+    let changes = diff_map.get("changes")
+        .expect("Should have changes field");
+    assert_eq!(changes.as_array().expect("Should be an array").len(), 0, 
+               "changes list should be empty");
+    
+    println!("✅ Empty diff returned: no new changes relative to current state");
+    
+    // Step 5: Verify the change was auto-approved (marked as Merged)
+    println!("\nStep 5: Verifying change was auto-approved...");
+    
+    let change = server.database().index().get_change(&change_id)
+        .expect("Failed to get change")
+        .expect("Change should still exist");
+    
+    assert_eq!(change.status, moor_vcs_worker::types::ChangeStatus::Merged, 
+               "Change should be marked as Merged (auto-approved)");
+    println!("✅ Change was auto-approved and marked as Merged");
+    
+    // Step 6: Verify no local change exists
+    println!("\nStep 6: Verifying no local change exists after submit...");
+    
+    let top_change = server.database().index().get_top_change()
+        .expect("Failed to get top change");
+    assert!(top_change.is_none(), "Should have no local change after submit");
+    println!("✅ No local change exists");
+    
+    // Step 7: Verify the object was persisted
+    println!("\nStep 7: Verifying object was persisted...");
+    
+    let obj_ref = server.database().refs().get_ref(
+        moor_vcs_worker::types::VcsObjectType::MooObject, 
+        object_name, 
+        None
+    ).expect("Failed to get ref");
+    
+    assert!(obj_ref.is_some(), "Object should have a ref after auto-approval");
+    println!("✅ Object was persisted with ref");
+    
+    println!("\n✅ Test passed: Submit on local index auto-approves and returns successful diff");
+}
+
