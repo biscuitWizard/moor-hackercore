@@ -231,7 +231,8 @@ player:tell("Added: ", length(diff["added_objects"]), " objects");"#.to_string()
             OperationResponse::new(
                 400,
                 "Bad Request - Cannot approve change in current state",
-                r#"E_INVARG("Error: Cannot approve change 'my-change' - it must be Local or Review status (current: Merged),
+                r#"E_INVARG("Error: Cannot approve change 'my-change' - it must be Local or Review status (current: Merged)")"#
+            ),
             OperationResponse::new(
                 403,
                 "Forbidden - User lacks permission to approve changes",
