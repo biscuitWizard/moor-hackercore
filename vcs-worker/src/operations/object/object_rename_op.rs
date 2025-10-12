@@ -213,6 +213,26 @@ impl ObjectRenameOperation {
             if let Some(pos) = current_change.added_objects.iter().position(|obj| {
                 obj.object_type == VcsObjectType::MooObject && obj.name == request.from_name
             }) {
+                let obj_version = current_change.added_objects[pos].version;
+                
+                // Update refs: from_name -> to_name
+                if let Some(sha256) = self
+                    .database
+                    .refs()
+                    .get_ref(VcsObjectType::MooObject, &request.from_name, Some(obj_version))
+                    .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
+                {
+                    self.database
+                        .refs()
+                        .update_ref(VcsObjectType::MooObject, &request.to_name, obj_version, &sha256)
+                        .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+                    self.database
+                        .refs()
+                        .delete_ref(VcsObjectType::MooObject, &request.from_name, obj_version)
+                        .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+                    info!("Updated ref from '{}' to '{}' (rename back)", request.from_name, request.to_name);
+                }
+                
                 current_change.added_objects[pos] = crate::types::ObjectInfo {
                     object_type: current_change.added_objects[pos].object_type,
                     name: request.to_name.clone(),
@@ -227,6 +247,26 @@ impl ObjectRenameOperation {
             if let Some(pos) = current_change.modified_objects.iter().position(|obj| {
                 obj.object_type == VcsObjectType::MooObject && obj.name == request.from_name
             }) {
+                let obj_version = current_change.modified_objects[pos].version;
+                
+                // Update refs: from_name -> to_name
+                if let Some(sha256) = self
+                    .database
+                    .refs()
+                    .get_ref(VcsObjectType::MooObject, &request.from_name, Some(obj_version))
+                    .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
+                {
+                    self.database
+                        .refs()
+                        .update_ref(VcsObjectType::MooObject, &request.to_name, obj_version, &sha256)
+                        .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+                    self.database
+                        .refs()
+                        .delete_ref(VcsObjectType::MooObject, &request.from_name, obj_version)
+                        .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+                    info!("Updated ref from '{}' to '{}' (rename back)", request.from_name, request.to_name);
+                }
+                
                 current_change.modified_objects[pos] = crate::types::ObjectInfo {
                     object_type: current_change.modified_objects[pos].object_type,
                     name: request.to_name.clone(),
@@ -356,6 +396,46 @@ impl ObjectRenameOperation {
                     if let Some(pos) = current_change.added_objects.iter().position(|obj| {
                         obj.object_type == VcsObjectType::MooObject && obj.name == request.from_name
                     }) {
+                        let obj_version = current_change.added_objects[pos].version;
+                        
+                        // Update the ref: get SHA256 from old name, create new ref with new name
+                        if let Some(sha256) = self
+                            .database
+                            .refs()
+                            .get_ref(
+                                VcsObjectType::MooObject,
+                                &request.from_name,
+                                Some(obj_version),
+                            )
+                            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
+                        {
+                            // Create new ref with new name
+                            self.database
+                                .refs()
+                                .update_ref(
+                                    VcsObjectType::MooObject,
+                                    &request.to_name,
+                                    obj_version,
+                                    &sha256,
+                                )
+                                .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+                            
+                            // Delete old ref
+                            self.database
+                                .refs()
+                                .delete_ref(
+                                    VcsObjectType::MooObject,
+                                    &request.from_name,
+                                    obj_version,
+                                )
+                                .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+                            
+                            info!(
+                                "Updated ref from '{}' to '{}' (version {})",
+                                request.from_name, request.to_name, obj_version
+                            );
+                        }
+                        
                         current_change.added_objects[pos].name = request.to_name.clone();
                         info!(
                             "Updated added object name from '{}' to '{}'",
@@ -368,13 +448,96 @@ impl ObjectRenameOperation {
                 if let Some(pos) = current_change.modified_objects.iter().position(|obj| {
                     obj.object_type == VcsObjectType::MooObject && obj.name == request.from_name
                 }) {
+                    let obj_version = current_change.modified_objects[pos].version;
+                    
+                    // Update the ref: get SHA256 from old name, create new ref with new name
+                    if let Some(sha256) = self
+                        .database
+                        .refs()
+                        .get_ref(
+                            VcsObjectType::MooObject,
+                            &request.from_name,
+                            Some(obj_version),
+                        )
+                        .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
+                    {
+                        // Create new ref with new name
+                        self.database
+                            .refs()
+                            .update_ref(
+                                VcsObjectType::MooObject,
+                                &request.to_name,
+                                obj_version,
+                                &sha256,
+                            )
+                            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+                        
+                        // Delete old ref
+                        self.database
+                            .refs()
+                            .delete_ref(
+                                VcsObjectType::MooObject,
+                                &request.from_name,
+                                obj_version,
+                            )
+                            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+                        
+                        info!(
+                            "Updated ref from '{}' to '{}' (version {})",
+                            request.from_name, request.to_name, obj_version
+                        );
+                    }
+                    
                     current_change.modified_objects[pos].name = request.to_name.clone();
                     info!(
                         "Updated modified object name from '{}' to '{}'",
                         request.from_name, request.to_name
                     );
+                    
+                    // Check if this is a continuation of an existing rename (chaining)
+                    if let Some(rename_pos) = current_change.renamed_objects.iter().position(|r| {
+                        r.from.object_type == VcsObjectType::MooObject
+                            && r.to.object_type == VcsObjectType::MooObject
+                            && r.to.name == request.from_name
+                    }) {
+                        // Update the existing rename's to.name to chain the renames
+                        info!(
+                            "Chaining rename for modified object: updating existing rename to point to '{}'",
+                            request.to_name
+                        );
+                        current_change.renamed_objects[rename_pos].to.name = request.to_name.clone();
+                    } else if obj_version > 1 {
+                        // Check if there are previous versions with the old name (approved/committed versions)
+                        // If so, add to renamed_objects to block lookups by old name
+                        let has_previous_versions = self
+                            .database
+                            .refs()
+                            .get_current_version(VcsObjectType::MooObject, &request.from_name)
+                            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
+                            .is_some();
+                        
+                        if has_previous_versions {
+                            // Add to renamed_objects to block old name lookups
+                            let renamed_object = RenamedObject {
+                                from: crate::types::ObjectInfo {
+                                    object_type: VcsObjectType::MooObject,
+                                    name: request.from_name.clone(),
+                                    version: obj_version - 1, // Previous version
+                                },
+                                to: crate::types::ObjectInfo {
+                                    object_type: VcsObjectType::MooObject,
+                                    name: request.to_name.clone(),
+                                    version: obj_version,
+                                },
+                            };
+                            current_change.renamed_objects.push(renamed_object);
+                            info!(
+                                "Added rename entry to block old name '{}' (has previous versions)",
+                                request.from_name
+                            );
+                        }
+                    }
                 }
-                // Don't add to renamed_objects since it's already tracked as modified
             } else {
                 // Object exists only in refs (committed history) - add to renamed_objects
 
