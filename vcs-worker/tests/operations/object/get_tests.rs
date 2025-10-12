@@ -6,6 +6,11 @@
 //! 3. Getting renamed objects by old/new names
 //! 4. Getting objects after updates
 //! 5. Getting objects with invalid names
+//! 6. Getting objects at specific change IDs (historical versions)
+//! 7. Getting objects with short (abbreviated) change IDs
+//! 8. Error handling for invalid change IDs
+//! 9. Error handling for objects not in specified changes
+//! 10. Retrieving multiple historical versions accurately
 
 use crate::common::*;
 
