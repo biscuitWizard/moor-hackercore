@@ -291,7 +291,7 @@ fn apply_meta_filtering(obj_content: &str, meta: &crate::types::MooMetaObject) -
 
 /// Sanitize a filename by replacing invalid characters
 pub fn sanitize_filename(name: &str) -> String {
-    name.replace('/', "_")
+    let sanitized = name.replace('/', "_")
         .replace('\\', "_")
         .replace(':', "_")
         .replace('*', "_")
@@ -300,7 +300,23 @@ pub fn sanitize_filename(name: &str) -> String {
         .replace('<', "_")
         .replace('>', "_")
         .replace('|', "_")
-        .replace('$', "")
+        .replace('$', "");
+    
+    // Collapse consecutive underscores into a single underscore
+    let mut result = String::new();
+    let mut last_was_underscore = false;
+    for c in sanitized.chars() {
+        if c == '_' {
+            if !last_was_underscore {
+                result.push(c);
+                last_was_underscore = true;
+            }
+        } else {
+            result.push(c);
+            last_was_underscore = false;
+        }
+    }
+    result
 }
 
 /// Clean up old .moo files that no longer correspond to objects
