@@ -102,7 +102,10 @@ impl Operation for MetaAddIgnoredPropertyOperation {
     }
 
     fn philosophy(&self) -> &'static str {
-        "Documentation for this operation is being prepared."
+        "Adds a property to the object's meta ignored properties list, causing the VCS to exclude that property from \
+        version control tracking (similar to .gitignore). This is useful for properties that change frequently but don't \
+        need to be tracked, such as temporary state, cache values, or runtime statistics. The operation modifies the \
+        object's meta file and adds it to the current local change."
     }
 
     fn parameters(&self) -> Vec<OperationParameter> {
@@ -110,7 +113,20 @@ impl Operation for MetaAddIgnoredPropertyOperation {
     }
 
     fn examples(&self) -> Vec<OperationExample> {
-        vec![]
+        vec![OperationExample {
+            description: "Add a property to the ignored list".to_string(),
+            moocode: r#"// Ignore a property that changes frequently but doesn't need tracking
+result = worker_request("vcs", {"meta/add_ignored_property", "obj123", "last_access_time"});
+// Returns: "Property 'last_access_time' added to ignored list for object 'obj123'"
+// Future changes to this property will not appear in diffs"#
+                .to_string(),
+            http_curl: Some(
+                r#"curl -X POST http://localhost:8081/api/meta/add_ignored_property \
+  -H "Content-Type: application/json" \
+  -d '{"object_name":"obj123","property_name":"last_access_time"}'"#
+                    .to_string(),
+            ),
+        }]
     }
 
     fn responses(&self) -> Vec<crate::operations::OperationResponse> {

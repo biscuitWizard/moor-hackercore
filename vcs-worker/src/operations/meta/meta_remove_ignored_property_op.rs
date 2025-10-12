@@ -100,7 +100,10 @@ impl Operation for MetaRemoveIgnoredPropertyOperation {
     }
 
     fn philosophy(&self) -> &'static str {
-        "Documentation for this operation is being prepared."
+        "Removes a property from the object's meta ignored properties list, causing the VCS to resume tracking that \
+        property in version control. This is useful when a previously ignored property becomes important to track, \
+        or when cleaning up ignore lists after development is complete. The operation modifies the object's meta file \
+        and adds it to the current local change."
     }
 
     fn parameters(&self) -> Vec<OperationParameter> {
@@ -108,7 +111,20 @@ impl Operation for MetaRemoveIgnoredPropertyOperation {
     }
 
     fn examples(&self) -> Vec<OperationExample> {
-        vec![]
+        vec![OperationExample {
+            description: "Remove a property from the ignored list".to_string(),
+            moocode: r#"// Resume tracking a property that was previously ignored
+result = worker_request("vcs", {"meta/remove_ignored_property", "obj123", "last_access_time"});
+// Returns: "Property 'last_access_time' removed from ignored list for object 'obj123'"
+// Future changes to this property will now appear in diffs"#
+                .to_string(),
+            http_curl: Some(
+                r#"curl -X POST http://localhost:8081/api/meta/remove_ignored_property \
+  -H "Content-Type: application/json" \
+  -d '{"object_name":"obj123","property_name":"last_access_time"}'"#
+                    .to_string(),
+            ),
+        }]
     }
 
     fn responses(&self) -> Vec<crate::operations::OperationResponse> {

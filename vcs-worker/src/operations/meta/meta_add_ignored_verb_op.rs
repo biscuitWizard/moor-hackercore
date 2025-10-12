@@ -100,7 +100,10 @@ impl Operation for MetaAddIgnoredVerbOperation {
     }
 
     fn philosophy(&self) -> &'static str {
-        "Documentation for this operation is being prepared."
+        "Adds a verb to the object's meta ignored verbs list, causing the VCS to exclude that verb from version \
+        control tracking (similar to .gitignore). This is useful for verbs that are frequently modified but don't \
+        need to be tracked, such as temporary debugging verbs, development helpers, or verbs that are auto-generated. \
+        The operation modifies the object's meta file and adds it to the current local change."
     }
 
     fn parameters(&self) -> Vec<OperationParameter> {
@@ -108,7 +111,20 @@ impl Operation for MetaAddIgnoredVerbOperation {
     }
 
     fn examples(&self) -> Vec<OperationExample> {
-        vec![]
+        vec![OperationExample {
+            description: "Add a verb to the ignored list".to_string(),
+            moocode: r#"// Ignore a debug verb that changes frequently during development
+result = worker_request("vcs", {"meta/add_ignored_verb", "obj123", "debug_state"});
+// Returns: "Verb 'debug_state' added to ignored list for object 'obj123'"
+// Future changes to this verb will not appear in diffs"#
+                .to_string(),
+            http_curl: Some(
+                r#"curl -X POST http://localhost:8081/api/meta/add_ignored_verb \
+  -H "Content-Type: application/json" \
+  -d '{"object_name":"obj123","verb_name":"debug_state"}'"#
+                    .to_string(),
+            ),
+        }]
     }
 
     fn responses(&self) -> Vec<crate::operations::OperationResponse> {

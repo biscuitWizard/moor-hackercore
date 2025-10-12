@@ -240,7 +240,10 @@ impl Operation for IndexCalcDeltaOperation {
     }
 
     fn philosophy(&self) -> &'static str {
-        "Documentation for this operation is being prepared."
+        "Calculates the delta (difference) of all merged changes that occurred chronologically after a specified change ID. \
+        This operation returns comprehensive delta information including change IDs, ref pairs showing object name mappings, \
+        and all objects added or modified in those changes. This is primarily used for synchronization between repositories, \
+        allowing efficient transfer of only new changes rather than entire repository contents."
     }
 
     fn parameters(&self) -> Vec<OperationParameter> {
@@ -248,7 +251,37 @@ impl Operation for IndexCalcDeltaOperation {
     }
 
     fn examples(&self) -> Vec<OperationExample> {
-        vec![]
+        vec![
+            OperationExample {
+                description: "Calculate delta after a specific change".to_string(),
+                moocode: r#"// Find all changes after a known change ID
+delta = worker_request("vcs", {"index/calc_delta", "abc123def"});
+// Returns map with change_ids, ref_pairs, and objects_added
+player:tell("Changes since abc123def: ", length(delta["change_ids"]));
+player:tell("Objects affected: ", length(delta["objects_added"]));"#
+                    .to_string(),
+                http_curl: Some(
+                    r#"curl -X GET "http://localhost:8081/api/index/calc_delta?change_id=abc123def""#
+                        .to_string(),
+                ),
+            },
+            OperationExample {
+                description: "Use delta for synchronization check".to_string(),
+                moocode: r#"// Check if there are any new changes since last sync
+last_sync_id = player.last_synced_change;
+delta = worker_request("vcs", {"index/calc_delta", last_sync_id});
+if (length(delta["change_ids"]) > 0)
+    player:tell("You have ", length(delta["change_ids"]), " new changes to sync");
+else
+    player:tell("Already up to date");
+endif"#
+                    .to_string(),
+                http_curl: Some(
+                    r#"curl -X GET "http://localhost:8081/api/index/calc_delta?change_id=def456ghi""#
+                        .to_string(),
+                ),
+            },
+        ]
     }
 
     fn responses(&self) -> Vec<crate::operations::OperationResponse> {

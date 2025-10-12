@@ -87,7 +87,10 @@ impl Operation for WorkspaceSubmitOperation {
     }
 
     fn philosophy(&self) -> &'static str {
-        "Documentation for this operation is being prepared."
+        "Submits a serialized change to the workspace for review and approval. This operation accepts a JSON-serialized \
+        Change object and stores it in the workspace where it can be reviewed by users with approval permissions. \
+        This operation requires the SubmitChanges permission and is typically used after making local changes that need \
+        to be shared with other developers or submitted to the main repository."
     }
 
     fn parameters(&self) -> Vec<OperationParameter> {
@@ -95,7 +98,21 @@ impl Operation for WorkspaceSubmitOperation {
     }
 
     fn examples(&self) -> Vec<OperationExample> {
-        vec![]
+        vec![OperationExample {
+            description: "Submit a serialized change for review".to_string(),
+            moocode: r#"// First, serialize your local change to JSON
+change_json = worker_request("vcs", {"serialize_change", change_id});
+// Then submit it to the workspace for review
+result = worker_request("vcs", {"workspace/submit", change_json});
+// Returns: "Change 'my-feature' (change-abc123) successfully submitted for review""#
+                .to_string(),
+            http_curl: Some(
+                r#"curl -X PUT http://localhost:8081/api/workspace/submit \
+  -H "Content-Type: application/json" \
+  -d '{"id":"abc123...","name":"my-feature","description":"Added new login system",...}'"#
+                    .to_string(),
+            ),
+        }]
     }
 
     fn responses(&self) -> Vec<crate::operations::OperationResponse> {

@@ -102,7 +102,10 @@ impl Operation for MetaClearIgnoredPropertiesOperation {
     }
 
     fn philosophy(&self) -> &'static str {
-        "Documentation for this operation is being prepared."
+        "Clears all ignored properties from the object's meta, causing the VCS to resume tracking all properties. \
+        This is useful when resetting an object's ignore configuration, cleaning up after development, or ensuring \
+        all properties are tracked. The operation modifies the object's meta file and adds it to the current local \
+        change, reporting the count of properties that were cleared."
     }
 
     fn parameters(&self) -> Vec<OperationParameter> {
@@ -110,7 +113,20 @@ impl Operation for MetaClearIgnoredPropertiesOperation {
     }
 
     fn examples(&self) -> Vec<OperationExample> {
-        vec![]
+        vec![OperationExample {
+            description: "Clear all ignored properties for an object".to_string(),
+            moocode: r#"// Remove all property ignores from an object
+result = worker_request("vcs", {"meta/clear_ignored_properties", "obj123"});
+// Returns: "Cleared 5 ignored properties for object 'obj123'"
+// All properties will now be tracked by VCS"#
+                .to_string(),
+            http_curl: Some(
+                r#"curl -X POST http://localhost:8081/api/meta/clear_ignored_properties \
+  -H "Content-Type: application/json" \
+  -d '{"object_name":"obj123"}'"#
+                    .to_string(),
+            ),
+        }]
     }
 
     fn responses(&self) -> Vec<crate::operations::OperationResponse> {

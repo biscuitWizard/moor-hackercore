@@ -153,7 +153,10 @@ impl Operation for IndexListOperation {
     }
 
     fn philosophy(&self) -> &'static str {
-        "Documentation for this operation is being prepared."
+        "Lists changes in the index in chronological order (oldest first, newest last) with optional pagination support. \
+        This operation provides a way to browse through the repository's history, showing change metadata including IDs, \
+        authors, timestamps, messages, and status. Pagination allows efficient handling of large repositories by limiting \
+        results per query. Default limit is 5 changes, starting from page 0."
     }
 
     fn parameters(&self) -> Vec<OperationParameter> {
@@ -161,7 +164,29 @@ impl Operation for IndexListOperation {
     }
 
     fn examples(&self) -> Vec<OperationExample> {
-        vec![]
+        vec![
+            OperationExample {
+                description: "List first 5 changes (default)".to_string(),
+                moocode: r#"changes = worker_request("vcs", {"index/list"});
+// Returns up to 5 changes with full metadata
+for change in (changes)
+    player:tell(change["short_id"], ": ", change["message"], " by ", change["author"]);
+endfor"#
+                    .to_string(),
+                http_curl: Some(r#"curl -X GET http://localhost:8081/api/index/list"#.to_string()),
+            },
+            OperationExample {
+                description: "List changes with custom pagination".to_string(),
+                moocode: r#"// Get 10 changes per page, starting at page 2 (skip first 20)
+changes = worker_request("vcs", {"index/list", "10", "2"});
+player:tell("Found ", length(changes), " changes on page 2");"#
+                    .to_string(),
+                http_curl: Some(
+                    r#"curl -X GET "http://localhost:8081/api/index/list?limit=10&page=2""#
+                        .to_string(),
+                ),
+            },
+        ]
     }
 
     fn responses(&self) -> Vec<crate::operations::OperationResponse> {

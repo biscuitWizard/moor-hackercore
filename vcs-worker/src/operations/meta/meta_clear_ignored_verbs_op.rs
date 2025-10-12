@@ -102,7 +102,10 @@ impl Operation for MetaClearIgnoredVerbsOperation {
     }
 
     fn philosophy(&self) -> &'static str {
-        "Documentation for this operation is being prepared."
+        "Clears all ignored verbs from the object's meta, causing the VCS to resume tracking all verbs. This is \
+        useful when resetting an object's ignore configuration, cleaning up after development, or ensuring all verbs \
+        are tracked. The operation modifies the object's meta file and adds it to the current local change, reporting \
+        the count of verbs that were cleared."
     }
 
     fn parameters(&self) -> Vec<OperationParameter> {
@@ -110,7 +113,20 @@ impl Operation for MetaClearIgnoredVerbsOperation {
     }
 
     fn examples(&self) -> Vec<OperationExample> {
-        vec![]
+        vec![OperationExample {
+            description: "Clear all ignored verbs for an object".to_string(),
+            moocode: r#"// Remove all verb ignores from an object
+result = worker_request("vcs", {"meta/clear_ignored_verbs", "obj123"});
+// Returns: "Cleared 3 ignored verbs for object 'obj123'"
+// All verbs will now be tracked by VCS"#
+                .to_string(),
+            http_curl: Some(
+                r#"curl -X POST http://localhost:8081/api/meta/clear_ignored_verbs \
+  -H "Content-Type: application/json" \
+  -d '{"object_name":"obj123"}'"#
+                    .to_string(),
+            ),
+        }]
     }
 
     fn responses(&self) -> Vec<crate::operations::OperationResponse> {

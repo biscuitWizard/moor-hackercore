@@ -100,7 +100,10 @@ impl Operation for MetaRemoveIgnoredVerbOperation {
     }
 
     fn philosophy(&self) -> &'static str {
-        "Documentation for this operation is being prepared."
+        "Removes a verb from the object's meta ignored verbs list, causing the VCS to resume tracking that verb in \
+        version control. This is useful when a previously ignored verb becomes important to track (e.g., a debug verb \
+        becomes a permanent feature), or when cleaning up ignore lists after development is complete. The operation \
+        modifies the object's meta file and adds it to the current local change."
     }
 
     fn parameters(&self) -> Vec<OperationParameter> {
@@ -108,7 +111,20 @@ impl Operation for MetaRemoveIgnoredVerbOperation {
     }
 
     fn examples(&self) -> Vec<OperationExample> {
-        vec![]
+        vec![OperationExample {
+            description: "Remove a verb from the ignored list".to_string(),
+            moocode: r#"// Resume tracking a verb that was previously ignored
+result = worker_request("vcs", {"meta/remove_ignored_verb", "obj123", "debug_state"});
+// Returns: "Verb 'debug_state' removed from ignored list for object 'obj123'"
+// Future changes to this verb will now appear in diffs"#
+                .to_string(),
+            http_curl: Some(
+                r#"curl -X POST http://localhost:8081/api/meta/remove_ignored_verb \
+  -H "Content-Type: application/json" \
+  -d '{"object_name":"obj123","verb_name":"debug_state"}'"#
+                    .to_string(),
+            ),
+        }]
     }
 
     fn responses(&self) -> Vec<crate::operations::OperationResponse> {

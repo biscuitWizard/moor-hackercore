@@ -169,7 +169,10 @@ impl Operation for WorkspaceListOperation {
     }
 
     fn philosophy(&self) -> &'static str {
-        "Documentation for this operation is being prepared."
+        "Lists all changes currently in the workspace, including those awaiting review (Review status) and those that \
+        are stashed for later work (Idle status). This operation allows filtering by status to show only specific types \
+        of changes. Each change entry includes detailed information about the author, timestamp, affected objects, and \
+        change type. This operation requires the SubmitChanges permission."
     }
 
     fn parameters(&self) -> Vec<OperationParameter> {
@@ -177,7 +180,31 @@ impl Operation for WorkspaceListOperation {
     }
 
     fn examples(&self) -> Vec<OperationExample> {
-        vec![]
+        vec![
+            OperationExample {
+                description: "List all workspace changes".to_string(),
+                moocode: r#"changes = worker_request("vcs", {"workspace/list"});
+// Returns a list of all changes in the workspace with full details
+for change in (changes)
+    player:tell("Change: ", change["name"], " by ", change["author"], 
+                " - Status: ", change["status"]);
+    player:tell("  Objects added: ", tostr(change["changes"]["objects_added"]));
+endfor"#
+                    .to_string(),
+                http_curl: Some(r#"curl -X GET http://localhost:8081/api/workspace/list"#.to_string()),
+            },
+            OperationExample {
+                description: "List only changes awaiting review".to_string(),
+                moocode: r#"review_changes = worker_request("vcs", {"workspace/list", "review"});
+// Returns only changes with Review status
+player:tell("Changes awaiting review: ", length(review_changes));"#
+                    .to_string(),
+                http_curl: Some(
+                    r#"curl -X GET "http://localhost:8081/api/workspace/list?status=review""#
+                        .to_string(),
+                ),
+            },
+        ]
     }
 
     fn responses(&self) -> Vec<crate::operations::OperationResponse> {
