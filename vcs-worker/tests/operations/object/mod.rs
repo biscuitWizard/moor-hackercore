@@ -13,6 +13,7 @@
 mod crud;
 mod delete_tests;
 mod get_tests;
+mod history_tests;
 mod lifecycle;
 mod list;
 mod rename_edge_cases_tests;

@@ -85,6 +85,12 @@ impl VcsTestClient {
         .await
     }
 
+    /// Get the history of changes for an object
+    pub async fn object_history(&self, name: &str) -> Result<Value, Box<dyn std::error::Error>> {
+        self.rpc_call("object/history", vec![Value::String(name.to_string())])
+            .await
+    }
+
     /// Delete an object by name
     pub async fn object_delete(&self, name: &str) -> Result<Value, Box<dyn std::error::Error>> {
         self.rpc_call("object/delete", vec![Value::String(name.to_string())])
