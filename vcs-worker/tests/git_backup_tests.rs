@@ -121,26 +121,6 @@ async fn test_git_backup_with_local_repo() {
         .expect("Failed to update object");
     
     response.assert_success("object/update");
-    println!("object/update response: {:?}", response);
-    
-    // Debug: Check what the change looks like BEFORE submit
-    let top_change_id_before = server.database().index().get_top_change().unwrap().unwrap();
-    if let Ok(Some(change_before)) = server.database().index().get_change(&top_change_id_before) {
-        println!("Change BEFORE submit:");
-        println!("  ID: {}", change_before.id);
-        println!("  Added: {}, Modified: {}, Deleted: {}, Renamed: {}",
-            change_before.added_objects.len(),
-            change_before.modified_objects.len(),
-            change_before.deleted_objects.len(),
-            change_before.renamed_objects.len()
-        );
-        for obj in &change_before.added_objects {
-            println!("    Added: {} (type: {:?}, version: {})", obj.name, obj.object_type, obj.version);
-        }
-        for obj in &change_before.modified_objects {
-            println!("    Modified: {} (type: {:?}, version: {})", obj.name, obj.object_type, obj.version);
-        }
-    }
     
     // Submit the change (which triggers git backup)
     let submit_response = client
@@ -150,44 +130,8 @@ async fn test_git_backup_with_local_repo() {
     
     submit_response.assert_success("change/submit");
     
-    // Debug: Check if git backup config is set
-    println!("Git backup config check:");
-    println!("  VCS_GIT_BACKUP_REPO env var: {:?}", std::env::var("VCS_GIT_BACKUP_REPO"));
-    
-    // Debug: Check what changes exist
-    let change_order = server.database().index().get_change_order().unwrap();
-    println!("  Changes in order: {}", change_order.len());
-    for change_id in &change_order {
-        if let Ok(Some(change)) = server.database().index().get_change(change_id) {
-            println!("    Change {}: {} added, {} modified, {} deleted, {} renamed",
-                change.id,
-                change.added_objects.len(),
-                change.modified_objects.len(),
-                change.deleted_objects.len(),
-                change.renamed_objects.len()
-            );
-        }
-    }
-    
-    // Debug: Check what objects are in the database
-    let objects = server.database().index().compute_complete_object_list().unwrap();
-    println!("  Objects in index: {} objects", objects.len());
-    for obj in &objects {
-        println!("    - {} (type: {:?}, version: {})", obj.name, obj.object_type, obj.version);
-    }
-    
     // Wait for the background thread to complete
     thread::sleep(Duration::from_secs(3));
-    
-    // Debug: List all files in the git directory
-    println!("Files in git directory {:?}:", git_dir.path());
-    if let Ok(entries) = fs::read_dir(git_dir.path()) {
-        for entry in entries {
-            if let Ok(entry) = entry {
-                println!("  - {:?}", entry.path());
-            }
-        }
-    }
     
     // Check that the .moo file was created in the git repo (filename is sanitized object name)
     let expected_file = git_dir.path().join("#1.moo");
@@ -228,30 +172,20 @@ async fn test_git_backup_with_meta_filtering() {
     // Create an object
     let objdef = vec![
         "object #2",
-        "  name \"Test Object\"",
-        "  parent #0",
-        "  owner #1",
-        "  location #0",
+        "  name: \"Test Object\"",
+        "  parent: #0",
+        "  owner: #1",
+        "  location: #0",
         "",
-        "  property visible_prop rw #1 \"visible\"",
-        "  property ignored_prop rw #1 \"ignored\"",
+        "  property visible_prop (owner: #1, flags: \"rw\") = \"visible\";",
+        "  property ignored_prop (owner: #1, flags: \"rw\") = \"ignored\";",
         "",
-        "  verb visible_verb",
-        "    owner #1",
-        "    flags rx",
-        "    args any any any",
-        "    code",
-        "      return \"visible\";",
-        "    endcode",
+        "  verb visible_verb (this none this) owner: #1 flags: \"rx\"",
+        "    return \"visible\";",
         "  endverb",
         "",
-        "  verb ignored_verb",
-        "    owner #1",
-        "    flags rx",
-        "    args any any any",
-        "    code",
-        "      return \"ignored\";",
-        "    endcode",
+        "  verb ignored_verb (this none this) owner: #1 flags: \"rx\"",
+        "    return \"ignored\";",
         "  endverb",
         "endobject",
     ].join("\n");
@@ -291,7 +225,7 @@ async fn test_git_backup_with_meta_filtering() {
     thread::sleep(Duration::from_secs(3));
     
     // Check that the file was created with meta filtering applied
-    let expected_file = git_dir.path().join("2.moo");
+    let expected_file = git_dir.path().join("#2.moo");
     assert!(expected_file.exists());
     
     let content = fs::read_to_string(&expected_file).unwrap();
@@ -323,10 +257,10 @@ async fn test_git_backup_cleanup_old_files() {
     // Create a real object
     let objdef = vec![
         "object #3",
-        "  name \"Real Object\"",
-        "  parent #0",
-        "  owner #1",
-        "  location #0",
+        "  name: \"Real Object\"",
+        "  parent: #0",
+        "  owner: #1",
+        "  location: #0",
         "endobject",
     ].join("\n");
     
@@ -348,7 +282,7 @@ async fn test_git_backup_cleanup_old_files() {
     thread::sleep(Duration::from_secs(3));
     
     // Check that the real file exists
-    let real_file = git_dir.path().join("3.moo");
+    let real_file = git_dir.path().join("#3.moo");
     assert!(real_file.exists());
     
     // Check that the stale file was removed
@@ -368,10 +302,10 @@ async fn test_git_backup_disabled_by_default() {
     // Create and submit a change
     let objdef = vec![
         "object #5",
-        "  name \"Test\"",
-        "  parent #0",
-        "  owner #1",
-        "  location #0",
+        "  name: \"Test\"",
+        "  parent: #0",
+        "  owner: #1",
+        "  location: #0",
         "endobject",
     ].join("\n");
     
@@ -402,21 +336,23 @@ async fn test_git_backup_with_special_characters_in_object_name() {
     
     // Create an object with special characters in the name
     let objdef = vec![
-        "object $player",
-        "  name \"Player Object\"",
-        "  parent #0",
-        "  owner #1",
-        "  location #0",
+        "object #100",
+        "  name: \"Player Object\"",
+        "  parent: #0",
+        "  owner: #1",
+        "  location: #0",
         "endobject",
     ].join("\n");
     
-    client
+    let update_response = client
         .rpc_call("object/update", vec![
             serde_json::Value::String("$player".to_string()),
             serde_json::Value::String(objdef),
         ])
         .await
         .expect("Failed to update object");
+    
+    update_response.assert_success("object/update");
     
     client
         .rpc_call("change/submit", vec![])
