@@ -10,6 +10,7 @@
 
 mod blake3_hash_tests;
 mod change_operations;
+mod change_status_tests;
 mod change_switch_tests;
 mod clone_tests;
 mod index_operations;

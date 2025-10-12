@@ -4,7 +4,7 @@ use crate::providers::objects::ObjectsProvider;
 use crate::providers::refs::RefsProvider;
 use crate::types::{Change, VcsObjectType};
 use moor_compiler::ObjectDefinition;
-use moor_var::{Var, v_map, v_str, Sequence, Associative};
+use moor_var::{Var, v_map, v_str, v_objid, Sequence, Associative};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
@@ -67,8 +67,8 @@ impl ObjectChange {
     pub fn to_moo_var(&self) -> Var {
         let mut pairs = Vec::new();
 
-        // obj_id
-        pairs.push((v_str("obj_id"), v_str(&self.obj_id)));
+        // obj_id - use helper to convert to v_obj if it's a numeric ID
+        pairs.push((v_str("obj_id"), object_id_to_var(&self.obj_id)));
 
         // verbs_modified
         let verbs_modified_list: Vec<Var> = self.verbs_modified.iter().map(|v| v_str(v)).collect();
@@ -142,32 +142,32 @@ impl ObjectDiffModel {
     pub fn to_moo_var(&self) -> Var {
         let mut pairs = Vec::new();
 
-        // objects_renamed
+        // objects_renamed - use helper to convert object IDs to v_obj if they're numeric
         let objects_renamed_map: Vec<(Var, Var)> = self
             .objects_renamed
             .iter()
-            .map(|(k, v)| (v_str(k), v_str(v)))
+            .map(|(k, v)| (object_id_to_var(k), object_id_to_var(v)))
             .collect();
         pairs.push((v_str("objects_renamed"), v_map(&objects_renamed_map)));
 
-        // objects_deleted
+        // objects_deleted - use helper to convert object IDs to v_obj if they're numeric
         let objects_deleted_list: Vec<Var> =
-            self.objects_deleted.iter().map(|v| v_str(v)).collect();
+            self.objects_deleted.iter().map(|v| object_id_to_var(v)).collect();
         pairs.push((
             v_str("objects_deleted"),
             moor_var::v_list(&objects_deleted_list),
         ));
 
-        // objects_added
-        let objects_added_list: Vec<Var> = self.objects_added.iter().map(|v| v_str(v)).collect();
+        // objects_added - use helper to convert object IDs to v_obj if they're numeric
+        let objects_added_list: Vec<Var> = self.objects_added.iter().map(|v| object_id_to_var(v)).collect();
         pairs.push((
             v_str("objects_added"),
             moor_var::v_list(&objects_added_list),
         ));
 
-        // objects_modified
+        // objects_modified - use helper to convert object IDs to v_obj if they're numeric
         let objects_modified_list: Vec<Var> =
-            self.objects_modified.iter().map(|v| v_str(v)).collect();
+            self.objects_modified.iter().map(|v| object_id_to_var(v)).collect();
         pairs.push((
             v_str("objects_modified"),
             moor_var::v_list(&objects_modified_list),
@@ -244,6 +244,21 @@ impl Default for ObjectDiffModel {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Helper function to convert an object ID string to a MOO Var
+/// If the string is in the format "#<number>", returns a v_obj (object reference)
+/// Otherwise, returns a v_str (string)
+pub fn object_id_to_var(obj_id: &str) -> Var {
+    // Check if the string starts with '#' and the rest is a valid number
+    if let Some(stripped) = obj_id.strip_prefix('#') {
+        if let Ok(num) = stripped.parse::<i32>() {
+            // This is a numeric object ID like "#73", return as v_obj
+            return v_objid(num);
+        }
+    }
+    // Otherwise, return as a string
+    v_str(obj_id)
 }
 
 /// Helper function to convert an object ID to an object name
