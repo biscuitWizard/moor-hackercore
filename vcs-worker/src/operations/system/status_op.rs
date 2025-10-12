@@ -6,6 +6,7 @@ use crate::database::{DatabaseRef, ObjectsTreeError};
 use crate::types::{User, ChangeStatus};
 use crate::providers::index::IndexProvider;
 use crate::providers::workspace::WorkspaceProvider;
+use moor_var::{v_error, E_INVARG};
 
 /// System status operation that provides comprehensive repository status information
 #[derive(Clone)]
@@ -195,22 +196,12 @@ impl Operation for StatusOperation {
         vec![
             OperationResponse::success(
                 "Operation executed successfully",
-                r#""Operation completed successfully""#
-            ),
-            OperationResponse::new(
-                400,
-                "Bad Request - Invalid arguments",
-                r#""Error: Invalid operation arguments""#
-            ),
-            OperationResponse::new(
-                404,
-                "Not Found - Resource not found",
-                r#""Error: Resource not found""#
+                r#"["game_name" -> "MyGame", "top_change_id" -> "abc123def456...", "top_change_short_id" -> "abc123", "idle_changes" -> 2, "pending_review" -> 1, "current_username" -> "player", "changes_in_index" -> 5, "latest_merged_change" -> ["id" -> "def789ghi012...", "short_id" -> "def789", "author" -> "player", "timestamp" -> 1697040000, "message" -> "Fixed login bug"], "index_partition_size" -> 1048576, "refs_partition_size" -> 4096, "objects_partition_size" -> 8388608, "remote_url" -> "http://example.com/repo", "pending_updates" -> 0]"#
             ),
             OperationResponse::new(
                 500,
-                "Internal Server Error - Database or system error",
-                r#""Error: Database error: operation failed""#
+                "Internal Server Error - Database error",
+                r#"E_INVARG("Database error: failed to get change order")"#
             ),
         ]
     }
@@ -225,7 +216,7 @@ impl Operation for StatusOperation {
             }
             Err(e) => {
                 error!("System status operation failed: {}", e);
-                moor_var::v_str(&format!("Error: {e}"))
+                v_error(E_INVARG.msg(format!("{e}")))
             }
         }
     }

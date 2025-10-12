@@ -7,6 +7,7 @@ use crate::database::{DatabaseRef, ObjectsTreeError};
 use crate::types::User;
 use crate::providers::index::IndexProvider;
 use crate::object_diff::{ObjectDiffModel, build_object_diff_from_change};
+use moor_var::{v_error, E_INVARG};
 
 /// Request structure for index update operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -54,7 +55,7 @@ impl IndexUpdateOperation {
             }
             None => {
                 error!("No source URL found in index - nothing to update");
-                return Ok(moor_var::v_str("Error: No source URL configured. This repository was not cloned from a remote source."));
+                return Err(ObjectsTreeError::SerializationError("No source URL configured. This repository was not cloned from a remote source.".to_string()));
             }
         };
         
@@ -318,23 +319,37 @@ impl Operation for IndexUpdateOperation {
         use crate::operations::OperationResponse;
         vec![
             OperationResponse::success(
-                "Operation executed successfully",
-                r#""Operation completed successfully""#
+                "Operation executed successfully - Index is up to date",
+                r#""Index is up to date""#
+            ),
+            OperationResponse::success(
+                "Operation executed successfully - Full clone completed",
+                r#""Cloned successfully from http://example.com:8081 - 5 changes, 42 objects""#
             ),
             OperationResponse::new(
                 400,
-                "Bad Request - Invalid arguments",
-                r#""Error: Invalid operation arguments""#
+                "Bad Request - No source URL configured",
+                r#"E_INVARG("No source URL configured. This repository was not cloned from a remote source.")"#
             ),
             OperationResponse::new(
-                404,
-                "Not Found - Resource not found",
-                r#""Error: Resource not found""#
+                400,
+                "Bad Request - Failed to parse delta from remote",
+                r#"E_INVARG("Failed to parse delta: invalid JSON")"#
+            ),
+            OperationResponse::new(
+                500,
+                "Internal Server Error - HTTP request to remote failed",
+                r#"E_INVARG("HTTP request failed: connection refused")"#
+            ),
+            OperationResponse::new(
+                500,
+                "Internal Server Error - Channel closed during update",
+                r#"E_INVARG("Channel closed during update")"#
             ),
             OperationResponse::new(
                 500,
                 "Internal Server Error - Database or system error",
-                r#""Error: Database error: operation failed""#
+                r#"E_INVARG("Database error: failed to get change order")"#
             ),
         ]
     }
@@ -351,7 +366,7 @@ impl Operation for IndexUpdateOperation {
             }
             Err(e) => {
                 error!("Index update operation failed: {}", e);
-                moor_var::v_str(&format!("Error: {e}"))
+                v_error(E_INVARG.msg(format!("{e}")))
             }
         }
     }
