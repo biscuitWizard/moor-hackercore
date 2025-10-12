@@ -1,8 +1,10 @@
+use crate::config::Config;
 use crate::operations::{Operation, OperationExample, OperationParameter, OperationRoute};
 use axum::http::Method;
 use tracing::{error, info};
 
 use crate::database::{DatabaseRef, ObjectsTreeError};
+use crate::git_backup;
 use crate::object_diff::{ObjectDiffModel, build_object_diff_from_change};
 use crate::providers::index::IndexProvider;
 use crate::providers::workspace::WorkspaceProvider;
@@ -13,12 +15,13 @@ use moor_var::{E_INVARG, v_error};
 #[derive(Clone)]
 pub struct ChangeApproveOperation {
     database: DatabaseRef,
+    config: Config,
 }
 
 impl ChangeApproveOperation {
     /// Create a new change approve operation
-    pub fn new(database: DatabaseRef) -> Self {
-        Self { database }
+    pub fn new(database: DatabaseRef, config: Config) -> Self {
+        Self { database, config }
     }
 
     /// Process the change approve request
@@ -204,6 +207,9 @@ impl ChangeApproveOperation {
                 change.name, change.id
             );
         }
+
+        // Trigger git backup in background (non-blocking)
+        git_backup::trigger_git_backup(self.database.clone(), self.config.clone());
 
         Ok(diff_model)
     }

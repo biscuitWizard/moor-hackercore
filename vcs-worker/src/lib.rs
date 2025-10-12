@@ -1,6 +1,7 @@
 // Public modules for integration tests and library usage
 pub mod config;
 pub mod database;
+pub mod git_backup;
 pub mod object_diff;
 pub mod operations;
 pub mod providers;

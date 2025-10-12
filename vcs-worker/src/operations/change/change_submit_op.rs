@@ -1,8 +1,10 @@
+use crate::config::Config;
 use crate::operations::{Operation, OperationExample, OperationParameter, OperationRoute};
 use axum::http::Method;
 use tracing::{error, info, warn};
 
 use crate::database::{DatabaseRef, ObjectsTreeError};
+use crate::git_backup;
 use crate::object_diff::{ObjectDiffModel, build_abandon_diff_from_change};
 use crate::providers::index::IndexProvider;
 use crate::providers::workspace::WorkspaceProvider;
@@ -13,12 +15,13 @@ use moor_var::{E_INVARG, v_error};
 #[derive(Clone)]
 pub struct ChangeSubmitOperation {
     database: DatabaseRef,
+    config: Config,
 }
 
 impl ChangeSubmitOperation {
     /// Create a new change submit operation
-    pub fn new(database: DatabaseRef) -> Self {
-        Self { database }
+    pub fn new(database: DatabaseRef, config: Config) -> Self {
+        Self { database, config }
     }
 
     /// Process the change submit request
@@ -213,6 +216,9 @@ impl ChangeSubmitOperation {
                 "Successfully approved change '{}' ({}), marked as merged and removed from index",
                 change.name, change.id
             );
+
+            // Trigger git backup in background (non-blocking) for instant approval
+            git_backup::trigger_git_backup(self.database.clone(), self.config.clone());
 
             Ok(diff_model)
         }

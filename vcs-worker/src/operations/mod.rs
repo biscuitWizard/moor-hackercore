@@ -216,8 +216,8 @@ pub fn create_registry_with_config(
     registry.register(ChangeCreateOperation::new(database.clone()));
     registry.register(ChangeAbandonOperation::new(database.clone()));
     registry.register(ChangeStatusOperation::new(database.clone()));
-    registry.register(ChangeApproveOperation::new(database.clone()));
-    registry.register(ChangeSubmitOperation::new(database.clone()));
+    registry.register(ChangeApproveOperation::new(database.clone(), config.clone()));
+    registry.register(ChangeSubmitOperation::new(database.clone(), config.clone()));
     registry.register(ChangeStashOperation::new(database.clone()));
     registry.register(IndexListOperation::new(database.clone()));
     registry.register(IndexCalcDeltaOperation::new(database.clone()));

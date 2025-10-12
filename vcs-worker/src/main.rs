@@ -12,6 +12,7 @@ use uuid::Uuid;
 
 mod config;
 mod database;
+mod git_backup;
 mod object_diff;
 mod operations;
 mod providers;
