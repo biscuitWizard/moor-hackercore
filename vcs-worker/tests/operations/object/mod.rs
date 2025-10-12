@@ -10,10 +10,9 @@
 //! - rename_edge_cases_tests: Edge case tests for object/rename operation
 
 mod crud;
-mod list;
-mod lifecycle;
-mod rename_update_integration;
 mod delete_tests;
 mod get_tests;
+mod lifecycle;
+mod list;
 mod rename_edge_cases_tests;
-
+mod rename_update_integration;

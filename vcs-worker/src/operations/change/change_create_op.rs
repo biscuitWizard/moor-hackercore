@@ -1,11 +1,11 @@
-use crate::operations::{Operation, OperationRoute, OperationParameter, OperationExample};
+use crate::operations::{Operation, OperationExample, OperationParameter, OperationRoute};
 use axum::http::Method;
 use tracing::{error, info};
 
 use crate::database::{DatabaseRef, ObjectsTreeError};
-use crate::types::User;
 use crate::providers::index::IndexProvider;
-use crate::types::{ChangeCreateRequest, Change, ChangeStatus};
+use crate::types::User;
+use crate::types::{Change, ChangeCreateRequest, ChangeStatus};
 
 /// Change create operation that creates a new change
 #[derive(Clone)]
@@ -20,25 +20,41 @@ impl ChangeCreateOperation {
     }
 
     /// Process the change create request
-    fn process_change_create(&self, request: ChangeCreateRequest) -> Result<String, ObjectsTreeError> {
-        info!("Creating new change '{}' with author '{}'", request.name, request.author);
-        
+    fn process_change_create(
+        &self,
+        request: ChangeCreateRequest,
+    ) -> Result<String, ObjectsTreeError> {
+        info!(
+            "Creating new change '{}' with author '{}'",
+            request.name, request.author
+        );
+
         // Check if there's already a local change at the top of the index
-        if let Some(top_change_id) = self.database.index().get_top_change()
-            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))? {
-            if let Some(existing_change) = self.database.index().get_change(&top_change_id)
-                .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))? {
+        if let Some(top_change_id) = self
+            .database
+            .index()
+            .get_top_change()
+            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
+        {
+            if let Some(existing_change) = self
+                .database
+                .index()
+                .get_change(&top_change_id)
+                .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
+            {
                 if existing_change.status == ChangeStatus::Local {
-                    error!("Cannot create new change '{}' - already in a local change '{}' ({})", 
-                           request.name, existing_change.name, existing_change.id);
-                    return Err(ObjectsTreeError::SerializationError(
-                        format!("Already in a local change '{}' ({}). Abandon the current change before creating a new one.", 
-                                existing_change.name, existing_change.id)
-                    ));
+                    error!(
+                        "Cannot create new change '{}' - already in a local change '{}' ({})",
+                        request.name, existing_change.name, existing_change.id
+                    );
+                    return Err(ObjectsTreeError::SerializationError(format!(
+                        "Already in a local change '{}' ({}). Abandon the current change before creating a new one.",
+                        existing_change.name, existing_change.id
+                    )));
                 }
             }
         }
-        
+
         let timestamp = crate::util::current_unix_timestamp();
         let change_id = crate::util::generate_change_id(
             &request.name,
@@ -46,7 +62,7 @@ impl ChangeCreateOperation {
             &request.author,
             timestamp,
         );
-        
+
         let change = Change {
             id: change_id,
             name: request.name.clone(),
@@ -60,17 +76,27 @@ impl ChangeCreateOperation {
             renamed_objects: Vec::new(),
             index_change_id: None,
         };
-        
+
         // Store the change
-        self.database.index().store_change(&change)
+        self.database
+            .index()
+            .store_change(&change)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
-        
+
         // Add change to the top of the index (since it's local)
-        self.database.index().push_change(&change.id)
+        self.database
+            .index()
+            .push_change(&change.id)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
-        
-        info!("Successfully created change '{}' ({})", change.name, change.id);
-        Ok(format!("Created change '{}' with ID: {}", change.name, change.id))
+
+        info!(
+            "Successfully created change '{}' ({})",
+            change.name, change.id
+        );
+        Ok(format!(
+            "Created change '{}' with ID: {}",
+            change.name, change.id
+        ))
     }
 }
 
@@ -78,15 +104,15 @@ impl Operation for ChangeCreateOperation {
     fn name(&self) -> &'static str {
         "change/create"
     }
-    
+
     fn description(&self) -> &'static str {
         "Creates a new change with the given name, description, and author. Fails if already in a local change."
     }
-    
+
     fn response_content_type(&self) -> &'static str {
         "text/x-moo"
     }
-    
+
     fn philosophy(&self) -> &'static str {
         "Creates a new changelist for organizing your work. In the VCS workflow, changes are the fundamental \
         unit of work organization - similar to branches in git, but lighter weight. When you create a change, \
@@ -95,27 +121,32 @@ impl Operation for ChangeCreateOperation {
         time; if you want to work on multiple features simultaneously, use 'change/switch' to move between \
         workspace changes. The change name and description help you and your team understand what work is being done."
     }
-    
+
     fn parameters(&self) -> Vec<OperationParameter> {
         vec![
             OperationParameter {
                 name: "name".to_string(),
-                description: "A short name for the change (e.g., 'fix-parser-bug', 'add-new-command')".to_string(),
+                description:
+                    "A short name for the change (e.g., 'fix-parser-bug', 'add-new-command')"
+                        .to_string(),
                 required: true,
             },
             OperationParameter {
                 name: "author".to_string(),
-                description: "The name of the person creating the change (e.g., player name or user id)".to_string(),
+                description:
+                    "The name of the person creating the change (e.g., player name or user id)"
+                        .to_string(),
                 required: true,
             },
             OperationParameter {
                 name: "description".to_string(),
-                description: "A detailed description of what this change accomplishes (optional)".to_string(),
+                description: "A detailed description of what this change accomplishes (optional)"
+                    .to_string(),
                 required: false,
-            }
+            },
         ]
     }
-    
+
     fn examples(&self) -> Vec<OperationExample> {
         vec![
             OperationExample {
@@ -135,43 +166,47 @@ impl Operation for ChangeCreateOperation {
             }
         ]
     }
-    
+
     fn routes(&self) -> Vec<OperationRoute> {
-        vec![
-            OperationRoute {
-                path: "/api/change/create".to_string(),
-                method: Method::POST,
-                is_json: true,
-            }
-        ]
+        vec![OperationRoute {
+            path: "/api/change/create".to_string(),
+            method: Method::POST,
+            is_json: true,
+        }]
     }
-    
+
     fn responses(&self) -> Vec<crate::operations::OperationResponse> {
         use crate::operations::OperationResponse;
         vec![
             OperationResponse::success(
                 "Operation executed successfully",
-                r#""Created change 'fix-login-bug' with ID: abc-123...""#
+                r#""Created change 'fix-login-bug' with ID: abc-123...""#,
             ),
             OperationResponse::new(
                 400,
                 "Bad Request - Already in a local change or invalid arguments",
-                r#"E_INVARG("Error: Already in a local change 'existing-change' (abc-123)")"#
+                r#"E_INVARG("Error: Already in a local change 'existing-change' (abc-123)")"#,
             ),
             OperationResponse::new(
                 500,
                 "Internal Server Error - Database or system error",
-                r#"E_INVARG("Error: Database error: failed to create change")"#
+                r#"E_INVARG("Error: Database error: failed to create change")"#,
             ),
         ]
     }
 
     fn execute(&self, args: Vec<String>, _user: &User) -> moor_var::Var {
-        info!("Change create operation received {} arguments: {:?}", args.len(), args);
-        
+        info!(
+            "Change create operation received {} arguments: {:?}",
+            args.len(),
+            args
+        );
+
         if args.len() < 2 {
             error!("Change create operation requires at least name and author");
-            return moor_var::v_error(moor_var::E_INVARG.msg("Error: Name and author are required"));
+            return moor_var::v_error(
+                moor_var::E_INVARG.msg("Error: Name and author are required"),
+            );
         }
 
         let name = args[0].clone();

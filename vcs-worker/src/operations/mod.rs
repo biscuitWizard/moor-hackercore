@@ -1,26 +1,38 @@
-mod registry;
-mod hello_op;
 mod change;
-mod object;
-mod index;
 mod clone_op;
+mod hello_op;
+mod index;
+mod meta;
+mod object;
+mod registry;
+mod system;
 mod user;
 mod workspace;
-mod meta;
-mod system;
 
-pub use registry::OperationRegistry;
-pub use hello_op::HelloOperation;
-pub use change::{ChangeCreateOperation, ChangeAbandonOperation, ChangeStatusOperation, ChangeApproveOperation, ChangeSubmitOperation, ChangeStashOperation, ChangeSwitchOperation};
-pub use object::{ObjectGetOperation, ObjectUpdateOperation, ObjectRenameOperation, ObjectDeleteOperation, ObjectListOperation};
-pub use index::{IndexListOperation, IndexCalcDeltaOperation, IndexUpdateOperation};
+pub use change::{
+    ChangeAbandonOperation, ChangeApproveOperation, ChangeCreateOperation, ChangeStashOperation,
+    ChangeStatusOperation, ChangeSubmitOperation, ChangeSwitchOperation,
+};
 pub use clone_op::CloneOperation;
-pub use user::{StatOperation, UserCreateOperation, UserDisableOperation, UserEnableOperation, 
-              UserAddPermissionOperation, UserRemovePermissionOperation, UserGenerateApiKeyOperation,
-              UserDeleteApiKeyOperation, UserListOperation};
-pub use workspace::{WorkspaceSubmitOperation, WorkspaceListOperation};
-pub use meta::{MetaAddIgnoredPropertyOperation, MetaAddIgnoredVerbOperation, MetaRemoveIgnoredPropertyOperation, MetaRemoveIgnoredVerbOperation, MetaClearIgnoredPropertiesOperation, MetaClearIgnoredVerbsOperation};
+pub use hello_op::HelloOperation;
+pub use index::{IndexCalcDeltaOperation, IndexListOperation, IndexUpdateOperation};
+pub use meta::{
+    MetaAddIgnoredPropertyOperation, MetaAddIgnoredVerbOperation,
+    MetaClearIgnoredPropertiesOperation, MetaClearIgnoredVerbsOperation,
+    MetaRemoveIgnoredPropertyOperation, MetaRemoveIgnoredVerbOperation,
+};
+pub use object::{
+    ObjectDeleteOperation, ObjectGetOperation, ObjectListOperation, ObjectRenameOperation,
+    ObjectUpdateOperation,
+};
+pub use registry::OperationRegistry;
 pub use system::StatusOperation;
+pub use user::{
+    StatOperation, UserAddPermissionOperation, UserCreateOperation, UserDeleteApiKeyOperation,
+    UserDisableOperation, UserEnableOperation, UserGenerateApiKeyOperation, UserListOperation,
+    UserRemovePermissionOperation,
+};
+pub use workspace::{WorkspaceListOperation, WorkspaceSubmitOperation};
 
 // Re-export common types from crate::types
 pub use crate::types::OperationRequest;
@@ -30,8 +42,8 @@ use std::sync::Arc;
 
 use crate::config::Config;
 use crate::database::{Database, DatabaseRef, ObjectsTreeError};
-use crate::types::User;
 use crate::providers::user::UserProvider;
+use crate::types::User;
 
 #[derive(Debug, Clone)]
 pub struct OperationRoute {
@@ -65,32 +77,36 @@ pub struct OperationResponse {
 }
 
 impl OperationResponse {
-    pub fn new(status_code: u16, description: impl Into<String>, example: impl Into<String>) -> Self {
+    pub fn new(
+        status_code: u16,
+        description: impl Into<String>,
+        example: impl Into<String>,
+    ) -> Self {
         Self {
             status_code,
             description: description.into(),
             example: example.into(),
         }
     }
-    
+
     pub fn success(description: impl Into<String>, example: impl Into<String>) -> Self {
         Self::new(200, description, example)
     }
-    
+
     pub fn bad_request(description: impl Into<String>, example: impl Into<String>) -> Self {
         Self::new(400, description, example)
     }
-    
+
     #[allow(dead_code)]
     pub fn forbidden(description: impl Into<String>, example: impl Into<String>) -> Self {
         Self::new(403, description, example)
     }
-    
+
     #[allow(dead_code)]
     pub fn not_found(description: impl Into<String>, example: impl Into<String>) -> Self {
         Self::new(404, description, example)
     }
-    
+
     pub fn internal_error(description: impl Into<String>, example: impl Into<String>) -> Self {
         Self::new(500, description, example)
     }
@@ -103,56 +119,59 @@ pub type ErrorResponse = OperationResponse;
 pub trait Operation: Send + Sync {
     /// The name of the operation (used for RPC)
     fn name(&self) -> &'static str;
-    
+
     /// Description of what the operation does
     fn description(&self) -> &'static str;
-    
+
     /// Philosophy/intent of the operation and how it fits into the VCS workflow
     fn philosophy(&self) -> &'static str;
-    
+
     /// Detailed parameter descriptions
     fn parameters(&self) -> Vec<OperationParameter>;
-    
+
     /// Examples showing how to use this operation
     fn examples(&self) -> Vec<OperationExample>;
-    
+
     /// HTTP routing information for this operation
     fn routes(&self) -> Vec<OperationRoute>;
-    
+
     /// Execute the operation with the given arguments and user context, returning a moor Var
     fn execute(&self, args: Vec<String>, user: &User) -> moor_var::Var;
-    
+
     /// The response content type for this operation's HTTP responses
     /// Defaults to "application/json", but can be overridden to "text/x-moo" for MOO code responses
     fn response_content_type(&self) -> &'static str {
         "application/json"
     }
-    
+
     /// All responses (success and errors) that this operation can return
     /// Operations should override this to provide complete response documentation
     fn responses(&self) -> Vec<OperationResponse> {
         vec![
             OperationResponse::success(
                 "Operation executed successfully",
-                r#""Operation completed successfully""#
+                r#""Operation completed successfully""#,
             ),
             OperationResponse::bad_request(
                 "Bad Request - Invalid arguments or operation not allowed in current state",
-                r#"E_INVARG("Error: Invalid operation arguments")"#
+                r#"E_INVARG("Error: Invalid operation arguments")"#,
             ),
             OperationResponse::internal_error(
                 "Internal Server Error - Database or system error",
-                r#""Error: Database error: operation failed""#
+                r#""Error: Database error: operation failed""#,
             ),
         ]
     }
-    
+
     /// Error responses that this operation can return
     /// DEPRECATED: Use responses() instead for complete documentation
     /// This is kept for backwards compatibility during transition
     #[allow(dead_code)]
     fn error_responses(&self) -> Vec<ErrorResponse> {
-        self.responses().into_iter().filter(|r| r.status_code >= 400).collect()
+        self.responses()
+            .into_iter()
+            .filter(|r| r.status_code >= 400)
+            .collect()
     }
 }
 
@@ -163,25 +182,30 @@ pub fn create_default_registry() -> Result<(OperationRegistry, DatabaseRef), Obj
 }
 
 /// Create the default registry with a specific config (useful for testing)
-pub fn create_registry_with_config(config: Config) -> Result<(OperationRegistry, DatabaseRef), ObjectsTreeError> {
+pub fn create_registry_with_config(
+    config: Config,
+) -> Result<(OperationRegistry, DatabaseRef), ObjectsTreeError> {
     let mut registry = OperationRegistry::new();
-    
+
     // Initialize database with provided config
     let database = Arc::new(Database::new(&config)?);
-    
+
     // Set the user provider in the registry
     registry.set_user_provider(database.users().clone());
-    
+
     // Ensure the Everyone user exists
     if let Err(e) = database.users().ensure_everyone_user() {
         tracing::warn!("Failed to ensure Everyone user exists: {}", e);
     }
-    
+
     // Ensure the Wizard user exists with the configured API key
-    if let Err(e) = database.users().ensure_wizard_user(config.wizard_api_key.clone()) {
+    if let Err(e) = database
+        .users()
+        .ensure_wizard_user(config.wizard_api_key.clone())
+    {
         tracing::warn!("Failed to ensure Wizard user exists: {}", e);
     }
-    
+
     // Register built-in operations
     registry.register(HelloOperation);
     registry.register(ObjectUpdateOperation::new(database.clone()));
@@ -218,6 +242,6 @@ pub fn create_registry_with_config(config: Config) -> Result<(OperationRegistry,
     registry.register(MetaClearIgnoredPropertiesOperation::new(database.clone()));
     registry.register(MetaClearIgnoredVerbsOperation::new(database.clone()));
     registry.register(StatusOperation::new(database.clone()));
-    
+
     Ok((registry, database))
 }

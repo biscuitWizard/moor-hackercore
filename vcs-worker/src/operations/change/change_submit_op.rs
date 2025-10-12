@@ -1,13 +1,13 @@
-use crate::operations::{Operation, OperationRoute, OperationParameter, OperationExample};
+use crate::operations::{Operation, OperationExample, OperationParameter, OperationRoute};
 use axum::http::Method;
 use tracing::{error, info, warn};
 
 use crate::database::{DatabaseRef, ObjectsTreeError};
+use crate::object_diff::{ObjectDiffModel, build_abandon_diff_from_change};
 use crate::providers::index::IndexProvider;
 use crate::providers::workspace::WorkspaceProvider;
-use crate::types::{ChangeSubmitRequest, ChangeStatus, User, Permission};
-use crate::object_diff::{ObjectDiffModel, build_abandon_diff_from_change};
-use moor_var::{v_error, E_INVARG};
+use crate::types::{ChangeStatus, ChangeSubmitRequest, Permission, User};
+use moor_var::{E_INVARG, v_error};
 
 /// Change submit operation that submits a local change for review
 #[derive(Clone)]
@@ -22,32 +22,53 @@ impl ChangeSubmitOperation {
     }
 
     /// Process the change submit request
-    fn process_change_submit(&self, request: ChangeSubmitRequest, user: &User) -> Result<ObjectDiffModel, ObjectsTreeError> {
+    fn process_change_submit(
+        &self,
+        request: ChangeSubmitRequest,
+        user: &User,
+    ) -> Result<ObjectDiffModel, ObjectsTreeError> {
         // Check if user has permission to submit changes
         if !user.has_permission(&Permission::SubmitChanges) {
-            error!("User '{}' does not have permission to submit changes", user.id);
-            return Err(ObjectsTreeError::SerializationError(
-                format!("User '{}' does not have permission to submit changes", user.id)
-            ));
+            error!(
+                "User '{}' does not have permission to submit changes",
+                user.id
+            );
+            return Err(ObjectsTreeError::SerializationError(format!(
+                "User '{}' does not have permission to submit changes",
+                user.id
+            )));
         }
 
         // Get the top change from the index
-        let top_change_id = self.database.index().get_top_change()
+        let top_change_id = self
+            .database
+            .index()
+            .get_top_change()
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
-            .ok_or_else(|| ObjectsTreeError::SerializationError("No change to submit".to_string()))?;
+            .ok_or_else(|| {
+                ObjectsTreeError::SerializationError("No change to submit".to_string())
+            })?;
 
         // Get the change
-        let mut change = self.database.index().get_change(&top_change_id)
+        let mut change = self
+            .database
+            .index()
+            .get_change(&top_change_id)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
-            .ok_or_else(|| ObjectsTreeError::SerializationError(format!("Change '{top_change_id}' not found")))?;
+            .ok_or_else(|| {
+                ObjectsTreeError::SerializationError(format!("Change '{top_change_id}' not found"))
+            })?;
 
-        info!("User '{}' attempting to submit change: {} ({})", user.id, change.name, change.id);
+        info!(
+            "User '{}' attempting to submit change: {} ({})",
+            user.id, change.name, change.id
+        );
 
         // Validate that author is set
         if change.author.is_empty() {
             error!("Cannot submit change '{}' - author is not set", change.name);
             return Err(ObjectsTreeError::SerializationError(
-                "Cannot submit change - author is not set".to_string()
+                "Cannot submit change - author is not set".to_string(),
             ));
         }
 
@@ -75,21 +96,27 @@ impl ChangeSubmitOperation {
 
         // Check if the change is local
         if change.status != ChangeStatus::Local {
-            error!("Cannot submit change '{}' ({}) - it is not local (status: {:?})", 
-                   change.name, change.id, change.status);
-            return Err(ObjectsTreeError::SerializationError(
-                format!("Cannot submit change '{}' - it is not local (status: {:?})", change.name, change.status)
-            ));
+            error!(
+                "Cannot submit change '{}' ({}) - it is not local (status: {:?})",
+                change.name, change.id, change.status
+            );
+            return Err(ObjectsTreeError::SerializationError(format!(
+                "Cannot submit change '{}' - it is not local (status: {:?})",
+                change.name, change.status
+            )));
         }
 
         // Check if there's a source URL to determine the workflow
-        let source_url = self.database.index().get_source()
+        let source_url = self
+            .database
+            .index()
+            .get_source()
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
 
         if let Some(url) = source_url {
             // REMOTE INDEX: Submit for review (existing behavior)
             info!("Source URL found: {}, submitting change for review", url);
-            
+
             // Build the undo diff (like abandon does)
             let undo_diff = build_abandon_diff_from_change(&self.database, &change)?;
 
@@ -97,13 +124,20 @@ impl ChangeSubmitOperation {
             change.status = ChangeStatus::Review;
 
             // Store the change in the workspace (where changes waiting for approval live)
-            self.database.workspace().store_workspace_change(&change)
+            self.database
+                .workspace()
+                .store_workspace_change(&change)
                 .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
 
-            info!("Stored change '{}' in workspace with Review status", change.name);
+            info!(
+                "Stored change '{}' in workspace with Review status",
+                change.name
+            );
 
             // Remove the change from the working index
-            self.database.index().remove_from_index(&change.id)
+            self.database
+                .index()
+                .remove_from_index(&change.id)
                 .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
 
             info!("Removed change '{}' from top of index", change.name);
@@ -111,60 +145,86 @@ impl ChangeSubmitOperation {
             // Make a REST call to submit the change remotely
             match self.submit_to_remote(&url, &change, user) {
                 Ok(_) => {
-                    info!("Successfully submitted change '{}' to remote: {}", change.name, url);
+                    info!(
+                        "Successfully submitted change '{}' to remote: {}",
+                        change.name, url
+                    );
                 }
                 Err(e) => {
-                    warn!("Failed to submit change '{}' to remote {}: {}. Change still submitted locally.", 
-                          change.name, url, e);
+                    warn!(
+                        "Failed to submit change '{}' to remote {}: {}. Change still submitted locally.",
+                        change.name, url, e
+                    );
                     // Don't fail the whole operation if remote submission fails
                     // The local submission succeeded, remote is best-effort
                 }
             }
 
-            info!("Successfully submitted change '{}' ({}), moved to workspace for review", 
-                  change.name, change.id);
+            info!(
+                "Successfully submitted change '{}' ({}), moved to workspace for review",
+                change.name, change.id
+            );
 
             Ok(undo_diff)
         } else {
             // NON-REMOTE INDEX: Instantly approve the change
             info!("No source URL configured, instantly approving change");
-            
+
             // When submitting the top change (current working change), return an empty diff
             // because there are no NEW changes relative to the current state - the change
             // is already in the working state, so merging it doesn't introduce new changes
             let diff_model = ObjectDiffModel::new();
-            
-            info!("Returning empty diff for top change submission (no new changes relative to current state)");
-            
+
+            info!(
+                "Returning empty diff for top change submission (no new changes relative to current state)"
+            );
+
             // Update the change status to Merged
             change.status = ChangeStatus::Merged;
-            
+
             // Update the change in the database
-            self.database.index().update_change(&change)
+            self.database
+                .index()
+                .update_change(&change)
                 .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
-            
+
             // Clear the top_change pointer (change stays in history as merged)
-            self.database.index().clear_top_change_if(&change.id)
+            self.database
+                .index()
+                .clear_top_change_if(&change.id)
                 .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
-            
+
             // Remove the change from workspace if it exists there (as a pending or stashed change)
-            if self.database.workspace().get_workspace_change(&change.id)
+            if self
+                .database
+                .workspace()
+                .get_workspace_change(&change.id)
                 .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
-                .is_some() {
-                self.database.workspace().delete_workspace_change(&change.id)
+                .is_some()
+            {
+                self.database
+                    .workspace()
+                    .delete_workspace_change(&change.id)
                     .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
                 info!("Removed change '{}' from workspace", change.name);
             }
-            
-            info!("Successfully approved change '{}' ({}), marked as merged and removed from index", 
-                  change.name, change.id);
-            
+
+            info!(
+                "Successfully approved change '{}' ({}), marked as merged and removed from index",
+                change.name, change.id
+            );
+
             Ok(diff_model)
         }
     }
 
     /// Submit the change to a remote server via REST API
-    fn submit_to_remote(&self, source_url: &str, change: &crate::types::Change, _user: &User) -> Result<(), ObjectsTreeError> {
+    fn submit_to_remote(
+        &self,
+        source_url: &str,
+        change: &crate::types::Change,
+        _user: &User,
+    ) -> Result<(), ObjectsTreeError> {
         // Build the URL for the remote workspace/submit endpoint
         let submit_url = if source_url.ends_with('/') {
             format!("{source_url}workspace/submit")
@@ -172,11 +232,15 @@ impl ChangeSubmitOperation {
             format!("{source_url}/workspace/submit")
         };
 
-        info!("Submitting change '{}' to remote URL: {}", change.id, submit_url);
+        info!(
+            "Submitting change '{}' to remote URL: {}",
+            change.id, submit_url
+        );
 
         // Serialize the change to a JSON string
-        let serialized_change = serde_json::to_string(change)
-            .map_err(|e| ObjectsTreeError::SerializationError(format!("Failed to serialize change: {e}")))?;
+        let serialized_change = serde_json::to_string(change).map_err(|e| {
+            ObjectsTreeError::SerializationError(format!("Failed to serialize change: {e}"))
+        })?;
 
         // Prepare the payload for the workspace/submit operation
         // The operation expects args[0] to be the serialized change
@@ -208,12 +272,20 @@ impl ChangeSubmitOperation {
                 Ok(())
             } else {
                 let status = response.status();
-                let error_text = response.text().unwrap_or_else(|_| "Unknown error".to_string());
-                Err(format!("Remote submission failed with status {status}: {error_text}"))
+                let error_text = response
+                    .text()
+                    .unwrap_or_else(|_| "Unknown error".to_string());
+                Err(format!(
+                    "Remote submission failed with status {status}: {error_text}"
+                ))
             }
         })
         .join()
-        .map_err(|_| ObjectsTreeError::SerializationError("Thread panicked during remote submission".to_string()))?;
+        .map_err(|_| {
+            ObjectsTreeError::SerializationError(
+                "Thread panicked during remote submission".to_string(),
+            )
+        })?;
 
         match result {
             Ok(_) => {
@@ -232,15 +304,15 @@ impl Operation for ChangeSubmitOperation {
     fn name(&self) -> &'static str {
         "change/submit"
     }
-    
+
     fn description(&self) -> &'static str {
         "Submits the top local change. Requires author to be set. If a source URL is configured (remote index), moves it to workspace with Review status for remote approval. If no source URL is configured (non-remote index), instantly approves and merges the change. Returns an ObjectDiffModel. Optional message argument can be provided to set/override the commit message."
     }
-    
+
     fn response_content_type(&self) -> &'static str {
         "text/x-moo"
     }
-    
+
     fn philosophy(&self) -> &'static str {
         "Completes the change workflow by submitting your local changelist for permanent inclusion in the \
         repository. The behavior depends on your repository type: For local repositories (no source URL), \
@@ -250,17 +322,17 @@ impl Operation for ChangeSubmitOperation {
         local working state - use change/switch if you want to continue working on other changes. Always verify \
         your changes with change/status before submitting."
     }
-    
+
     fn parameters(&self) -> Vec<OperationParameter> {
-        vec![
-            OperationParameter {
-                name: "message".to_string(),
-                description: "Optional commit message describing the change (overrides the change description)".to_string(),
-                required: false,
-            }
-        ]
+        vec![OperationParameter {
+            name: "message".to_string(),
+            description:
+                "Optional commit message describing the change (overrides the change description)"
+                    .to_string(),
+            required: false,
+        }]
     }
-    
+
     fn examples(&self) -> Vec<OperationExample> {
         vec![
             OperationExample {
@@ -282,47 +354,52 @@ diff = worker_request("vcs", {"change/submit"});
             }
         ]
     }
-    
+
     fn routes(&self) -> Vec<OperationRoute> {
-        vec![
-            OperationRoute {
-                path: "/api/change/submit".to_string(),
-                method: Method::POST,
-                is_json: false,
-            }
-        ]
+        vec![OperationRoute {
+            path: "/api/change/submit".to_string(),
+            method: Method::POST,
+            is_json: false,
+        }]
     }
-    
+
     fn responses(&self) -> Vec<crate::operations::OperationResponse> {
         use crate::operations::OperationResponse;
         vec![
             OperationResponse::success(
                 "Operation executed successfully",
-                r#"["objects_renamed" -> [], "objects_deleted" -> {}, "objects_added" -> {}, "objects_modified" -> {"obj1"}, "changes" -> {["obj_id" -> "obj1", "verbs_modified" -> {}, "verbs_added" -> {}, "verbs_renamed" -> [], "verbs_deleted" -> {}, "props_modified" -> {}, "props_added" -> {}, "props_renamed" -> [], "props_deleted" -> {}]}]"#
+                r#"["objects_renamed" -> [], "objects_deleted" -> {}, "objects_added" -> {}, "objects_modified" -> {"obj1"}, "changes" -> {["obj_id" -> "obj1", "verbs_modified" -> {}, "verbs_added" -> {}, "verbs_renamed" -> [], "verbs_deleted" -> {}, "props_modified" -> {}, "props_added" -> {}, "props_renamed" -> [], "props_deleted" -> {}]}]"#,
             ),
             OperationResponse::new(
                 400,
                 "Bad Request - Cannot submit change in current state",
-                r#"E_INVARG("Error: Cannot submit change 'my-change' - it is not local (status: Merged)")"#),
+                r#"E_INVARG("Error: Cannot submit change 'my-change' - it is not local (status: Merged)")"#,
+            ),
             OperationResponse::new(
                 403,
                 "Forbidden - User lacks permission to submit changes",
-                r#"E_INVARG("Error: User 'player123' does not have permission to submit changes)"#),
+                r#"E_INVARG("Error: User 'player123' does not have permission to submit changes)"#,
+            ),
             OperationResponse::new(
                 404,
                 "Not Found - No change to submit",
-                r#"E_INVARG("Error: No change to submit)"#),
+                r#"E_INVARG("Error: No change to submit)"#,
+            ),
             OperationResponse::new(
                 500,
                 "Internal Server Error - Database or system error",
-                r#"E_INVARG("Error: Database error: failed to submit change")"#
+                r#"E_INVARG("Error: Database error: failed to submit change")"#,
             ),
         ]
     }
 
     fn execute(&self, args: Vec<String>, user: &User) -> moor_var::Var {
-        info!("Change submit operation received {} arguments for user: {}", args.len(), user.id);
-        
+        info!(
+            "Change submit operation received {} arguments for user: {}",
+            args.len(),
+            user.id
+        );
+
         // Parse optional message argument
         let message = if args.is_empty() {
             None
@@ -335,7 +412,7 @@ diff = worker_request("vcs", {"change/submit"});
                 Some(message_text)
             }
         };
-        
+
         let request = ChangeSubmitRequest { message };
 
         match self.process_change_submit(request, user) {

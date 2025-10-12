@@ -28,4 +28,3 @@ pub enum ProviderError {
 
 /// Alias for Result using ProviderError
 pub type ProviderResult<T> = Result<T, ProviderError>;
-

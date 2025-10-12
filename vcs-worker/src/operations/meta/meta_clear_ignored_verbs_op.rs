@@ -1,11 +1,11 @@
-use crate::operations::{Operation, OperationRoute, OperationParameter, OperationExample};
+use crate::operations::{Operation, OperationExample, OperationParameter, OperationRoute};
 use axum::http::Method;
 use tracing::{error, info};
 
-use crate::database::DatabaseRef;
-use crate::types::{ObjectsTreeError, User, MetaClearIgnoredVerbsRequest};
-use crate::providers::index::IndexProvider;
 use super::meta_utils;
+use crate::database::DatabaseRef;
+use crate::providers::index::IndexProvider;
+use crate::types::{MetaClearIgnoredVerbsRequest, ObjectsTreeError, User};
 
 /// Meta operation that clears all ignored verbs from an object's meta
 #[derive(Clone)]
@@ -20,34 +20,63 @@ impl MetaClearIgnoredVerbsOperation {
     }
 
     /// Parse and process the meta clear ignored verbs request
-    fn process_meta_clear_ignored_verbs(&self, request: MetaClearIgnoredVerbsRequest, author: Option<String>) -> Result<String, ObjectsTreeError> {
-        info!("Processing meta clear ignored verbs for '{}'", request.object_name);
-        
+    fn process_meta_clear_ignored_verbs(
+        &self,
+        request: MetaClearIgnoredVerbsRequest,
+        author: Option<String>,
+    ) -> Result<String, ObjectsTreeError> {
+        info!(
+            "Processing meta clear ignored verbs for '{}'",
+            request.object_name
+        );
+
         // Validate object exists
         meta_utils::validate_object_exists(&self.database, &request.object_name)?;
-        
+
         // Get or create the local change
-        let mut current_change = self.database.index().get_or_create_local_change(author)
+        let mut current_change = self
+            .database
+            .index()
+            .get_or_create_local_change(author)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
-        
+
         // Check if meta exists - if not, nothing to clear
-        let mut meta = match meta_utils::load_meta_if_exists(&self.database, &request.object_name)? {
+        let mut meta = match meta_utils::load_meta_if_exists(&self.database, &request.object_name)?
+        {
             Some(m) => m,
             None => {
-                info!("No meta exists for object '{}', nothing to clear", request.object_name);
-                return Ok(format!("No meta exists for object '{}', cleared 0 ignored verbs", request.object_name));
+                info!(
+                    "No meta exists for object '{}', nothing to clear",
+                    request.object_name
+                );
+                return Ok(format!(
+                    "No meta exists for object '{}', cleared 0 ignored verbs",
+                    request.object_name
+                ));
             }
         };
-        
+
         // Clear all ignored verbs
         let count = meta.ignored_verbs.len();
         meta.ignored_verbs.clear();
-        
+
         // Save and track the meta (meta existed before since we loaded it)
-        meta_utils::save_and_track_meta(&self.database, &meta, &request.object_name, true, &mut current_change)?;
-        
-        info!("Successfully cleared {} ignored verbs for object '{}'", count, request.object_name);
-        Ok(format!("Cleared {} ignored verbs for object '{}'", count, request.object_name))
+        meta_utils::save_and_track_meta(
+            &self.database,
+            &meta,
+            &request.object_name,
+            true,
+            &mut current_change,
+        )?;
+
+        info!(
+            "Successfully cleared {} ignored verbs for object '{}'",
+            count, request.object_name
+        );
+        Ok(format!(
+            "Cleared {} ignored verbs for object '{}'",
+            count, request.object_name
+        ))
     }
 }
 
@@ -55,7 +84,7 @@ impl Operation for MetaClearIgnoredVerbsOperation {
     fn name(&self) -> &'static str {
         "meta/clear_ignored_verbs"
     }
-    
+
     fn response_content_type(&self) -> &'static str {
         "text/x-moo"
     }
@@ -63,25 +92,23 @@ impl Operation for MetaClearIgnoredVerbsOperation {
     fn description(&self) -> &'static str {
         "Clears all ignored verbs from the object's meta"
     }
-    
+
     fn routes(&self) -> Vec<OperationRoute> {
-        vec![
-            OperationRoute {
-                path: "/api/meta/clear_ignored_verbs".to_string(),
-                method: Method::POST,
-                is_json: true,
-            },
-        ]
+        vec![OperationRoute {
+            path: "/api/meta/clear_ignored_verbs".to_string(),
+            method: Method::POST,
+            is_json: true,
+        }]
     }
-    
+
     fn philosophy(&self) -> &'static str {
         "Documentation for this operation is being prepared."
     }
-    
+
     fn parameters(&self) -> Vec<OperationParameter> {
         vec![]
     }
-    
+
     fn examples(&self) -> Vec<OperationExample> {
         vec![]
     }
@@ -91,29 +118,33 @@ impl Operation for MetaClearIgnoredVerbsOperation {
         vec![
             OperationResponse::success(
                 "Operation executed successfully",
-                r#""Operation completed successfully""#
+                r#""Operation completed successfully""#,
             ),
             OperationResponse::new(
                 400,
                 "Bad Request - Invalid arguments",
-                r#"E_INVARG("Error: Invalid operation arguments")"#
+                r#"E_INVARG("Error: Invalid operation arguments")"#,
             ),
             OperationResponse::new(
                 404,
                 "Not Found - Resource not found",
-                r#"E_INVARG("Error: Resource not found")"#
+                r#"E_INVARG("Error: Resource not found")"#,
             ),
             OperationResponse::new(
                 500,
                 "Internal Server Error - Database or system error",
-                r#"E_INVARG("Error: Database error: operation failed")"#
+                r#"E_INVARG("Error: Database error: operation failed")"#,
             ),
         ]
     }
 
     fn execute(&self, args: Vec<String>, user: &User) -> moor_var::Var {
-        info!("Meta clear ignored verbs operation received {} arguments: {:?}", args.len(), args);
-        
+        info!(
+            "Meta clear ignored verbs operation received {} arguments: {:?}",
+            args.len(),
+            args
+        );
+
         if args.is_empty() {
             error!("Meta clear ignored verbs operation requires object name");
             return moor_var::v_error(moor_var::E_INVARG.msg("Error: Object name is required"));
@@ -121,9 +152,7 @@ impl Operation for MetaClearIgnoredVerbsOperation {
 
         let object_name = args[0].clone();
 
-        let request = MetaClearIgnoredVerbsRequest {
-            object_name,
-        };
+        let request = MetaClearIgnoredVerbsRequest { object_name };
 
         match self.process_meta_clear_ignored_verbs(request, Some(user.id.clone())) {
             Ok(result) => {

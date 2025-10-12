@@ -1,15 +1,14 @@
-mod meta_utils;
 mod meta_add_ignored_property_op;
 mod meta_add_ignored_verb_op;
-mod meta_remove_ignored_property_op;
-mod meta_remove_ignored_verb_op;
 mod meta_clear_ignored_properties_op;
 mod meta_clear_ignored_verbs_op;
+mod meta_remove_ignored_property_op;
+mod meta_remove_ignored_verb_op;
+mod meta_utils;
 
 pub use meta_add_ignored_property_op::MetaAddIgnoredPropertyOperation;
 pub use meta_add_ignored_verb_op::MetaAddIgnoredVerbOperation;
-pub use meta_remove_ignored_property_op::MetaRemoveIgnoredPropertyOperation;
-pub use meta_remove_ignored_verb_op::MetaRemoveIgnoredVerbOperation;
 pub use meta_clear_ignored_properties_op::MetaClearIgnoredPropertiesOperation;
 pub use meta_clear_ignored_verbs_op::MetaClearIgnoredVerbsOperation;
-
+pub use meta_remove_ignored_property_op::MetaRemoveIgnoredPropertyOperation;
+pub use meta_remove_ignored_verb_op::MetaRemoveIgnoredVerbOperation;

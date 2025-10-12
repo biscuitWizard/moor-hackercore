@@ -1,10 +1,10 @@
-use crate::operations::{Operation, OperationRoute, OperationParameter, OperationExample};
+use crate::operations::{Operation, OperationExample, OperationParameter, OperationRoute};
 use crate::providers::user::UserProvider;
 use axum::http::Method;
-use tracing::{error, info};
 use std::sync::Arc;
+use tracing::{error, info};
 
-use crate::types::{User, Permission};
+use crate::types::{Permission, User};
 
 /// Remove permission from user operation
 #[derive(Clone)]
@@ -16,7 +16,7 @@ impl UserRemovePermissionOperation {
     pub fn new(user_provider: Arc<dyn UserProvider>) -> Self {
         Self { user_provider }
     }
-    
+
     fn parse_permission(perm_str: &str) -> Result<Permission, String> {
         match perm_str {
             "ApproveChanges" | "Approve_Changes" => Ok(Permission::ApproveChanges),
@@ -35,7 +35,7 @@ impl Operation for UserRemovePermissionOperation {
     fn name(&self) -> &'static str {
         "user/remove_permission"
     }
-    
+
     fn response_content_type(&self) -> &'static str {
         "text/x-moo"
     }
@@ -43,13 +43,13 @@ impl Operation for UserRemovePermissionOperation {
     fn description(&self) -> &'static str {
         "Remove a permission from a user"
     }
-    
+
     fn philosophy(&self) -> &'static str {
         "Revokes a specific permission from a user account. This removes the user's ability to perform \
         operations that require that permission. Use this to reduce a user's access level or remove \
         permissions that are no longer needed. This operation requires the ManagePermissions permission."
     }
-    
+
     fn parameters(&self) -> Vec<OperationParameter> {
         vec![
             OperationParameter {
@@ -59,12 +59,14 @@ impl Operation for UserRemovePermissionOperation {
             },
             OperationParameter {
                 name: "permission".to_string(),
-                description: "Permission to revoke (e.g., 'ApproveChanges', 'Clone', 'ManagePermissions')".to_string(),
+                description:
+                    "Permission to revoke (e.g., 'ApproveChanges', 'Clone', 'ManagePermissions')"
+                        .to_string(),
                 required: true,
-            }
+            },
         ]
     }
-    
+
     fn examples(&self) -> Vec<OperationExample> {
         vec![
             OperationExample {
@@ -78,60 +80,71 @@ impl Operation for UserRemovePermissionOperation {
             }
         ]
     }
-    
+
     fn routes(&self) -> Vec<OperationRoute> {
-        vec![
-            OperationRoute {
-                path: "/api/user/remove_permission".to_string(),
-                method: Method::POST,
-                is_json: true,
-            }
-        ]
+        vec![OperationRoute {
+            path: "/api/user/remove_permission".to_string(),
+            method: Method::POST,
+            is_json: true,
+        }]
     }
-    
+
     fn responses(&self) -> Vec<crate::operations::OperationResponse> {
         use crate::operations::OperationResponse;
         vec![
             OperationResponse::success(
                 "Operation executed successfully",
-                r#""Operation completed successfully""#
+                r#""Operation completed successfully""#,
             ),
             OperationResponse::new(
                 400,
                 "Bad Request - Invalid arguments",
-                r#"E_INVARG("Error: Invalid operation arguments")"#
+                r#"E_INVARG("Error: Invalid operation arguments")"#,
             ),
             OperationResponse::new(
                 404,
                 "Not Found - Resource not found",
-                r#"E_INVARG("Error: Resource not found")"#
+                r#"E_INVARG("Error: Resource not found")"#,
             ),
             OperationResponse::new(
                 500,
                 "Internal Server Error - Database or system error",
-                r#"E_INVARG("Error: Database error: operation failed")"#
+                r#"E_INVARG("Error: Database error: operation failed")"#,
             ),
         ]
     }
 
     fn execute(&self, args: Vec<String>, user: &User) -> moor_var::Var {
-        info!("Executing user/remove_permission operation for user: {}", user.id);
-        
+        info!(
+            "Executing user/remove_permission operation for user: {}",
+            user.id
+        );
+
         // Check permission
         if !user.has_permission(&Permission::ManagePermissions) {
-            error!("User {} does not have ManagePermissions permission", user.id);
-            return moor_var::v_error(moor_var::E_INVARG.msg("Error: You do not have permission to manage permissions"));
+            error!(
+                "User {} does not have ManagePermissions permission",
+                user.id
+            );
+            return moor_var::v_error(
+                moor_var::E_INVARG.msg("Error: You do not have permission to manage permissions"),
+            );
         }
-        
+
         // Validate arguments
         if args.len() < 2 {
-            error!("Invalid arguments for user/remove_permission: expected 2, got {}", args.len());
-            return moor_var::v_error(moor_var::E_INVARG.msg("Error: Expected 2 arguments: user_id, permission"));
+            error!(
+                "Invalid arguments for user/remove_permission: expected 2, got {}",
+                args.len()
+            );
+            return moor_var::v_error(
+                moor_var::E_INVARG.msg("Error: Expected 2 arguments: user_id, permission"),
+            );
         }
-        
+
         let target_user_id = &args[0];
         let permission_str = &args[1];
-        
+
         // Parse permission
         let permission = match Self::parse_permission(permission_str) {
             Ok(p) => p,
@@ -140,16 +153,29 @@ impl Operation for UserRemovePermissionOperation {
                 return moor_var::v_error(moor_var::E_INVARG.msg(format!("Error: {e}")));
             }
         };
-        
+
         // Remove the permission
-        match self.user_provider.remove_permission(target_user_id, &permission) {
+        match self
+            .user_provider
+            .remove_permission(target_user_id, &permission)
+        {
             Ok(removed) => {
                 if removed {
-                    info!("Removed permission {:?} from user '{}'", permission, target_user_id);
-                    moor_var::v_str(&format!("Successfully removed permission '{permission_str}' from user '{target_user_id}'"))
+                    info!(
+                        "Removed permission {:?} from user '{}'",
+                        permission, target_user_id
+                    );
+                    moor_var::v_str(&format!(
+                        "Successfully removed permission '{permission_str}' from user '{target_user_id}'"
+                    ))
                 } else {
-                    info!("User '{}' did not have permission {:?}", target_user_id, permission);
-                    moor_var::v_str(&format!("User '{target_user_id}' did not have permission '{permission_str}'"))
+                    info!(
+                        "User '{}' did not have permission {:?}",
+                        target_user_id, permission
+                    );
+                    moor_var::v_str(&format!(
+                        "User '{target_user_id}' did not have permission '{permission_str}'"
+                    ))
                 }
             }
             Err(e) => {
@@ -159,4 +185,3 @@ impl Operation for UserRemovePermissionOperation {
         }
     }
 }
-

@@ -1,11 +1,11 @@
-use crate::operations::{Operation, OperationRoute, OperationParameter, OperationExample};
+use crate::operations::{Operation, OperationExample, OperationParameter, OperationRoute};
 use axum::http::Method;
 use tracing::{error, info};
 
-use crate::database::DatabaseRef;
-use crate::types::{ObjectsTreeError, User, MetaAddIgnoredPropertyRequest};
-use crate::providers::index::IndexProvider;
 use super::meta_utils;
+use crate::database::DatabaseRef;
+use crate::providers::index::IndexProvider;
+use crate::types::{MetaAddIgnoredPropertyRequest, ObjectsTreeError, User};
 
 /// Meta operation that adds an ignored property to an object's meta
 #[derive(Clone)]
@@ -20,32 +20,63 @@ impl MetaAddIgnoredPropertyOperation {
     }
 
     /// Parse and process the meta add ignored property request
-    fn process_meta_add_ignored_property(&self, request: MetaAddIgnoredPropertyRequest, author: Option<String>) -> Result<String, ObjectsTreeError> {
-        info!("Processing meta add ignored property for '{}', property '{}'", request.object_name, request.property_name);
-        
+    fn process_meta_add_ignored_property(
+        &self,
+        request: MetaAddIgnoredPropertyRequest,
+        author: Option<String>,
+    ) -> Result<String, ObjectsTreeError> {
+        info!(
+            "Processing meta add ignored property for '{}', property '{}'",
+            request.object_name, request.property_name
+        );
+
         // Validate object exists
         meta_utils::validate_object_exists(&self.database, &request.object_name)?;
-        
+
         // Get or create the local change
-        let mut current_change = self.database.index().get_or_create_local_change(author)
+        let mut current_change = self
+            .database
+            .index()
+            .get_or_create_local_change(author)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
-        
+
         // Load existing meta or create default
-        let (mut meta, meta_existed_before) = meta_utils::load_or_create_meta(&self.database, &request.object_name)?;
-        
+        let (mut meta, meta_existed_before) =
+            meta_utils::load_or_create_meta(&self.database, &request.object_name)?;
+
         // Add the property to ignored_properties
-        let was_added = meta.ignored_properties.insert(request.property_name.clone());
-        
+        let was_added = meta
+            .ignored_properties
+            .insert(request.property_name.clone());
+
         if !was_added {
-            info!("Property '{}' was already in ignored list for object '{}'", request.property_name, request.object_name);
-            return Ok(format!("Property '{}' was already ignored for object '{}'", request.property_name, request.object_name));
+            info!(
+                "Property '{}' was already in ignored list for object '{}'",
+                request.property_name, request.object_name
+            );
+            return Ok(format!(
+                "Property '{}' was already ignored for object '{}'",
+                request.property_name, request.object_name
+            ));
         }
-        
+
         // Save and track the meta
-        meta_utils::save_and_track_meta(&self.database, &meta, &request.object_name, meta_existed_before, &mut current_change)?;
-        
-        info!("Successfully added property '{}' to ignored list for object '{}'", request.property_name, request.object_name);
-        Ok(format!("Property '{}' added to ignored list for object '{}'", request.property_name, request.object_name))
+        meta_utils::save_and_track_meta(
+            &self.database,
+            &meta,
+            &request.object_name,
+            meta_existed_before,
+            &mut current_change,
+        )?;
+
+        info!(
+            "Successfully added property '{}' to ignored list for object '{}'",
+            request.property_name, request.object_name
+        );
+        Ok(format!(
+            "Property '{}' added to ignored list for object '{}'",
+            request.property_name, request.object_name
+        ))
     }
 }
 
@@ -53,7 +84,7 @@ impl Operation for MetaAddIgnoredPropertyOperation {
     fn name(&self) -> &'static str {
         "meta/add_ignored_property"
     }
-    
+
     fn response_content_type(&self) -> &'static str {
         "text/x-moo"
     }
@@ -61,25 +92,23 @@ impl Operation for MetaAddIgnoredPropertyOperation {
     fn description(&self) -> &'static str {
         "Adds a property to the ignored properties list in the object's meta"
     }
-    
+
     fn routes(&self) -> Vec<OperationRoute> {
-        vec![
-            OperationRoute {
-                path: "/api/meta/add_ignored_property".to_string(),
-                method: Method::POST,
-                is_json: true,
-            }
-        ]
+        vec![OperationRoute {
+            path: "/api/meta/add_ignored_property".to_string(),
+            method: Method::POST,
+            is_json: true,
+        }]
     }
-    
+
     fn philosophy(&self) -> &'static str {
         "Documentation for this operation is being prepared."
     }
-    
+
     fn parameters(&self) -> Vec<OperationParameter> {
         vec![]
     }
-    
+
     fn examples(&self) -> Vec<OperationExample> {
         vec![]
     }
@@ -89,36 +118,42 @@ impl Operation for MetaAddIgnoredPropertyOperation {
         vec![
             OperationResponse::success(
                 "Property successfully added to ignored list",
-                r#""Property 'property_name' added to ignored list for object 'object_name'""#
+                r#""Property 'property_name' added to ignored list for object 'object_name'""#,
             ),
             OperationResponse::success(
                 "Property was already in ignored list",
-                r#""Property 'property_name' was already ignored for object 'object_name'""#
+                r#""Property 'property_name' was already ignored for object 'object_name'""#,
             ),
             OperationResponse::new(
                 400,
                 "Bad Request - Missing required arguments",
-                r#"E_INVARG("Error: Object name and property name are required")"#
+                r#"E_INVARG("Error: Object name and property name are required")"#,
             ),
             OperationResponse::new(
                 404,
                 "Not Found - Object does not exist",
-                r#"E_INVARG("Error: Object not found")"#
+                r#"E_INVARG("Error: Object not found")"#,
             ),
             OperationResponse::new(
                 500,
                 "Internal Server Error - Serialization or database error",
-                r#"E_INVARG("Error: SerializationError: failed to serialize data")"#
+                r#"E_INVARG("Error: SerializationError: failed to serialize data")"#,
             ),
         ]
     }
 
     fn execute(&self, args: Vec<String>, user: &User) -> moor_var::Var {
-        info!("Meta add ignored property operation received {} arguments: {:?}", args.len(), args);
-        
+        info!(
+            "Meta add ignored property operation received {} arguments: {:?}",
+            args.len(),
+            args
+        );
+
         if args.len() < 2 {
             error!("Meta add ignored property operation requires object name and property name");
-            return moor_var::v_error(moor_var::E_INVARG.msg("Error: Object name and property name are required"));
+            return moor_var::v_error(
+                moor_var::E_INVARG.msg("Error: Object name and property name are required"),
+            );
         }
 
         let object_name = args[0].clone();

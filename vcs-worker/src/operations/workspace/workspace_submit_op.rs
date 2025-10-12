@@ -1,11 +1,11 @@
-use crate::operations::{Operation, OperationRoute, OperationParameter, OperationExample};
+use crate::operations::{Operation, OperationExample, OperationParameter, OperationRoute};
 use axum::http::Method;
 use tracing::{error, info};
 
 use crate::database::{DatabaseRef, ObjectsTreeError};
 use crate::providers::workspace::WorkspaceProvider;
-use crate::types::{Change, User, Permission};
-use moor_var::{v_error, v_str, E_INVARG};
+use crate::types::{Change, Permission, User};
+use moor_var::{E_INVARG, v_error, v_str};
 
 /// Workspace submit operation that accepts a serialized change and stores it for review
 #[derive(Clone)]
@@ -20,30 +20,48 @@ impl WorkspaceSubmitOperation {
     }
 
     /// Process the workspace submit request with a serialized change
-    fn process_workspace_submit(&self, serialized_change: &str, user: &User) -> Result<String, ObjectsTreeError> {
+    fn process_workspace_submit(
+        &self,
+        serialized_change: &str,
+        user: &User,
+    ) -> Result<String, ObjectsTreeError> {
         // Check if user has permission to submit changes
         if !user.has_permission(&Permission::SubmitChanges) {
-            error!("User '{}' does not have permission to submit changes", user.id);
-            return Err(ObjectsTreeError::SerializationError(
-                format!("User '{}' does not have permission to submit changes", user.id)
-            ));
+            error!(
+                "User '{}' does not have permission to submit changes",
+                user.id
+            );
+            return Err(ObjectsTreeError::SerializationError(format!(
+                "User '{}' does not have permission to submit changes",
+                user.id
+            )));
         }
 
         // Deserialize the change from the provided string
-        let change: Change = serde_json::from_str(serialized_change)
-            .map_err(|e| ObjectsTreeError::SerializationError(
-                format!("Failed to deserialize change: {e}")
-            ))?;
+        let change: Change = serde_json::from_str(serialized_change).map_err(|e| {
+            ObjectsTreeError::SerializationError(format!("Failed to deserialize change: {e}"))
+        })?;
 
-        info!("User '{}' submitting change for review: {} ({})", user.id, change.name, change.id);
+        info!(
+            "User '{}' submitting change for review: {} ({})",
+            user.id, change.name, change.id
+        );
 
         // Store the change in the workspace
-        self.database.workspace().store_workspace_change(&change)
+        self.database
+            .workspace()
+            .store_workspace_change(&change)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
 
-        info!("Successfully stored change '{}' in workspace for review", change.name);
+        info!(
+            "Successfully stored change '{}' in workspace for review",
+            change.name
+        );
 
-        Ok(format!("Change '{}' ({}) successfully submitted for review", change.name, change.id))
+        Ok(format!(
+            "Change '{}' ({}) successfully submitted for review",
+            change.name, change.id
+        ))
     }
 }
 
@@ -51,7 +69,7 @@ impl Operation for WorkspaceSubmitOperation {
     fn name(&self) -> &'static str {
         "workspace/submit"
     }
-    
+
     fn response_content_type(&self) -> &'static str {
         "text/x-moo"
     }
@@ -59,25 +77,23 @@ impl Operation for WorkspaceSubmitOperation {
     fn description(&self) -> &'static str {
         "Submits a serialized change to the workspace for review. Takes a JSON-serialized Change object and stores it in the workspace."
     }
-    
+
     fn routes(&self) -> Vec<OperationRoute> {
-        vec![
-            OperationRoute {
-                path: "/api/workspace/submit".to_string(),
-                method: Method::PUT,
-                is_json: true,
-            }
-        ]
+        vec![OperationRoute {
+            path: "/api/workspace/submit".to_string(),
+            method: Method::PUT,
+            is_json: true,
+        }]
     }
-    
+
     fn philosophy(&self) -> &'static str {
         "Documentation for this operation is being prepared."
     }
-    
+
     fn parameters(&self) -> Vec<OperationParameter> {
         vec![]
     }
-    
+
     fn examples(&self) -> Vec<OperationExample> {
         vec![]
     }
@@ -87,39 +103,45 @@ impl Operation for WorkspaceSubmitOperation {
         vec![
             OperationResponse::success(
                 "Operation executed successfully",
-                r#""Change 'my-feature' (change-abc123) successfully submitted for review""#
+                r#""Change 'my-feature' (change-abc123) successfully submitted for review""#,
             ),
             OperationResponse::new(
                 400,
                 "Bad Request - No serialized change argument provided",
-                r#"E_INVARG("Workspace submit operation requires a serialized change argument")"#
+                r#"E_INVARG("Workspace submit operation requires a serialized change argument")"#,
             ),
             OperationResponse::new(
                 400,
                 "Bad Request - Failed to deserialize change",
-                r#"E_INVARG("Failed to deserialize change: invalid JSON at line 1 column 5")"#
+                r#"E_INVARG("Failed to deserialize change: invalid JSON at line 1 column 5")"#,
             ),
             OperationResponse::new(
                 403,
                 "Forbidden - User lacks permission to submit changes",
-                r#"E_INVARG("User 'player123' does not have permission to submit changes")"#
+                r#"E_INVARG("User 'player123' does not have permission to submit changes")"#,
             ),
             OperationResponse::new(
                 500,
                 "Internal Server Error - Database error",
-                r#"E_INVARG("Database error: failed to store workspace change")"#
+                r#"E_INVARG("Database error: failed to store workspace change")"#,
             ),
         ]
     }
 
     fn execute(&self, args: Vec<String>, user: &User) -> moor_var::Var {
-        info!("Workspace submit operation received {} arguments for user: {}", args.len(), user.id);
-        
+        info!(
+            "Workspace submit operation received {} arguments for user: {}",
+            args.len(),
+            user.id
+        );
+
         if args.is_empty() {
             error!("Workspace submit operation requires a serialized change argument");
-            return v_error(E_INVARG.msg("Workspace submit operation requires a serialized change argument"));
+            return v_error(
+                E_INVARG.msg("Workspace submit operation requires a serialized change argument"),
+            );
         }
-        
+
         let serialized_change = &args[0];
 
         match self.process_workspace_submit(serialized_change, user) {

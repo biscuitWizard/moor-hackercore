@@ -1,11 +1,11 @@
-use crate::operations::{Operation, OperationRoute, OperationParameter, OperationExample};
+use crate::operations::{Operation, OperationExample, OperationParameter, OperationRoute};
 use axum::http::Method;
 use tracing::{error, info};
 
-use crate::database::DatabaseRef;
-use crate::types::{ObjectsTreeError, User, MetaAddIgnoredVerbRequest};
-use crate::providers::index::IndexProvider;
 use super::meta_utils;
+use crate::database::DatabaseRef;
+use crate::providers::index::IndexProvider;
+use crate::types::{MetaAddIgnoredVerbRequest, ObjectsTreeError, User};
 
 /// Meta operation that adds an ignored verb to an object's meta
 #[derive(Clone)]
@@ -20,32 +20,61 @@ impl MetaAddIgnoredVerbOperation {
     }
 
     /// Parse and process the meta add ignored verb request
-    fn process_meta_add_ignored_verb(&self, request: MetaAddIgnoredVerbRequest, author: Option<String>) -> Result<String, ObjectsTreeError> {
-        info!("Processing meta add ignored verb for '{}', verb '{}'", request.object_name, request.verb_name);
-        
+    fn process_meta_add_ignored_verb(
+        &self,
+        request: MetaAddIgnoredVerbRequest,
+        author: Option<String>,
+    ) -> Result<String, ObjectsTreeError> {
+        info!(
+            "Processing meta add ignored verb for '{}', verb '{}'",
+            request.object_name, request.verb_name
+        );
+
         // Validate object exists
         meta_utils::validate_object_exists(&self.database, &request.object_name)?;
-        
+
         // Get or create the local change
-        let mut current_change = self.database.index().get_or_create_local_change(author)
+        let mut current_change = self
+            .database
+            .index()
+            .get_or_create_local_change(author)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
-        
+
         // Load existing meta or create default
-        let (mut meta, meta_existed_before) = meta_utils::load_or_create_meta(&self.database, &request.object_name)?;
-        
+        let (mut meta, meta_existed_before) =
+            meta_utils::load_or_create_meta(&self.database, &request.object_name)?;
+
         // Add the verb to ignored_verbs
         let was_added = meta.ignored_verbs.insert(request.verb_name.clone());
-        
+
         if !was_added {
-            info!("Verb '{}' was already in ignored list for object '{}'", request.verb_name, request.object_name);
-            return Ok(format!("Verb '{}' was already ignored for object '{}'", request.verb_name, request.object_name));
+            info!(
+                "Verb '{}' was already in ignored list for object '{}'",
+                request.verb_name, request.object_name
+            );
+            return Ok(format!(
+                "Verb '{}' was already ignored for object '{}'",
+                request.verb_name, request.object_name
+            ));
         }
-        
+
         // Save and track the meta
-        meta_utils::save_and_track_meta(&self.database, &meta, &request.object_name, meta_existed_before, &mut current_change)?;
-        
-        info!("Successfully added verb '{}' to ignored list for object '{}'", request.verb_name, request.object_name);
-        Ok(format!("Verb '{}' added to ignored list for object '{}'", request.verb_name, request.object_name))
+        meta_utils::save_and_track_meta(
+            &self.database,
+            &meta,
+            &request.object_name,
+            meta_existed_before,
+            &mut current_change,
+        )?;
+
+        info!(
+            "Successfully added verb '{}' to ignored list for object '{}'",
+            request.verb_name, request.object_name
+        );
+        Ok(format!(
+            "Verb '{}' added to ignored list for object '{}'",
+            request.verb_name, request.object_name
+        ))
     }
 }
 
@@ -53,7 +82,7 @@ impl Operation for MetaAddIgnoredVerbOperation {
     fn name(&self) -> &'static str {
         "meta/add_ignored_verb"
     }
-    
+
     fn response_content_type(&self) -> &'static str {
         "text/x-moo"
     }
@@ -61,25 +90,23 @@ impl Operation for MetaAddIgnoredVerbOperation {
     fn description(&self) -> &'static str {
         "Adds a verb to the ignored verbs list in the object's meta"
     }
-    
+
     fn routes(&self) -> Vec<OperationRoute> {
-        vec![
-            OperationRoute {
-                path: "/api/meta/add_ignored_verb".to_string(),
-                method: Method::POST,
-                is_json: true,
-            }
-        ]
+        vec![OperationRoute {
+            path: "/api/meta/add_ignored_verb".to_string(),
+            method: Method::POST,
+            is_json: true,
+        }]
     }
-    
+
     fn philosophy(&self) -> &'static str {
         "Documentation for this operation is being prepared."
     }
-    
+
     fn parameters(&self) -> Vec<OperationParameter> {
         vec![]
     }
-    
+
     fn examples(&self) -> Vec<OperationExample> {
         vec![]
     }
@@ -89,41 +116,47 @@ impl Operation for MetaAddIgnoredVerbOperation {
         vec![
             OperationResponse::success(
                 "Verb successfully added to ignored list",
-                r#""Verb 'verb_name' added to ignored list for object 'object_name'""#
+                r#""Verb 'verb_name' added to ignored list for object 'object_name'""#,
             ),
             OperationResponse::success(
                 "Verb was already in ignored list",
-                r#""Verb 'verb_name' was already ignored for object 'object_name'""#
+                r#""Verb 'verb_name' was already ignored for object 'object_name'""#,
             ),
             OperationResponse::new(
                 400,
                 "Bad Request - Missing required arguments",
-                r#"E_INVARG("Error: Object name and verb name are required")"#
+                r#"E_INVARG("Error: Object name and verb name are required")"#,
             ),
             OperationResponse::new(
                 400,
                 "Bad Request - Object validation failed",
-                r#"E_INVARG("Error: <object validation error>")"#
+                r#"E_INVARG("Error: <object validation error>")"#,
             ),
             OperationResponse::new(
                 500,
                 "Internal Server Error - Serialization error",
-                r#"E_INVARG("Error: <serialization error>")"#
+                r#"E_INVARG("Error: <serialization error>")"#,
             ),
             OperationResponse::new(
                 500,
                 "Internal Server Error - Meta operation failed",
-                r#"E_INVARG("Error: <meta load/save error>")"#
+                r#"E_INVARG("Error: <meta load/save error>")"#,
             ),
         ]
     }
 
     fn execute(&self, args: Vec<String>, user: &User) -> moor_var::Var {
-        info!("Meta add ignored verb operation received {} arguments: {:?}", args.len(), args);
-        
+        info!(
+            "Meta add ignored verb operation received {} arguments: {:?}",
+            args.len(),
+            args
+        );
+
         if args.len() < 2 {
             error!("Meta add ignored verb operation requires object name and verb name");
-            return moor_var::v_error(moor_var::E_INVARG.msg("Error: Object name and verb name are required"));
+            return moor_var::v_error(
+                moor_var::E_INVARG.msg("Error: Object name and verb name are required"),
+            );
         }
 
         let object_name = args[0].clone();
@@ -146,4 +179,3 @@ impl Operation for MetaAddIgnoredVerbOperation {
         }
     }
 }
-

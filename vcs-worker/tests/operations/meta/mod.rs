@@ -10,10 +10,9 @@
 //! - diff: Tests for diff behavior with ignored properties/verbs
 
 mod add;
-mod remove;
 mod clear;
-mod lifecycle;
+mod diff;
 mod filtering_get;
 mod filtering_update;
-mod diff;
-
+mod lifecycle;
+mod remove;

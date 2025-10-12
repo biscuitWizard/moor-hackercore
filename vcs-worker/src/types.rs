@@ -11,10 +11,10 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use serde::{Deserialize, Serialize};
-use thiserror::Error;
-use std::collections::HashSet;
 use moor_var::Obj;
+use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
+use thiserror::Error;
 use utoipa::ToSchema;
 
 /// Type of VCS object
@@ -31,10 +31,10 @@ pub enum VcsObjectType {
 /// IDLE: The change is inactive but preserved for future work
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, ToSchema)]
 pub enum ChangeStatus {
-    Merged,  // or "COMMITTED" 
-    Local,   // or "WORKING"
-    Review,  // Awaiting approval/review
-    Idle,    // Inactive but preserved
+    Merged, // or "COMMITTED"
+    Local,  // or "WORKING"
+    Review, // Awaiting approval/review
+    Idle,   // Inactive but preserved
 }
 
 /// Represents a file rename operation
@@ -51,7 +51,7 @@ pub struct Change {
     pub name: String,
     pub description: Option<String>,
     pub author: String,
-    pub timestamp: u64, // Linux UTC epoch
+    pub timestamp: u64,       // Linux UTC epoch
     pub status: ChangeStatus, // MERGED, LOCAL, REVIEW, or IDLE
     pub added_objects: Vec<ObjectInfo>,
     pub modified_objects: Vec<ObjectInfo>,
@@ -118,7 +118,6 @@ pub struct ChangeStatusResponse {
     pub change_name: Option<String>,
     pub status: ChangeStatus,
 }
-
 
 /// Request structure for change abandon operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -198,9 +197,9 @@ pub struct CloneRequest {
 pub struct CloneData {
     pub refs: Vec<(ObjectInfo, String)>, // List of (ObjectInfo, sha256) pairs
     pub objects: std::collections::HashMap<String, String>, // sha256 -> object data
-    pub changes: Vec<Change>, // All changes
-    pub change_order: Vec<String>, // Order of changes
-    pub source: Option<String>, // Source URL if this is a clone
+    pub changes: Vec<Change>,            // All changes
+    pub change_order: Vec<String>,       // Order of changes
+    pub source: Option<String>,          // Source URL if this is a clone
 }
 
 /// User permissions in the system
@@ -270,14 +269,14 @@ impl User {
             is_disabled: false,
         }
     }
-    
+
     /// Add an authorized key
     pub fn add_authorized_key(&mut self, key: String) {
         if !self.authorized_keys.contains(&key) {
             self.authorized_keys.push(key);
         }
     }
-    
+
     /// Remove an authorized key
     pub fn remove_authorized_key(&mut self, key: &str) -> bool {
         if let Some(pos) = self.authorized_keys.iter().position(|k| k == key) {
@@ -287,22 +286,21 @@ impl User {
             false
         }
     }
-    
+
     /// Add a permission
     pub fn add_permission(&mut self, permission: Permission) {
         self.permissions.insert(permission);
     }
-    
+
     /// Remove a permission
     pub fn remove_permission(&mut self, permission: &Permission) -> bool {
         self.permissions.remove(permission)
     }
-    
+
     /// Check if user has a specific permission
     pub fn has_permission(&self, permission: &Permission) -> bool {
         self.permissions.contains(permission)
     }
-    
 }
 
 /// Meta information for a MOO object

@@ -1,17 +1,17 @@
-use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
-use moor_var::{Var, v_map, v_str};
 use crate::database::{DatabaseRef, ObjectsTreeError};
+use crate::providers::index::IndexProvider;
 use crate::providers::objects::ObjectsProvider;
 use crate::providers::refs::RefsProvider;
-use crate::providers::index::IndexProvider;
 use crate::types::{Change, VcsObjectType};
 use moor_compiler::ObjectDefinition;
+use moor_var::{Var, v_map, v_str};
+use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
 
 /// Represents a single object change with detailed verb and property modifications
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ObjectChange {
-    /// Object ID - either the OID as string (e.g., "#4") or object name (e.g., "Foobar") 
+    /// Object ID - either the OID as string (e.g., "#4") or object name (e.g., "Foobar")
     /// if the name differs from the OID
     pub obj_id: String,
     /// Verbs that were modified (existing verbs with changes)
@@ -66,58 +66,62 @@ impl ObjectChange {
     /// Convert this ObjectChange to a MOO v_map
     pub fn to_moo_var(&self) -> Var {
         let mut pairs = Vec::new();
-        
+
         // obj_id
         pairs.push((v_str("obj_id"), v_str(&self.obj_id)));
-        
+
         // verbs_modified
-        let verbs_modified_list: Vec<Var> = self.verbs_modified.iter()
-            .map(|v| v_str(v))
-            .collect();
-        pairs.push((v_str("verbs_modified"), moor_var::v_list(&verbs_modified_list)));
-        
+        let verbs_modified_list: Vec<Var> = self.verbs_modified.iter().map(|v| v_str(v)).collect();
+        pairs.push((
+            v_str("verbs_modified"),
+            moor_var::v_list(&verbs_modified_list),
+        ));
+
         // verbs_added
-        let verbs_added_list: Vec<Var> = self.verbs_added.iter()
-            .map(|v| v_str(v))
-            .collect();
+        let verbs_added_list: Vec<Var> = self.verbs_added.iter().map(|v| v_str(v)).collect();
         pairs.push((v_str("verbs_added"), moor_var::v_list(&verbs_added_list)));
-        
+
         // verbs_renamed
-        let verbs_renamed_map: Vec<(Var, Var)> = self.verbs_renamed.iter()
+        let verbs_renamed_map: Vec<(Var, Var)> = self
+            .verbs_renamed
+            .iter()
             .map(|(k, v)| (v_str(k), v_str(v)))
             .collect();
         pairs.push((v_str("verbs_renamed"), v_map(&verbs_renamed_map)));
-        
+
         // verbs_deleted
-        let verbs_deleted_list: Vec<Var> = self.verbs_deleted.iter()
-            .map(|v| v_str(v))
-            .collect();
-        pairs.push((v_str("verbs_deleted"), moor_var::v_list(&verbs_deleted_list)));
-        
+        let verbs_deleted_list: Vec<Var> = self.verbs_deleted.iter().map(|v| v_str(v)).collect();
+        pairs.push((
+            v_str("verbs_deleted"),
+            moor_var::v_list(&verbs_deleted_list),
+        ));
+
         // props_modified
-        let props_modified_list: Vec<Var> = self.props_modified.iter()
-            .map(|v| v_str(v))
-            .collect();
-        pairs.push((v_str("props_modified"), moor_var::v_list(&props_modified_list)));
-        
+        let props_modified_list: Vec<Var> = self.props_modified.iter().map(|v| v_str(v)).collect();
+        pairs.push((
+            v_str("props_modified"),
+            moor_var::v_list(&props_modified_list),
+        ));
+
         // props_added
-        let props_added_list: Vec<Var> = self.props_added.iter()
-            .map(|v| v_str(v))
-            .collect();
+        let props_added_list: Vec<Var> = self.props_added.iter().map(|v| v_str(v)).collect();
         pairs.push((v_str("props_added"), moor_var::v_list(&props_added_list)));
-        
+
         // props_renamed
-        let props_renamed_map: Vec<(Var, Var)> = self.props_renamed.iter()
+        let props_renamed_map: Vec<(Var, Var)> = self
+            .props_renamed
+            .iter()
             .map(|(k, v)| (v_str(k), v_str(v)))
             .collect();
         pairs.push((v_str("props_renamed"), v_map(&props_renamed_map)));
-        
+
         // props_deleted
-        let props_deleted_list: Vec<Var> = self.props_deleted.iter()
-            .map(|v| v_str(v))
-            .collect();
-        pairs.push((v_str("props_deleted"), moor_var::v_list(&props_deleted_list)));
-        
+        let props_deleted_list: Vec<Var> = self.props_deleted.iter().map(|v| v_str(v)).collect();
+        pairs.push((
+            v_str("props_deleted"),
+            moor_var::v_list(&props_deleted_list),
+        ));
+
         v_map(&pairs)
     }
 }
@@ -137,37 +141,46 @@ impl ObjectDiffModel {
     /// Convert this ObjectDiffModel to a MOO v_map
     pub fn to_moo_var(&self) -> Var {
         let mut pairs = Vec::new();
-        
+
         // objects_renamed
-        let objects_renamed_map: Vec<(Var, Var)> = self.objects_renamed.iter()
+        let objects_renamed_map: Vec<(Var, Var)> = self
+            .objects_renamed
+            .iter()
             .map(|(k, v)| (v_str(k), v_str(v)))
             .collect();
         pairs.push((v_str("objects_renamed"), v_map(&objects_renamed_map)));
-        
+
         // objects_deleted
-        let objects_deleted_list: Vec<Var> = self.objects_deleted.iter()
-            .map(|v| v_str(v))
-            .collect();
-        pairs.push((v_str("objects_deleted"), moor_var::v_list(&objects_deleted_list)));
-        
+        let objects_deleted_list: Vec<Var> =
+            self.objects_deleted.iter().map(|v| v_str(v)).collect();
+        pairs.push((
+            v_str("objects_deleted"),
+            moor_var::v_list(&objects_deleted_list),
+        ));
+
         // objects_added
-        let objects_added_list: Vec<Var> = self.objects_added.iter()
-            .map(|v| v_str(v))
-            .collect();
-        pairs.push((v_str("objects_added"), moor_var::v_list(&objects_added_list)));
-        
+        let objects_added_list: Vec<Var> = self.objects_added.iter().map(|v| v_str(v)).collect();
+        pairs.push((
+            v_str("objects_added"),
+            moor_var::v_list(&objects_added_list),
+        ));
+
         // objects_modified
-        let objects_modified_list: Vec<Var> = self.objects_modified.iter()
-            .map(|v| v_str(v))
-            .collect();
-        pairs.push((v_str("objects_modified"), moor_var::v_list(&objects_modified_list)));
-        
+        let objects_modified_list: Vec<Var> =
+            self.objects_modified.iter().map(|v| v_str(v)).collect();
+        pairs.push((
+            v_str("objects_modified"),
+            moor_var::v_list(&objects_modified_list),
+        ));
+
         // changes
-        let changes_list: Vec<Var> = self.changes.iter()
+        let changes_list: Vec<Var> = self
+            .changes
+            .iter()
             .map(|change| change.to_moo_var())
             .collect();
         pairs.push((v_str("changes"), moor_var::v_list(&changes_list)));
-        
+
         v_map(&pairs)
     }
 
@@ -204,22 +217,22 @@ impl ObjectDiffModel {
         for (from, to) in other.objects_renamed {
             self.objects_renamed.insert(from, to);
         }
-        
+
         // Merge deleted objects
         for obj_id in other.objects_deleted {
             self.objects_deleted.insert(obj_id);
         }
-        
+
         // Merge added objects
         for obj_id in other.objects_added {
             self.objects_added.insert(obj_id);
         }
-        
+
         // Merge modified objects
         for obj_id in other.objects_modified {
             self.objects_modified.insert(obj_id);
         }
-        
+
         // Merge changes
         for change in other.changes {
             self.add_object_change(change);
@@ -253,40 +266,74 @@ pub fn obj_id_to_object_name(obj_id: &str, object_name: Option<&str>) -> String 
 }
 
 /// Compare object versions to determine detailed changes
-pub fn compare_object_versions(database: &DatabaseRef, obj_name: &str, local_version: u64) -> Result<ObjectChange, ObjectsTreeError> {
+pub fn compare_object_versions(
+    database: &DatabaseRef,
+    obj_name: &str,
+    local_version: u64,
+) -> Result<ObjectChange, ObjectsTreeError> {
     let mut object_change = ObjectChange::new(obj_name.to_string());
-    
+
     // Get the local version content
-    let local_sha256 = database.refs().get_ref(VcsObjectType::MooObject, obj_name, Some(local_version))
+    let local_sha256 = database
+        .refs()
+        .get_ref(VcsObjectType::MooObject, obj_name, Some(local_version))
         .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
-        .ok_or_else(|| ObjectsTreeError::SerializationError(format!("Local version {local_version} of object '{obj_name}' not found")))?;
-    
-    let local_content = database.objects().get(&local_sha256)
+        .ok_or_else(|| {
+            ObjectsTreeError::SerializationError(format!(
+                "Local version {local_version} of object '{obj_name}' not found"
+            ))
+        })?;
+
+    let local_content = database
+        .objects()
+        .get(&local_sha256)
         .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
-        .ok_or_else(|| ObjectsTreeError::SerializationError(format!("Object content for SHA256 '{local_sha256}' not found")))?;
-    
+        .ok_or_else(|| {
+            ObjectsTreeError::SerializationError(format!(
+                "Object content for SHA256 '{local_sha256}' not found"
+            ))
+        })?;
+
     // Parse local object definition
-    let local_def = database.objects().parse_object_dump(&local_content)
+    let local_def = database
+        .objects()
+        .parse_object_dump(&local_content)
         .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
-    
+
     // Get the baseline version (previous version)
     // For version 1 (new object), there is no baseline (version 0 doesn't exist)
     // For version 2+, the baseline is the previous version
     let baseline_version = local_version.saturating_sub(1);
-    let baseline_sha256 = database.refs().get_ref(VcsObjectType::MooObject, obj_name, Some(baseline_version))
+    let baseline_sha256 = database
+        .refs()
+        .get_ref(VcsObjectType::MooObject, obj_name, Some(baseline_version))
         .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
-    
+
     if let Some(baseline_sha256) = baseline_sha256 {
         // Get baseline content and parse it
-        let baseline_content = database.objects().get(&baseline_sha256)
+        let baseline_content = database
+            .objects()
+            .get(&baseline_sha256)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
-            .ok_or_else(|| ObjectsTreeError::SerializationError(format!("Baseline object content for SHA256 '{baseline_sha256}' not found")))?;
-        
-        let baseline_def = database.objects().parse_object_dump(&baseline_content)
+            .ok_or_else(|| {
+                ObjectsTreeError::SerializationError(format!(
+                    "Baseline object content for SHA256 '{baseline_sha256}' not found"
+                ))
+            })?;
+
+        let baseline_def = database
+            .objects()
+            .parse_object_dump(&baseline_content)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
-        
+
         // Compare the two object definitions with meta filtering
-        compare_object_definitions_with_meta(&baseline_def, &local_def, &mut object_change, Some(database), Some(obj_name));
+        compare_object_definitions_with_meta(
+            &baseline_def,
+            &local_def,
+            &mut object_change,
+            Some(database),
+            Some(obj_name),
+        );
     } else {
         // No baseline version - this is a new object, mark all as added
         for verb in &local_def.verbs {
@@ -298,24 +345,30 @@ pub fn compare_object_versions(database: &DatabaseRef, obj_name: &str, local_ver
             object_change.props_added.insert(prop_def.name.as_string());
         }
         for prop_override in &local_def.property_overrides {
-            object_change.props_added.insert(prop_override.name.as_string());
+            object_change
+                .props_added
+                .insert(prop_override.name.as_string());
         }
     }
-    
+
     Ok(object_change)
 }
 
 /// Compare two ObjectDefinitions and populate the ObjectChange with detailed differences
 /// If database and obj_name are provided, ignored properties/verbs from meta are excluded from deleted lists
 #[allow(dead_code)]
-pub fn compare_object_definitions(baseline: &ObjectDefinition, local: &ObjectDefinition, object_change: &mut ObjectChange) {
+pub fn compare_object_definitions(
+    baseline: &ObjectDefinition,
+    local: &ObjectDefinition,
+    object_change: &mut ObjectChange,
+) {
     compare_object_definitions_with_meta(baseline, local, object_change, None, None);
 }
 
 /// Compare two ObjectDefinitions with optional meta filtering
 pub fn compare_object_definitions_with_meta(
-    baseline: &ObjectDefinition, 
-    local: &ObjectDefinition, 
+    baseline: &ObjectDefinition,
+    local: &ObjectDefinition,
     object_change: &mut ObjectChange,
     database: Option<&DatabaseRef>,
     obj_name: Option<&str>,
@@ -323,28 +376,28 @@ pub fn compare_object_definitions_with_meta(
     // Load meta if database and obj_name are provided
     let meta = if let (Some(db), Some(name)) = (database, obj_name) {
         match db.refs().get_ref(VcsObjectType::MooMetaObject, name, None) {
-            Ok(Some(meta_sha256)) => {
-                match db.objects().get(&meta_sha256) {
-                    Ok(Some(yaml)) => {
-                        db.objects().parse_meta_dump(&yaml).ok()
-                    }
-                    _ => None,
-                }
-            }
+            Ok(Some(meta_sha256)) => match db.objects().get(&meta_sha256) {
+                Ok(Some(yaml)) => db.objects().parse_meta_dump(&yaml).ok(),
+                _ => None,
+            },
             _ => None,
         }
     } else {
         None
     };
     // Compare verbs
-    let baseline_verbs: HashMap<String, &moor_compiler::ObjVerbDef> = baseline.verbs.iter()
+    let baseline_verbs: HashMap<String, &moor_compiler::ObjVerbDef> = baseline
+        .verbs
+        .iter()
         .flat_map(|v| v.names.iter().map(move |name| (name.as_string(), v)))
         .collect();
-    
-    let local_verbs: HashMap<String, &moor_compiler::ObjVerbDef> = local.verbs.iter()
+
+    let local_verbs: HashMap<String, &moor_compiler::ObjVerbDef> = local
+        .verbs
+        .iter()
         .flat_map(|v| v.names.iter().map(move |name| (name.as_string(), v)))
         .collect();
-    
+
     // Find added, modified, and deleted verbs
     for (verb_name, local_verb) in &local_verbs {
         if let Some(baseline_verb) = baseline_verbs.get(verb_name) {
@@ -357,32 +410,40 @@ pub fn compare_object_definitions_with_meta(
             object_change.verbs_added.insert(verb_name.clone());
         }
     }
-    
+
     for verb_name in baseline_verbs.keys() {
         if !local_verbs.contains_key(verb_name) {
             // Verb is missing - check if it's ignored before marking as deleted
-            let is_ignored = meta.as_ref()
+            let is_ignored = meta
+                .as_ref()
                 .map(|m| m.ignored_verbs.contains(verb_name))
                 .unwrap_or(false);
-            
+
             if !is_ignored {
                 // Verb was actually deleted (not just ignored)
                 object_change.verbs_deleted.insert(verb_name.clone());
             } else {
-                tracing::debug!("Verb '{}' is missing but ignored in meta, not marking as deleted", verb_name);
+                tracing::debug!(
+                    "Verb '{}' is missing but ignored in meta, not marking as deleted",
+                    verb_name
+                );
             }
         }
     }
-    
+
     // Compare property definitions
-    let baseline_props: HashMap<String, &moor_compiler::ObjPropDef> = baseline.property_definitions.iter()
+    let baseline_props: HashMap<String, &moor_compiler::ObjPropDef> = baseline
+        .property_definitions
+        .iter()
         .map(|p| (p.name.as_string(), p))
         .collect();
-    
-    let local_props: HashMap<String, &moor_compiler::ObjPropDef> = local.property_definitions.iter()
+
+    let local_props: HashMap<String, &moor_compiler::ObjPropDef> = local
+        .property_definitions
+        .iter()
         .map(|p| (p.name.as_string(), p))
         .collect();
-    
+
     // Find added, modified, and deleted property definitions
     for (prop_name, local_prop) in &local_props {
         if let Some(baseline_prop) = baseline_props.get(prop_name) {
@@ -395,32 +456,40 @@ pub fn compare_object_definitions_with_meta(
             object_change.props_added.insert(prop_name.clone());
         }
     }
-    
+
     for prop_name in baseline_props.keys() {
         if !local_props.contains_key(prop_name) {
             // Property is missing - check if it's ignored before marking as deleted
-            let is_ignored = meta.as_ref()
+            let is_ignored = meta
+                .as_ref()
                 .map(|m| m.ignored_properties.contains(prop_name))
                 .unwrap_or(false);
-            
+
             if !is_ignored {
                 // Property was actually deleted (not just ignored)
                 object_change.props_deleted.insert(prop_name.clone());
             } else {
-                tracing::debug!("Property '{}' is missing but ignored in meta, not marking as deleted", prop_name);
+                tracing::debug!(
+                    "Property '{}' is missing but ignored in meta, not marking as deleted",
+                    prop_name
+                );
             }
         }
     }
-    
+
     // Compare property overrides
-    let baseline_overrides: HashMap<String, &moor_compiler::ObjPropOverride> = baseline.property_overrides.iter()
+    let baseline_overrides: HashMap<String, &moor_compiler::ObjPropOverride> = baseline
+        .property_overrides
+        .iter()
         .map(|p| (p.name.as_string(), p))
         .collect();
-    
-    let local_overrides: HashMap<String, &moor_compiler::ObjPropOverride> = local.property_overrides.iter()
+
+    let local_overrides: HashMap<String, &moor_compiler::ObjPropOverride> = local
+        .property_overrides
+        .iter()
         .map(|p| (p.name.as_string(), p))
         .collect();
-    
+
     // Find added, modified, and deleted property overrides
     for (prop_name, local_override) in &local_overrides {
         if let Some(baseline_override) = baseline_overrides.get(prop_name) {
@@ -433,149 +502,225 @@ pub fn compare_object_definitions_with_meta(
             object_change.props_added.insert(prop_name.clone());
         }
     }
-    
+
     for prop_name in baseline_overrides.keys() {
         if !local_overrides.contains_key(prop_name) {
             // Override is missing - check if it's ignored before marking as deleted
-            let is_ignored = meta.as_ref()
+            let is_ignored = meta
+                .as_ref()
                 .map(|m| m.ignored_properties.contains(prop_name))
                 .unwrap_or(false);
-            
+
             if !is_ignored {
                 // Override was actually deleted (not just ignored)
                 object_change.props_deleted.insert(prop_name.clone());
             } else {
-                tracing::debug!("Property override '{}' is missing but ignored in meta, not marking as deleted", prop_name);
+                tracing::debug!(
+                    "Property override '{}' is missing but ignored in meta, not marking as deleted",
+                    prop_name
+                );
             }
         }
     }
 }
 
 /// Check if two verb definitions differ
-pub fn verbs_differ(baseline: &moor_compiler::ObjVerbDef, local: &moor_compiler::ObjVerbDef) -> bool {
-    baseline.argspec != local.argspec ||
-    baseline.owner != local.owner ||
-    baseline.flags != local.flags ||
-    baseline.program != local.program
+pub fn verbs_differ(
+    baseline: &moor_compiler::ObjVerbDef,
+    local: &moor_compiler::ObjVerbDef,
+) -> bool {
+    baseline.argspec != local.argspec
+        || baseline.owner != local.owner
+        || baseline.flags != local.flags
+        || baseline.program != local.program
 }
 
 /// Check if two property definitions differ
-pub fn property_definitions_differ(baseline: &moor_compiler::ObjPropDef, local: &moor_compiler::ObjPropDef) -> bool {
-    baseline.perms != local.perms ||
-    baseline.value != local.value
+pub fn property_definitions_differ(
+    baseline: &moor_compiler::ObjPropDef,
+    local: &moor_compiler::ObjPropDef,
+) -> bool {
+    baseline.perms != local.perms || baseline.value != local.value
 }
 
 /// Check if two property overrides differ
-pub fn property_overrides_differ(baseline: &moor_compiler::ObjPropOverride, local: &moor_compiler::ObjPropOverride) -> bool {
-    baseline.value != local.value ||
-    baseline.perms_update != local.perms_update
+pub fn property_overrides_differ(
+    baseline: &moor_compiler::ObjPropOverride,
+    local: &moor_compiler::ObjPropOverride,
+) -> bool {
+    baseline.value != local.value || baseline.perms_update != local.perms_update
 }
 
 /// Build an ObjectDiffModel by comparing a change against the compiled state
 /// This is the shared logic used by approve and status operations
-pub fn build_object_diff_from_change(database: &DatabaseRef, change: &Change) -> Result<ObjectDiffModel, ObjectsTreeError> {
+pub fn build_object_diff_from_change(
+    database: &DatabaseRef,
+    change: &Change,
+) -> Result<ObjectDiffModel, ObjectsTreeError> {
     let mut diff_model = ObjectDiffModel::new();
-    
+
     // Get the complete object list from the index state (excluding the local change)
-    let complete_object_list = database.index().compute_complete_object_list()
+    let complete_object_list = database
+        .index()
+        .compute_complete_object_list()
         .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
-    
-    tracing::info!("Using complete object list with {} objects as baseline for change '{}'", 
-          complete_object_list.len(), change.name);
-    
+
+    tracing::info!(
+        "Using complete object list with {} objects as baseline for change '{}'",
+        complete_object_list.len(),
+        change.name
+    );
+
     // Process the change to build the diff
     process_change_for_diff(database, &mut diff_model, change)?;
-    
+
     Ok(diff_model)
 }
 
 /// Process a single change and add its modifications to the diff model
 /// This is the shared logic used by approve and status operations
-pub fn process_change_for_diff(database: &DatabaseRef, diff_model: &mut ObjectDiffModel, change: &Change) -> Result<(), ObjectsTreeError> {
+pub fn process_change_for_diff(
+    database: &DatabaseRef,
+    diff_model: &mut ObjectDiffModel,
+    change: &Change,
+) -> Result<(), ObjectsTreeError> {
     // Process added objects (filter to only MooObject types)
-    for obj_info in change.added_objects.iter().filter(|o| o.object_type == VcsObjectType::MooObject) {
+    for obj_info in change
+        .added_objects
+        .iter()
+        .filter(|o| o.object_type == VcsObjectType::MooObject)
+    {
         let obj_name = obj_id_to_object_name(&obj_info.name, Some(&obj_info.name));
         diff_model.add_object_added(obj_name.clone());
-        
+
         // Get detailed object changes by comparing local vs baseline (which will be empty for new objects)
         let object_change = compare_object_versions(database, &obj_name, obj_info.version)?;
         diff_model.add_object_change(object_change);
     }
-    
+
     // Process deleted objects (filter to only MooObject types)
-    for obj_info in change.deleted_objects.iter().filter(|o| o.object_type == VcsObjectType::MooObject) {
+    for obj_info in change
+        .deleted_objects
+        .iter()
+        .filter(|o| o.object_type == VcsObjectType::MooObject)
+    {
         let obj_name = obj_id_to_object_name(&obj_info.name, Some(&obj_info.name));
         diff_model.add_object_deleted(obj_name);
     }
-    
+
     // Process renamed objects (filter to only MooObject types)
-    for renamed in change.renamed_objects.iter().filter(|r| r.from.object_type == VcsObjectType::MooObject && r.to.object_type == VcsObjectType::MooObject) {
+    for renamed in change.renamed_objects.iter().filter(|r| {
+        r.from.object_type == VcsObjectType::MooObject
+            && r.to.object_type == VcsObjectType::MooObject
+    }) {
         let from_name = obj_id_to_object_name(&renamed.from.name, Some(&renamed.from.name));
         let to_name = obj_id_to_object_name(&renamed.to.name, Some(&renamed.to.name));
         diff_model.add_object_renamed(from_name, to_name);
     }
-    
+
     // Process modified objects with detailed comparison (filter to only MooObject types)
-    for obj_info in change.modified_objects.iter().filter(|o| o.object_type == VcsObjectType::MooObject) {
+    for obj_info in change
+        .modified_objects
+        .iter()
+        .filter(|o| o.object_type == VcsObjectType::MooObject)
+    {
         let obj_name = obj_id_to_object_name(&obj_info.name, Some(&obj_info.name));
         diff_model.add_object_modified(obj_name.clone());
-        
+
         // Get detailed object changes by comparing local vs baseline
         let object_change = compare_object_versions(database, &obj_name, obj_info.version)?;
         diff_model.add_object_change(object_change);
     }
-    
+
     Ok(())
 }
 
 /// Build an ObjectDiffModel for abandoning a change (undo operations)
 /// This creates the reverse operations needed to undo the change
-pub fn build_abandon_diff_from_change(database: &DatabaseRef, change: &Change) -> Result<ObjectDiffModel, ObjectsTreeError> {
+pub fn build_abandon_diff_from_change(
+    database: &DatabaseRef,
+    change: &Change,
+) -> Result<ObjectDiffModel, ObjectsTreeError> {
     // Get the complete object list from the index state for comparison
-    let complete_object_list = database.index().compute_complete_object_list()
+    let complete_object_list = database
+        .index()
+        .compute_complete_object_list()
         .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
-    
-    tracing::info!("Using complete object list with {} objects as baseline for abandoning change '{}'", 
-          complete_object_list.len(), change.name);
-    
+
+    tracing::info!(
+        "Using complete object list with {} objects as baseline for abandoning change '{}'",
+        complete_object_list.len(),
+        change.name
+    );
+
     // Create a delta model showing what needs to be undone
     let mut undo_delta = ObjectDiffModel::new();
-    
+
     // Get object name mappings for better display names
     let object_names = get_object_names_for_change(change);
-    
+
     // Process added objects - to undo, we need to delete them (filter to only MooObject types)
-    for added_obj in change.added_objects.iter().filter(|o| o.object_type == VcsObjectType::MooObject) {
-        let object_name = obj_id_to_object_name(&added_obj.name, object_names.get(&added_obj.name).map(|s| s.as_str()));
+    for added_obj in change
+        .added_objects
+        .iter()
+        .filter(|o| o.object_type == VcsObjectType::MooObject)
+    {
+        let object_name = obj_id_to_object_name(
+            &added_obj.name,
+            object_names.get(&added_obj.name).map(|s| s.as_str()),
+        );
         undo_delta.add_object_deleted(object_name);
     }
-    
+
     // Process deleted objects - to undo, we need to add them back (filter to only MooObject types)
-    for deleted_obj in change.deleted_objects.iter().filter(|o| o.object_type == VcsObjectType::MooObject) {
-        let object_name = obj_id_to_object_name(&deleted_obj.name, object_names.get(&deleted_obj.name).map(|s| s.as_str()));
+    for deleted_obj in change
+        .deleted_objects
+        .iter()
+        .filter(|o| o.object_type == VcsObjectType::MooObject)
+    {
+        let object_name = obj_id_to_object_name(
+            &deleted_obj.name,
+            object_names.get(&deleted_obj.name).map(|s| s.as_str()),
+        );
         undo_delta.add_object_added(object_name);
     }
-    
+
     // Process renamed objects - to undo, we need to rename them back (filter to only MooObject types)
-    for renamed in change.renamed_objects.iter().filter(|r| r.from.object_type == VcsObjectType::MooObject && r.to.object_type == VcsObjectType::MooObject) {
-        let from_name = obj_id_to_object_name(&renamed.from.name, object_names.get(&renamed.from.name).map(|s| s.as_str()));
-        let to_name = obj_id_to_object_name(&renamed.to.name, object_names.get(&renamed.to.name).map(|s| s.as_str()));
+    for renamed in change.renamed_objects.iter().filter(|r| {
+        r.from.object_type == VcsObjectType::MooObject
+            && r.to.object_type == VcsObjectType::MooObject
+    }) {
+        let from_name = obj_id_to_object_name(
+            &renamed.from.name,
+            object_names.get(&renamed.from.name).map(|s| s.as_str()),
+        );
+        let to_name = obj_id_to_object_name(
+            &renamed.to.name,
+            object_names.get(&renamed.to.name).map(|s| s.as_str()),
+        );
         undo_delta.add_object_renamed(to_name, from_name);
     }
-    
+
     // Process modified objects - to undo, we need to mark them as modified
     // and create basic ObjectChange entries (filter to only MooObject types)
-    for modified_obj in change.modified_objects.iter().filter(|o| o.object_type == VcsObjectType::MooObject) {
-        let object_name = obj_id_to_object_name(&modified_obj.name, object_names.get(&modified_obj.name).map(|s| s.as_str()));
+    for modified_obj in change
+        .modified_objects
+        .iter()
+        .filter(|o| o.object_type == VcsObjectType::MooObject)
+    {
+        let object_name = obj_id_to_object_name(
+            &modified_obj.name,
+            object_names.get(&modified_obj.name).map(|s| s.as_str()),
+        );
         undo_delta.add_object_modified(object_name.clone());
-        
+
         // Create a basic ObjectChange for modified objects
         // In a real implementation, you'd want to track what specifically changed
         let mut object_change = ObjectChange::new(object_name);
         object_change.props_modified.insert("content".to_string());
         undo_delta.add_object_change(object_change);
     }
-    
+
     Ok(undo_delta)
 }
 
@@ -584,24 +729,28 @@ pub fn build_abandon_diff_from_change(database: &DatabaseRef, change: &Change) -
 /// query the actual object names from the MOO database
 pub fn get_object_names_for_change(change: &Change) -> HashMap<String, String> {
     let mut object_names = HashMap::new();
-    
+
     // Try to get object names from workspace provider (filter to only MooObject types)
-    for obj_info in change.added_objects.iter()
+    for obj_info in change
+        .added_objects
+        .iter()
         .chain(change.modified_objects.iter())
         .chain(change.deleted_objects.iter())
-        .filter(|o| o.object_type == VcsObjectType::MooObject) {
-        
+        .filter(|o| o.object_type == VcsObjectType::MooObject)
+    {
         // For now, we'll just use the object name as the name
         // In a real implementation, you'd query the actual object names
         object_names.insert(obj_info.name.clone(), obj_info.name.clone());
     }
-    
-    for renamed in change.renamed_objects.iter()
-        .filter(|r| r.from.object_type == VcsObjectType::MooObject && r.to.object_type == VcsObjectType::MooObject) {
+
+    for renamed in change.renamed_objects.iter().filter(|r| {
+        r.from.object_type == VcsObjectType::MooObject
+            && r.to.object_type == VcsObjectType::MooObject
+    }) {
         object_names.insert(renamed.from.name.clone(), renamed.from.name.clone());
         object_names.insert(renamed.to.name.clone(), renamed.to.name.clone());
     }
-    
+
     object_names
 }
 
@@ -614,9 +763,9 @@ mod tests {
         let mut change = ObjectChange::new("TestObject".to_string());
         change.verbs_added.insert("new_verb".to_string());
         change.props_modified.insert("existing_prop".to_string());
-        
+
         let moo_var = change.to_moo_var();
-        
+
         // Verify it's a map
         assert!(matches!(moo_var.variant(), moor_var::Variant::Map(_)));
     }
@@ -626,9 +775,9 @@ mod tests {
         let mut model = ObjectDiffModel::new();
         model.add_object_added("NewObject".to_string());
         model.add_object_deleted("OldObject".to_string());
-        
+
         let moo_var = model.to_moo_var();
-        
+
         // Verify it's a map
         assert!(matches!(moo_var.variant(), moor_var::Variant::Map(_)));
     }
@@ -638,20 +787,23 @@ mod tests {
         assert_eq!(obj_id_to_object_name("#4", Some("foobar")), "Foobar");
         assert_eq!(obj_id_to_object_name("#4", Some("#4")), "#4");
         assert_eq!(obj_id_to_object_name("#4", None), "#4");
-        assert_eq!(obj_id_to_object_name("TestObject", Some("TestObject")), "TestObject");
+        assert_eq!(
+            obj_id_to_object_name("TestObject", Some("TestObject")),
+            "TestObject"
+        );
     }
 
     #[test]
     fn test_merge_object_diff_models() {
         let mut model1 = ObjectDiffModel::new();
         model1.add_object_added("Object1".to_string());
-        
+
         let mut model2 = ObjectDiffModel::new();
         model2.add_object_added("Object2".to_string());
         model2.add_object_deleted("Object3".to_string());
-        
+
         model1.merge(model2);
-        
+
         assert!(model1.objects_added.contains("Object1"));
         assert!(model1.objects_added.contains("Object2"));
         assert!(model1.objects_deleted.contains("Object3"));

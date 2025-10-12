@@ -1,12 +1,12 @@
-use crate::operations::{Operation, OperationRoute, OperationParameter, OperationExample};
+use crate::operations::{Operation, OperationExample, OperationParameter, OperationRoute};
 use axum::http::Method;
 use tracing::{error, info};
 
 use crate::database::{DatabaseRef, ObjectsTreeError};
-use crate::types::User;
-use crate::providers::index::IndexProvider;
-use crate::types::{ChangeAbandonRequest, ChangeStatus};
 use crate::object_diff::{ObjectDiffModel, build_abandon_diff_from_change};
+use crate::providers::index::IndexProvider;
+use crate::types::User;
+use crate::types::{ChangeAbandonRequest, ChangeStatus};
 
 /// Change abandon operation that abandons the top change in the index
 #[derive(Clone)]
@@ -21,65 +21,91 @@ impl ChangeAbandonOperation {
     }
 
     /// Process the change abandon request and return an ObjectDiffModel showing what needs to be undone
-    fn process_change_abandon(&self, _request: ChangeAbandonRequest) -> Result<ObjectDiffModel, ObjectsTreeError> {
+    fn process_change_abandon(
+        &self,
+        _request: ChangeAbandonRequest,
+    ) -> Result<ObjectDiffModel, ObjectsTreeError> {
         // Get the current change from the top of the index
-        let top_change_id = self.database.index().get_top_change()
+        let top_change_id = self
+            .database
+            .index()
+            .get_top_change()
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
-        
+
         if let Some(change_id) = top_change_id {
-            let change = self.database.index().get_change(&change_id)
+            let change = self
+                .database
+                .index()
+                .get_change(&change_id)
                 .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
-                .ok_or_else(|| ObjectsTreeError::SerializationError(format!("Top change '{change_id}' not found")))?;
-            
+                .ok_or_else(|| {
+                    ObjectsTreeError::SerializationError(format!(
+                        "Top change '{change_id}' not found"
+                    ))
+                })?;
+
             info!("Attempting to abandon current change: {}", change.id);
-            
+
             if change.status == ChangeStatus::Merged {
-                error!("Cannot abandon change '{}' ({}) - it has already been merged", change.name, change.id);
-                return Err(ObjectsTreeError::SerializationError(
-                    format!("Cannot abandon merged change '{}'", change.name)
-                ));
+                error!(
+                    "Cannot abandon change '{}' ({}) - it has already been merged",
+                    change.name, change.id
+                );
+                return Err(ObjectsTreeError::SerializationError(format!(
+                    "Cannot abandon merged change '{}'",
+                    change.name
+                )));
             }
-            
+
             // Build the abandon diff using shared logic
             let undo_delta = build_abandon_diff_from_change(&self.database, &change)?;
-            
+
             // Remove from working index if it's LOCAL
             if change.status == ChangeStatus::Local {
-                self.database.index().remove_from_index(&change.id)
+                self.database
+                    .index()
+                    .remove_from_index(&change.id)
                     .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
                 info!("Removed change '{}' from working index", change.name);
-                
+
                 // Delete the change from history storage (abandoned changes are not kept)
-                self.database.index().delete_change(&change.id)
+                self.database
+                    .index()
+                    .delete_change(&change.id)
                     .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
-                info!("Deleted abandoned change '{}' from history storage", change.name);
+                info!(
+                    "Deleted abandoned change '{}' from history storage",
+                    change.name
+                );
             }
-            
-            info!("Successfully abandoned change '{}' ({}), created undo delta", change.name, change.id);
+
+            info!(
+                "Successfully abandoned change '{}' ({}), created undo delta",
+                change.name, change.id
+            );
             Ok(undo_delta)
         } else {
             error!("No current change to abandon");
             Err(ObjectsTreeError::SerializationError(
-                "Error: No change to abandon".to_string()
+                "Error: No change to abandon".to_string(),
             ))
         }
     }
-
 }
 
 impl Operation for ChangeAbandonOperation {
     fn name(&self) -> &'static str {
         "change/abandon"
     }
-    
+
     fn description(&self) -> &'static str {
         "Abandons the top local change in the index, removing it from index. Returns an ObjectDiffModel showing what changes need to be undone. Cannot abandon merged changes."
     }
-    
+
     fn response_content_type(&self) -> &'static str {
         "text/x-moo"
     }
-    
+
     fn philosophy(&self) -> &'static str {
         "Discards your current local changelist completely, removing all tracked changes without submitting them. \
         Use this when you've made changes you don't want to keep - perhaps experimental work that didn't pan out, \
@@ -88,11 +114,11 @@ impl Operation for ChangeAbandonOperation {
         cannot abandon changes that have already been merged into the repository; this operation only works on \
         local (unsubmitted) changes."
     }
-    
+
     fn parameters(&self) -> Vec<OperationParameter> {
         vec![]
     }
-    
+
     fn examples(&self) -> Vec<OperationExample> {
         vec![
             OperationExample {
@@ -105,45 +131,43 @@ player:tell("Change abandoned. You need to revert ", length(diff["modified_objec
             }
         ]
     }
-    
+
     fn routes(&self) -> Vec<OperationRoute> {
-        vec![
-            OperationRoute {
-                path: "/api/change/abandon".to_string(),
-                method: Method::POST,
-                is_json: false,
-            }
-        ]
+        vec![OperationRoute {
+            path: "/api/change/abandon".to_string(),
+            method: Method::POST,
+            is_json: false,
+        }]
     }
-    
+
     fn responses(&self) -> Vec<crate::operations::OperationResponse> {
         use crate::operations::OperationResponse;
         vec![
             OperationResponse::success(
                 "Operation executed successfully",
-                r#"["objects_renamed" -> [], "objects_deleted" -> {}, "objects_added" -> {}, "objects_modified" -> {"obj1"}, "changes" -> {["obj_id" -> "obj1", "verbs_modified" -> {}, "verbs_added" -> {}, "verbs_renamed" -> [], "verbs_deleted" -> {}, "props_modified" -> {}, "props_added" -> {}, "props_renamed" -> [], "props_deleted" -> {}]}]"#
+                r#"["objects_renamed" -> [], "objects_deleted" -> {}, "objects_added" -> {}, "objects_modified" -> {"obj1"}, "changes" -> {["obj_id" -> "obj1", "verbs_modified" -> {}, "verbs_added" -> {}, "verbs_renamed" -> [], "verbs_deleted" -> {}, "props_modified" -> {}, "props_added" -> {}, "props_renamed" -> [], "props_deleted" -> {}]}]"#,
             ),
             OperationResponse::new(
                 400,
                 "Bad Request - Cannot abandon merged change",
-                r#"E_INVARG("Error: Cannot abandon merged change 'my-change'")"#
+                r#"E_INVARG("Error: Cannot abandon merged change 'my-change'")"#,
             ),
             OperationResponse::new(
                 404,
                 "Not Found - No change to abandon",
-                r#"E_INVARG("Error: No change to abandon")"#
+                r#"E_INVARG("Error: No change to abandon")"#,
             ),
             OperationResponse::new(
                 500,
                 "Internal Server Error - Database or system error",
-                r#"E_INVARG("Error: Database error: failed to abandon change")"#
+                r#"E_INVARG("Error: Database error: failed to abandon change")"#,
             ),
         ]
     }
 
     fn execute(&self, args: Vec<String>, _user: &User) -> moor_var::Var {
         info!("Change abandon operation received {} arguments", args.len());
-        
+
         let request = ChangeAbandonRequest {};
 
         match self.process_change_abandon(request) {

@@ -10,17 +10,17 @@ use tokio::signal::unix::{SignalKind, signal};
 use tracing::{error, info};
 use uuid::Uuid;
 
-mod operations;
-mod router;
 mod config;
-mod util;
 mod database;
-mod providers;
-mod types;
 mod object_diff;
+mod operations;
+mod providers;
+mod router;
+mod types;
+mod util;
 
 use operations::create_default_registry;
-use router::{start_http_server, create_rpc_handler};
+use router::{create_rpc_handler, start_http_server};
 
 // TODO: timeouts, and generally more error handling
 #[derive(Parser, Debug)]
@@ -84,7 +84,7 @@ async fn main() -> Result<(), eyre::Error> {
     let worker_type = moor_var::Symbol::mk("vcs");
     let ks = kill_switch.clone();
     let perform_func = Arc::new(create_rpc_handler(registry.clone()));
-    
+
     // Start RPC worker loop
     let worker_loop_thread = tokio::spawn(async move {
         if let Err(e) = worker_loop(

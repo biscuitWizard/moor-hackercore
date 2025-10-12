@@ -1,13 +1,16 @@
-use axum::{response::{Json, Redirect}, routing::{get, post}, Router};
+use axum::{
+    Router,
+    response::{Json, Redirect},
+    routing::{get, post},
+};
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tracing::info;
 use utoipa::OpenApi;
 use utoipa::openapi::{
-    PathsBuilder, InfoBuilder, ResponseBuilder, ContentBuilder, RefOr,
-    path::{PathItemBuilder, OperationBuilder},
+    ContentBuilder, HttpMethod, InfoBuilder, PathsBuilder, RefOr, ResponseBuilder,
+    path::{OperationBuilder, PathItemBuilder},
     request_body::RequestBodyBuilder,
-    HttpMethod,
 };
 use utoipa_swagger_ui::SwaggerUi;
 
@@ -15,27 +18,25 @@ use crate::operations::{OperationRegistry, OperationRequest};
 use crate::types::{HttpRequest, OperationResponse};
 
 // Import moor types for RPC
-use moor_var::{Obj, Symbol, Var, v_str};
 use moor_common::tasks::WorkerError;
+use moor_var::{Obj, Symbol, Var, v_str};
 use rpc_common::WorkerToken;
 use uuid::Uuid;
 
 /// Type alias for RPC handler function signature to reduce complexity
-type RpcHandler = std::pin::Pin<Box<dyn std::future::Future<Output = Result<Var, WorkerError>> + Send + Sync + 'static>>;
+type RpcHandler = std::pin::Pin<
+    Box<dyn std::future::Future<Output = Result<Var, WorkerError>> + Send + Sync + 'static>,
+>;
 
 /// Base OpenAPI documentation for VCS Worker API
 #[derive(OpenApi)]
-#[openapi(
-    components(
-        schemas(HttpRequest, OperationResponse)
-    )
-)]
+#[openapi(components(schemas(HttpRequest, OperationResponse)))]
 struct BaseApiDoc;
 
 /// Generate OpenAPI spec dynamically from registered operations
 fn generate_openapi_spec(registry: &OperationRegistry) -> utoipa::openapi::OpenApi {
     let mut openapi = BaseApiDoc::openapi();
-    
+
     // Set API info
     openapi.info = InfoBuilder::new()
         .title("VCS Worker API")
@@ -151,7 +152,7 @@ result = worker_request("vcs", {"object/update", "$player", objdef_lines});
 
 For more details on each operation, see the categorized endpoints below."#))
         .build();
-    
+
     // Add tags with descriptions for each category
     openapi.tags = Some(vec![
         utoipa::openapi::tag::TagBuilder::new()
@@ -183,9 +184,9 @@ For more details on each operation, see the categorized endpoints below."#))
             .description(Some("System-level operations including repository cloning and basic connectivity tests."))
             .build(),
     ]);
-    
+
     let mut paths = PathsBuilder::new();
-    
+
     // Add the generic RPC endpoint
     let rpc_op = OperationBuilder::new()
         .tag("vcs-worker")
@@ -193,65 +194,85 @@ For more details on each operation, see the categorized endpoints below."#))
         .description(Some("Execute any registered operation by name"))
         .request_body(Some(
             RequestBodyBuilder::new()
-                .content("application/json", ContentBuilder::new()
-                    .schema(Some(RefOr::Ref(utoipa::openapi::Ref::from_schema_name("HttpRequest"))))
-                    .build())
+                .content(
+                    "application/json",
+                    ContentBuilder::new()
+                        .schema(Some(RefOr::Ref(utoipa::openapi::Ref::from_schema_name(
+                            "HttpRequest",
+                        ))))
+                        .build(),
+                )
                 .required(Some(utoipa::openapi::Required::True))
-                .build()
+                .build(),
         ))
-        .response("200", ResponseBuilder::new()
-            .description("Operation executed successfully")
-            .content("application/json", ContentBuilder::new()
-                .schema(Some(RefOr::Ref(utoipa::openapi::Ref::from_schema_name("OperationResponse"))))
-                .build())
-            .build())
+        .response(
+            "200",
+            ResponseBuilder::new()
+                .description("Operation executed successfully")
+                .content(
+                    "application/json",
+                    ContentBuilder::new()
+                        .schema(Some(RefOr::Ref(utoipa::openapi::Ref::from_schema_name(
+                            "OperationResponse",
+                        ))))
+                        .build(),
+                )
+                .build(),
+        )
         .build();
-    
-    paths = paths.path("/rpc", PathItemBuilder::new()
-        .operation(HttpMethod::Post, rpc_op)
-        .build());
-    
+
+    paths = paths.path(
+        "/rpc",
+        PathItemBuilder::new()
+            .operation(HttpMethod::Post, rpc_op)
+            .build(),
+    );
+
     // Add dynamic routes from operations
-    let mut operation_routes: std::collections::HashMap<String, Vec<(String, axum::http::Method, String)>> = std::collections::HashMap::new();
-    
+    let mut operation_routes: std::collections::HashMap<
+        String,
+        Vec<(String, axum::http::Method, String)>,
+    > = std::collections::HashMap::new();
+
     for (route, op_name) in registry.get_all_routes() {
         let operations_list = registry.list_operations();
         if let Some(operation) = operations_list.iter().find(|&name| name == &op_name) {
             if let Some(desc) = registry.get_operation_description(operation) {
-                operation_routes.entry(route.path.clone())
+                operation_routes
+                    .entry(route.path.clone())
                     .or_default()
                     .push((op_name.clone(), route.method.clone(), desc.to_string()));
             }
         }
     }
-    
+
     for (path, ops) in operation_routes {
         let mut path_item = PathItemBuilder::new();
-        
+
         for (op_name, method, description) in ops {
             // Get the full operation to extract detailed documentation
             let operation_opt = registry.get_operation(&op_name);
-            
+
             // Build comprehensive description with philosophy, parameters, and examples
             let mut full_description = description.clone();
-            
+
             // Determine tag/category from operation name (e.g., "object/get" -> "object")
             let tag = if op_name.contains('/') {
                 op_name.split('/').next().unwrap_or("system")
             } else {
                 "system"
             };
-            
+
             // Build request body with parameter schema if operation has parameters
             let mut request_body_builder = None;
-            
+
             if let Some(op) = operation_opt.as_ref() {
                 let params = op.parameters();
                 if !params.is_empty() && method != "GET" {
                     // Build a JSON schema example for the request body
                     let mut example_obj = serde_json::Map::new();
                     example_obj.insert("operation".to_string(), serde_json::json!(op_name));
-                    
+
                     let mut args_example = Vec::new();
                     for param in &params {
                         if param.required {
@@ -260,9 +281,10 @@ For more details on each operation, see the categorized endpoints below."#))
                         }
                     }
                     example_obj.insert("args".to_string(), serde_json::json!(args_example));
-                    
-                    let example_json = serde_json::to_string_pretty(&example_obj).unwrap_or_default();
-                    
+
+                    let example_json =
+                        serde_json::to_string_pretty(&example_obj).unwrap_or_default();
+
                     request_body_builder = Some(
                         RequestBodyBuilder::new()
                             .description(Some(format!(
@@ -284,7 +306,7 @@ For more details on each operation, see the categorized endpoints below."#))
                     );
                 }
             }
-            
+
             if let Some(op) = operation_opt {
                 // Add philosophy section
                 let philosophy = op.philosophy();
@@ -292,7 +314,7 @@ For more details on each operation, see the categorized endpoints below."#))
                     full_description.push_str("\n\n## Philosophy\n\n");
                     full_description.push_str(philosophy);
                 }
-                
+
                 // Add parameters section
                 let params = op.parameters();
                 if !params.is_empty() {
@@ -301,12 +323,16 @@ For more details on each operation, see the categorized endpoints below."#))
                         full_description.push_str(&format!(
                             "- **{}** {}: {}\n",
                             param.name,
-                            if param.required { "(required)" } else { "(optional)" },
+                            if param.required {
+                                "(required)"
+                            } else {
+                                "(optional)"
+                            },
                             param.description
                         ));
                     }
                 }
-                
+
                 // Add examples section
                 let examples = op.examples();
                 if !examples.is_empty() {
@@ -316,7 +342,7 @@ For more details on each operation, see the categorized endpoints below."#))
                         full_description.push_str("**MOOCode:**\n```moo\n");
                         full_description.push_str(&example.moocode);
                         full_description.push_str("\n```\n\n");
-                        
+
                         if let Some(ref curl) = example.http_curl {
                             full_description.push_str("**HTTP (curl):**\n```bash\n");
                             full_description.push_str(curl);
@@ -325,33 +351,33 @@ For more details on each operation, see the categorized endpoints below."#))
                     }
                 }
             }
-            
+
             // Get the response content type from the operation
             let content_type = if let Some(op) = operation_opt.as_ref() {
                 op.response_content_type()
             } else {
                 "application/json"
             };
-            
+
             let mut operation_builder = OperationBuilder::new()
                 .tag(tag)
                 .operation_id(Some(op_name.replace("/", "_")))
                 .summary(Some(op_name.clone()))
                 .description(Some(full_description));
-            
+
             // Add all responses from the operation
             if let Some(op) = operation_opt.as_ref() {
                 for response in op.responses() {
-                    let mut response_builder = ResponseBuilder::new()
-                        .description(&response.description);
-                    
+                    let mut response_builder =
+                        ResponseBuilder::new().description(&response.description);
+
                     // Add content with proper content type
                     if content_type == "text/x-moo" {
                         response_builder = response_builder.content(
                             content_type,
                             ContentBuilder::new()
                                 .example(Some(serde_json::json!(response.example)))
-                                .build()
+                                .build(),
                         );
                     } else {
                         // For application/json, use schema for 200, example for errors
@@ -359,23 +385,23 @@ For more details on each operation, see the categorized endpoints below."#))
                             response_builder = response_builder.content(
                                 content_type,
                                 ContentBuilder::new()
-                                    .schema(Some(RefOr::Ref(utoipa::openapi::Ref::from_schema_name("OperationResponse"))))
-                                    .build()
+                                    .schema(Some(RefOr::Ref(
+                                        utoipa::openapi::Ref::from_schema_name("OperationResponse"),
+                                    )))
+                                    .build(),
                             );
                         } else {
                             response_builder = response_builder.content(
                                 content_type,
                                 ContentBuilder::new()
                                     .example(Some(serde_json::json!(response.example)))
-                                    .build()
+                                    .build(),
                             );
                         }
                     }
-                    
-                    operation_builder = operation_builder.response(
-                        response.status_code.to_string(),
-                        response_builder.build()
-                    );
+
+                    operation_builder = operation_builder
+                        .response(response.status_code.to_string(), response_builder.build());
                 }
             } else {
                 // Fallback for operations without proper response definitions
@@ -386,20 +412,22 @@ For more details on each operation, see the categorized endpoints below."#))
                         .content(
                             content_type,
                             ContentBuilder::new()
-                                .schema(Some(RefOr::Ref(utoipa::openapi::Ref::from_schema_name("OperationResponse"))))
-                                .build()
+                                .schema(Some(RefOr::Ref(utoipa::openapi::Ref::from_schema_name(
+                                    "OperationResponse",
+                                ))))
+                                .build(),
                         )
-                        .build()
+                        .build(),
                 );
             }
-            
+
             // Add request body if we have one
             if let Some(request_body) = request_body_builder {
                 operation_builder = operation_builder.request_body(Some(request_body));
             }
-            
+
             let operation = operation_builder.build();
-            
+
             let http_method = match method.as_str() {
                 "GET" => HttpMethod::Get,
                 "POST" => HttpMethod::Post,
@@ -407,13 +435,13 @@ For more details on each operation, see the categorized endpoints below."#))
                 "DELETE" => HttpMethod::Delete,
                 _ => continue,
             };
-            
+
             path_item = path_item.operation(http_method, operation);
         }
-        
+
         paths = paths.path(path, path_item.build());
     }
-    
+
     openapi.paths = paths.build();
     openapi
 }
@@ -421,7 +449,7 @@ For more details on each operation, see the categorized endpoints below."#))
 /// Generic RPC endpoint handler
 async fn rpc_handler(
     registry: Arc<OperationRegistry>,
-    Json(payload): Json<HttpRequest>
+    Json(payload): Json<HttpRequest>,
 ) -> Json<OperationResponse> {
     let request = OperationRequest {
         operation: payload.operation,
@@ -433,72 +461,83 @@ async fn rpc_handler(
 /// Create the HTTP router from registered operations.
 /// Automatically generates routes from the operation definitions in the registry.
 pub fn create_http_router(registry: Arc<OperationRegistry>) -> Router {
-    let mut api_router = Router::new()
-        .route("/rpc", post({
+    let mut api_router = Router::new().route(
+        "/rpc",
+        post({
             let registry = registry.clone();
             move |payload| rpc_handler(registry.clone(), payload)
-        }));
-    
+        }),
+    );
+
     // Dynamically add routes from registered operations
     for (route, op_name) in registry.get_all_routes() {
         let registry_for_route = registry.clone();
         let operation_name = op_name.clone();
-        
+
         match route.method {
             axum::http::Method::GET => {
-                api_router = api_router.route(&route.path, get({
-                    let registry = registry_for_route.clone();
-                    let op_name = operation_name.clone();
-                    move || {
-                        let registry = registry.clone();
-                        let op_name = op_name.clone();
-                        async move {
-                            let request = OperationRequest {
-                                operation: op_name,
-                                args: vec![],
-                            };
-                            Json(registry.execute_http(request))
-                        }
-                    }
-                }));
-            }
-            axum::http::Method::POST => {
-                if route.is_json {
-                    // For JSON POST requests, use the generic RPC handler
-                    api_router = api_router.route(&route.path, post({
+                api_router = api_router.route(
+                    &route.path,
+                    get({
                         let registry = registry_for_route.clone();
                         let op_name = operation_name.clone();
-                        move |Json(payload): Json<HttpRequest>| {
+                        move || {
                             let registry = registry.clone();
                             let op_name = op_name.clone();
                             async move {
                                 let request = OperationRequest {
                                     operation: op_name,
-                                    args: payload.args,
+                                    args: vec![],
                                 };
                                 Json(registry.execute_http(request))
                             }
                         }
-                    }));
+                    }),
+                );
+            }
+            axum::http::Method::POST => {
+                if route.is_json {
+                    // For JSON POST requests, use the generic RPC handler
+                    api_router = api_router.route(
+                        &route.path,
+                        post({
+                            let registry = registry_for_route.clone();
+                            let op_name = operation_name.clone();
+                            move |Json(payload): Json<HttpRequest>| {
+                                let registry = registry.clone();
+                                let op_name = op_name.clone();
+                                async move {
+                                    let request = OperationRequest {
+                                        operation: op_name,
+                                        args: payload.args,
+                                    };
+                                    Json(registry.execute_http(request))
+                                }
+                            }
+                        }),
+                    );
                 }
             }
             _ => {
-                tracing::warn!("Unsupported HTTP method for route: {} {:?}", route.path, route.method);
+                tracing::warn!(
+                    "Unsupported HTTP method for route: {} {:?}",
+                    route.path,
+                    route.method
+                );
             }
         }
     }
-    
+
     // Generate dynamic OpenAPI spec from operations
     let openapi_spec = generate_openapi_spec(&registry);
-    
+
     // Apply state to API router first, then merge with Swagger UI
     let api_router = api_router.with_state(registry);
-    
+
     // Create the final router with Swagger UI (no state needed for Swagger routes)
     Router::new()
         .route("/", get(|| async { Redirect::permanent("/swagger-ui") }))
-        .merge(SwaggerUi::new("/swagger-ui")
-            .url("/api-docs/openapi.json", openapi_spec))
+        .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", openapi_spec))
         .merge(api_router)
 }
 
@@ -508,14 +547,14 @@ pub async fn start_http_server(
     registry: Arc<OperationRegistry>,
 ) -> Result<(), eyre::Error> {
     let router = create_http_router(registry);
-    
+
     let listener = TcpListener::bind(address).await?;
     info!("HTTP server listening on {}", address);
-    
+
     axum::serve(listener, router.into_make_service())
         .await
         .map_err(|e| eyre::eyre!(e))?;
-        
+
     Ok(())
 }
 
@@ -558,9 +597,15 @@ pub async fn process_rpc_request(
                     string_list.push(format!("{item:?}"));
                 }
             }
-            let json_str = serde_json::to_string(&string_list).unwrap_or_else(|_| format!("{list:?}"));
+            let json_str =
+                serde_json::to_string(&string_list).unwrap_or_else(|_| format!("{list:?}"));
             args.push(json_str.clone());
-            info!("RPC arg {}: list with {} items converted to JSON = '{}'", i + 1, string_list.len(), json_str);
+            info!(
+                "RPC arg {}: list with {} items converted to JSON = '{}'",
+                i + 1,
+                string_list.len(),
+                json_str
+            );
         } else {
             // Convert other types to string representation
             let repr = format!("{arg:?}");
@@ -582,15 +627,8 @@ pub async fn process_rpc_request(
 /// Create a handler closure that can be used with the RPC worker loop
 pub fn create_rpc_handler(
     registry: Arc<OperationRegistry>,
-) -> impl Fn(
-        WorkerToken,
-        Uuid,
-        Symbol,
-        Obj,
-        Vec<Var>,
-        Option<std::time::Duration>,
-    ) -> RpcHandler
-           + Clone {
+) -> impl Fn(WorkerToken, Uuid, Symbol, Obj, Vec<Var>, Option<std::time::Duration>) -> RpcHandler + Clone
+{
     move |token, request_id, worker_type, perms, arguments, timeout| {
         let registry = registry.clone();
         Box::pin(process_rpc_request(

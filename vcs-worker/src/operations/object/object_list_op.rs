@@ -1,12 +1,12 @@
-use crate::operations::{Operation, OperationRoute, OperationParameter, OperationExample};
+use crate::operations::{Operation, OperationExample, OperationParameter, OperationRoute};
 use axum::http::Method;
-use tracing::{error, info};
 use serde::{Deserialize, Serialize};
+use tracing::{error, info};
 
 use crate::database::{DatabaseRef, ObjectsTreeError};
-use crate::types::{ObjectInfo, User};
 use crate::providers::index::IndexProvider;
-use moor_var::{v_error, v_list, v_str, E_INVARG, Var};
+use crate::types::{ObjectInfo, User};
+use moor_var::{E_INVARG, Var, v_error, v_list, v_str};
 
 /// Request structure for object list operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -29,13 +29,19 @@ impl ObjectListOperation {
     }
 
     /// Process the object list request by delegating to IndexProvider
-    fn process_object_list(&self, _request: ObjectListRequest) -> Result<Vec<ObjectInfo>, ObjectsTreeError> {
+    fn process_object_list(
+        &self,
+        _request: ObjectListRequest,
+    ) -> Result<Vec<ObjectInfo>, ObjectsTreeError> {
         info!("Requesting complete object list from IndexProvider");
-        
+
         // Use the IndexProvider to compute the complete object list
-        let object_list = self.database.index().compute_complete_object_list()
+        let object_list = self
+            .database
+            .index()
+            .compute_complete_object_list()
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
-        
+
         Ok(object_list)
     }
 }
@@ -44,15 +50,15 @@ impl Operation for ObjectListOperation {
     fn name(&self) -> &'static str {
         "object/list"
     }
-    
+
     fn description(&self) -> &'static str {
         "Lists all objects by walking through the entire change history chronologically, tracking names, renames, additions, and deletions. Returns a MOO list of object names."
     }
-    
+
     fn response_content_type(&self) -> &'static str {
         "text/x-moo"
     }
-    
+
     fn philosophy(&self) -> &'static str {
         "Provides a complete view of all MOO objects currently in the version control repository. This \
         operation walks through the entire change history chronologically, computing the current state by \
@@ -61,68 +67,66 @@ impl Operation for ObjectListOperation {
         current working changelist. This is useful for getting an overview of your repository contents, \
         synchronizing with the MOO database, or building tools that need to operate on the full object set."
     }
-    
+
     fn parameters(&self) -> Vec<OperationParameter> {
         vec![]
     }
-    
+
     fn examples(&self) -> Vec<OperationExample> {
-        vec![
-            OperationExample {
-                description: "List all objects in the repository".to_string(),
-                moocode: r##"// Returns a list of object names
+        vec![OperationExample {
+            description: "List all objects in the repository".to_string(),
+            moocode: r##"// Returns a list of object names
 objects = worker_request("vcs", {"object/list"});
 // objects is a list like: {"$player", "$room", "#123", "#124"}
 for obj in (objects)
     player:tell("Object: ", obj);
-endfor"##.to_string(),
-                http_curl: Some(r##"curl -X POST http://localhost:8081/api/object/list"##.to_string()),
-            }
-        ]
+endfor"##
+                .to_string(),
+            http_curl: Some(r##"curl -X POST http://localhost:8081/api/object/list"##.to_string()),
+        }]
     }
-    
+
     fn routes(&self) -> Vec<OperationRoute> {
-        vec![
-            OperationRoute {
-                path: "/api/object/list".to_string(),
-                method: Method::POST,
-                is_json: true,
-            }
-        ]
+        vec![OperationRoute {
+            path: "/api/object/list".to_string(),
+            method: Method::POST,
+            is_json: true,
+        }]
     }
-    
+
     fn responses(&self) -> Vec<crate::operations::OperationResponse> {
         use crate::operations::OperationResponse;
         vec![
             OperationResponse::success(
                 "Operation executed successfully",
-                r##"{"$player", "$room", "#123", "#124"}"##
+                r##"{"$player", "$room", "#123", "#124"}"##,
             ),
             OperationResponse::new(
                 500,
                 "Internal Server Error - Database or computation error",
-                r##"E_INVARG("Failed to compute object list: database operation failed")"##
+                r##"E_INVARG("Failed to compute object list: database operation failed")"##,
             ),
         ]
     }
 
     fn execute(&self, args: Vec<String>, _user: &User) -> Var {
         info!("Executing object list operation with {} args", args.len());
-        
+
         let request = ObjectListRequest {
             include_deleted: false, // For now, don't include deleted objects
         };
 
         match self.process_object_list(request) {
             Ok(object_list) => {
-                info!("Object list operation completed successfully with {} objects", object_list.len());
-                
+                info!(
+                    "Object list operation completed successfully with {} objects",
+                    object_list.len()
+                );
+
                 // Convert ObjectInfo list to MOO list of object names (strings)
-                let object_names: Vec<Var> = object_list
-                    .iter()
-                    .map(|obj| v_str(&obj.name))
-                    .collect();
-                
+                let object_names: Vec<Var> =
+                    object_list.iter().map(|obj| v_str(&obj.name)).collect();
+
                 v_list(&object_names)
             }
             Err(e) => {

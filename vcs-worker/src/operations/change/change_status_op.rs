@@ -1,14 +1,14 @@
-use crate::operations::{Operation, OperationRoute, OperationParameter, OperationExample};
+use crate::operations::{Operation, OperationExample, OperationParameter, OperationRoute};
 use axum::http::Method;
-use tracing::{error, info};
 use serde::{Deserialize, Serialize};
+use tracing::{error, info};
 
 use crate::database::{DatabaseRef, ObjectsTreeError};
-use crate::types::User;
+use crate::object_diff::build_object_diff_from_change;
 use crate::providers::index::IndexProvider;
 use crate::types::ChangeStatus;
-use crate::object_diff::build_object_diff_from_change;
-use moor_var::{v_error, E_INVARG};
+use crate::types::User;
+use moor_var::{E_INVARG, v_error};
 
 /// Request structure for change status operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -24,7 +24,6 @@ pub struct ChangeStatusResponse {
     pub status: ChangeStatus,
 }
 
-
 /// Change status operation that lists all objects modified in the current change
 #[derive(Clone)]
 pub struct ChangeStatusOperation {
@@ -38,56 +37,74 @@ impl ChangeStatusOperation {
     }
 
     /// Process the change status request
-    fn process_change_status(&self, _request: ChangeStatusRequest) -> Result<moor_var::Var, ObjectsTreeError> {
+    fn process_change_status(
+        &self,
+        _request: ChangeStatusRequest,
+    ) -> Result<moor_var::Var, ObjectsTreeError> {
         // Get the top change from the index
-        let top_change_id = self.database.index().get_top_change()
+        let top_change_id = self
+            .database
+            .index()
+            .get_top_change()
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
-        
+
         if let Some(change_id) = top_change_id {
             // Get the actual change object
-            let current_change = self.database.index().get_change(&change_id)
+            let current_change = self
+                .database
+                .index()
+                .get_change(&change_id)
                 .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
-                .ok_or_else(|| ObjectsTreeError::SerializationError(format!("Change '{change_id}' not found")))?;
-            
+                .ok_or_else(|| {
+                    ObjectsTreeError::SerializationError(format!("Change '{change_id}' not found"))
+                })?;
+
             // Check if the top change is local status
             if current_change.status != ChangeStatus::Local {
-                info!("Top change '{}' is not local status (status: {:?}), returning error", 
-                      current_change.name, current_change.status);
-                return Ok(v_error(E_INVARG.msg("No local change on top of index - nothing to do")));
+                info!(
+                    "Top change '{}' is not local status (status: {:?}), returning error",
+                    current_change.name, current_change.status
+                );
+                return Ok(v_error(
+                    E_INVARG.msg("No local change on top of index - nothing to do"),
+                ));
             }
-            
+
             info!("Getting status for local change: {}", current_change.id);
-            
+
             // Build the ObjectDiffModel by comparing local change against the compiled state below it
             let diff_model = build_object_diff_from_change(&self.database, &current_change)?;
-            
+
             // Convert to MOO Var and return
             let status_map = diff_model.to_moo_var();
-            
-            info!("Successfully retrieved change status for '{}'", current_change.name);
+
+            info!(
+                "Successfully retrieved change status for '{}'",
+                current_change.name
+            );
             Ok(status_map)
         } else {
             info!("No top change found, returning error");
-            Ok(v_error(E_INVARG.msg("No change on top of index - nothing to do")))
+            Ok(v_error(
+                E_INVARG.msg("No change on top of index - nothing to do"),
+            ))
         }
     }
-    
-    
 }
 
 impl Operation for ChangeStatusOperation {
     fn name(&self) -> &'static str {
         "change/status"
     }
-    
+
     fn description(&self) -> &'static str {
         "Lists all objects that have been modified in the current change (added, modified, deleted, renamed)"
     }
-    
+
     fn response_content_type(&self) -> &'static str {
         "text/x-moo"
     }
-    
+
     fn philosophy(&self) -> &'static str {
         "Provides a summary of all pending changes in your current local changelist. This is your primary \
         tool for reviewing what you've done before submitting - it shows which objects have been added, \
@@ -96,62 +113,61 @@ impl Operation for ChangeStatusOperation {
         development to track your progress and ensure you haven't accidentally modified objects you didn't \
         intend to change."
     }
-    
+
     fn parameters(&self) -> Vec<OperationParameter> {
         vec![]
     }
-    
+
     fn examples(&self) -> Vec<OperationExample> {
-        vec![
-            OperationExample {
-                description: "Get status of current change".to_string(),
-                moocode: r#"diff = worker_request("vcs", {"change/status"});
+        vec![OperationExample {
+            description: "Get status of current change".to_string(),
+            moocode: r#"diff = worker_request("vcs", {"change/status"});
 // Returns an ObjectDiffModel map like:
 // [#<added_objects => {object_name => objdef}, ...>, #<modified_objects => {...}>, ...]
 player:tell("Added: ", length(diff["added_objects"]), " objects");
 player:tell("Modified: ", length(diff["modified_objects"]), " objects");
-player:tell("Deleted: ", length(diff["deleted_objects"]), " objects");"#.to_string(),
-                http_curl: Some(r#"curl -X GET http://localhost:8081/api/change/status"#.to_string()),
-            }
-        ]
+player:tell("Deleted: ", length(diff["deleted_objects"]), " objects");"#
+                .to_string(),
+            http_curl: Some(r#"curl -X GET http://localhost:8081/api/change/status"#.to_string()),
+        }]
     }
-    
+
     fn routes(&self) -> Vec<OperationRoute> {
-        vec![
-            OperationRoute {
-                path: "/api/change/status".to_string(),
-                method: Method::GET,
-                is_json: false,
-            }
-        ]
+        vec![OperationRoute {
+            path: "/api/change/status".to_string(),
+            method: Method::GET,
+            is_json: false,
+        }]
     }
-    
+
     fn responses(&self) -> Vec<crate::operations::OperationResponse> {
         use crate::operations::OperationResponse;
         vec![
             OperationResponse::success(
                 "Operation executed successfully",
-                r#"["objects_renamed" -> ["old_obj" -> "new_obj"], "objects_deleted" -> {"obj1"}, "objects_added" -> {"obj2"}, "objects_modified" -> {"obj3"}, "changes" -> {["obj_id" -> "obj3", "verbs_modified" -> {"verb1"}, "verbs_added" -> {}, "verbs_renamed" -> [], "verbs_deleted" -> {}, "props_modified" -> {"prop1"}, "props_added" -> {}, "props_renamed" -> [], "props_deleted" -> {}]}]"#
+                r#"["objects_renamed" -> ["old_obj" -> "new_obj"], "objects_deleted" -> {"obj1"}, "objects_added" -> {"obj2"}, "objects_modified" -> {"obj3"}, "changes" -> {["obj_id" -> "obj3", "verbs_modified" -> {"verb1"}, "verbs_added" -> {}, "verbs_renamed" -> [], "verbs_deleted" -> {}, "props_modified" -> {"prop1"}, "props_added" -> {}, "props_renamed" -> [], "props_deleted" -> {}]}]"#,
             ),
             OperationResponse::new(
                 400,
                 "Bad Request - No local change available",
-                r#"E_INVARG("No local change on top of index - nothing to do)"#),
+                r#"E_INVARG("No local change on top of index - nothing to do)"#,
+            ),
             OperationResponse::new(
                 404,
                 "Not Found - No change to query",
-                r#"E_INVARG("Error: No change on top of index - nothing to do)"#),
+                r#"E_INVARG("Error: No change on top of index - nothing to do)"#,
+            ),
             OperationResponse::new(
                 500,
                 "Internal Server Error - Database or system error",
-                r#"E_INVARG("Error: Database error: failed to build diff model")"#
+                r#"E_INVARG("Error: Database error: failed to build diff model")"#,
             ),
         ]
     }
-    
+
     fn execute(&self, _args: Vec<String>, _user: &User) -> moor_var::Var {
         info!("Change status operation executed");
-        
+
         let request = ChangeStatusRequest {};
 
         match self.process_change_status(request) {
