@@ -47,10 +47,13 @@ database/
 - **Backend**: Fjall embedded database
 
 #### Refs (References)
-- **Name resolution**: Maps object names (like `$player`) to SHA256 hashes
-- **Versioning**: Each object has a version number that increments on changes
+- **Name resolution**: Maps `(object_name, version, type)` tuples to SHA256 hashes
+- **Versioning**: Each object has a version number that increments on *submitted* changes (not within a local change)
 - **Multi-type support**: Handles MOO objects and meta objects separately
 - **Fast lookups**: Enables quick resolution of current object state
+- **Critical invariant**: Refs MUST stay in sync with the names in Change tracking lists
+
+**Key Constraint**: When an object's name changes in a Change's tracking lists (added_objects, modified_objects), the corresponding ref must be updated from old_name → new_name, otherwise "version N not found" errors occur when resolving the object.
 
 #### Index
 - **Change ordering**: Maintains chronological list of changes (changelist)
@@ -180,6 +183,40 @@ Common data structures used throughout the system.
 - **ObjectDiffModel**: Represents differences between states
 - **User**: Authentication and permission information
 
+#### Local Changes: Collapsed Diffs (Critical Concept)
+
+**Local changes are NOT historical records - they are collapsed diffs from the previous state.**
+
+Key implications:
+
+1. **No intermediate history**: If you modify an object multiple times in the same local change, only the final state matters. The intermediate states never existed in any committed form.
+
+2. **Version numbers don't increment**: Within a local change, modifying an object multiple times keeps the same version number. The version only increments when the change is submitted/approved.
+
+3. **Renames collapse**: If you rename A→B→C within a local change, only A→C is recorded. The intermediate name B never existed in committed history, so:
+   - Only ONE ref exists (pointing from C to the SHA256)
+   - No ref for B is created or maintained
+   - The change records A→C in renamed_objects
+
+4. **Refs are replaced in-place**: When you modify an object already modified in the local change, the old SHA256 is replaced (and deleted if orphaned), keeping the same version number.
+
+5. **Critical constraint**: Operations that update object names in tracking lists (added_objects, modified_objects) MUST also update the refs from old_name to new_name, maintaining the invariant that refs and tracking lists stay synchronized.
+
+**Example**: 
+```
+# In a single local change:
+1. Modify object "foo" (version 2)
+2. Rename "foo" to "bar"
+3. Modify "bar" again
+
+Result:
+- One entry in modified_objects: {name: "bar", version: 2}
+- One entry in renamed_objects: {from: "foo", to: "bar"}
+- One ref: ("bar", 2) → SHA256_final
+- NO ref for "foo" version 2 (deleted during rename)
+- Version stayed at 2 throughout (replaced in-place)
+```
+
 ## Data Flow
 
 ### Creating and Modifying Objects
@@ -196,8 +233,12 @@ Operation.execute()
 3. Apply meta filtering (RefsProvider)
 4. Generate SHA256 hash
 5. Store object content (ObjectsTree)
-6. Update ref (Refs: name → SHA256, version++)
+6. Update ref (Refs: name → SHA256, version++ if first mod, else reuse version)
+   - First modification in change: version increments
+   - Subsequent modifications in same change: version stays same, ref replaced
 7. Track in change (Index: added/modified lists)
+   - If already tracked: update in-place, delete orphaned old SHA256
+   - If not tracked: add to appropriate list
     ↓
 Return success
 ```
@@ -230,10 +271,12 @@ Return object definition
    - Add to top of changelist
 
 2. Modify Objects
-   - Objects tracked in change
-   - Added/modified/deleted/renamed lists
-   - Refs updated with new versions
-   - Content stored by SHA256
+   - Objects tracked in change (collapsed state)
+   - Added/modified/deleted/renamed lists show FINAL state only
+   - Refs updated (version increments once per object, then replaced in-place)
+   - Content stored by SHA256 (old SHAs deleted if orphaned)
+   - Multiple modifications to same object collapse into single entry
+   - Rename chains collapse (A→B→C becomes A→C)
 
 3. Check Status
    - Build ObjectDiffModel
@@ -376,6 +419,52 @@ Use cases:
 - Exclude auto-generated properties (`.last_modified`)
 - Ignore debug verbs
 - Skip environment-specific settings
+
+### Object Renaming (Critical: Refs Must Stay in Sync)
+
+When renaming an object within a local change, refs must be updated to maintain the invariant that refs and tracking lists stay synchronized:
+
+```
+function rename_object_in_local_change(from_name, to_name):
+    change = get_local_change()
+    
+    // Case 1: Object in added_objects or modified_objects
+    if object_in_tracking_list(change, from_name):
+        obj_version = get_version_from_tracking_list(change, from_name)
+        
+        // CRITICAL: Update refs
+        sha256 = get_ref(from_name, obj_version)
+        update_ref(to_name, obj_version, sha256)  // Create new ref
+        delete_ref(from_name, obj_version)         // Delete old ref
+        
+        // Update tracking list name
+        update_tracking_list_name(change, from_name, to_name)
+        
+        // Handle rename chaining (if A→B exists, update to A→to_name)
+        if rename_exists_to(change, from_name):
+            update_rename_chain(change, to_name)
+        else if has_previous_versions(from_name):
+            add_to_renamed_objects(change, from_name, to_name)
+    
+    // Case 2: Object exists in committed history only
+    else:
+        // Add to renamed_objects list for history tracking
+        add_to_renamed_objects(change, from_name, to_name)
+    
+    // Case 3: Rename-back (A→B→A cancellation)
+    if is_rename_back(change, from_name, to_name):
+        remove_from_renamed_objects(change)
+        update_refs_back(from_name, to_name)  // Same ref update as Case 1
+```
+
+**Critical Rules**:
+1. When name changes in tracking list → refs MUST be updated
+2. Within a local change, only ONE ref exists per object (current name)
+3. Rename chains collapse: A→B→C stores only A→C
+4. Rename-back cancels: A→B→A removes the rename entry entirely
+5. Old refs are deleted immediately (no intermediate refs in local changes)
+
+**Failure Mode**: If refs are not updated when names change in tracking lists, other operations (like `change/status`) will fail with "version N not found" errors when trying to resolve the object by its new name.
 
 ## Concurrency Model
 
