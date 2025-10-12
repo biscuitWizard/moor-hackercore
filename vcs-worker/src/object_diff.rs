@@ -4,7 +4,7 @@ use crate::providers::objects::ObjectsProvider;
 use crate::providers::refs::RefsProvider;
 use crate::types::{Change, VcsObjectType};
 use moor_compiler::ObjectDefinition;
-use moor_var::{Var, v_map, v_str};
+use moor_var::{Var, v_map, v_str, Sequence, Associative};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
@@ -431,6 +431,10 @@ pub fn compare_object_definitions_with_meta(
         }
     }
 
+    // Detect verb renames: if a verb was deleted and another was added with the same content,
+    // it's likely a rename rather than a delete+add
+    detect_verb_renames(&baseline_verbs, &local_verbs, object_change);
+
     // Compare property definitions
     let baseline_props: HashMap<String, &moor_compiler::ObjPropDef> = baseline
         .property_definitions
@@ -521,6 +525,180 @@ pub fn compare_object_definitions_with_meta(
                 );
             }
         }
+    }
+
+    // Detect property renames: if a property was deleted and another was added with the same content,
+    // it's likely a rename rather than a delete+add
+    detect_property_renames(&baseline_props, &local_props, object_change);
+    detect_property_override_renames(&baseline_overrides, &local_overrides, object_change);
+}
+
+/// Detect verb renames by finding deleted verbs that match added verbs in content
+/// Also detects renames when verb names have overlapping aliases (space-delimited)
+fn detect_verb_renames(
+    baseline_verbs: &HashMap<String, &moor_compiler::ObjVerbDef>,
+    local_verbs: &HashMap<String, &moor_compiler::ObjVerbDef>,
+    object_change: &mut ObjectChange,
+) {
+    // Find potential renames: for each deleted verb, check if there's a matching added verb
+    let mut renames_to_apply = Vec::new();
+
+    for deleted_name in &object_change.verbs_deleted.clone() {
+        if let Some(baseline_verb) = baseline_verbs.get(deleted_name) {
+            // Check if there's an added verb with the same content
+            for added_name in &object_change.verbs_added.clone() {
+                if let Some(local_verb) = local_verbs.get(added_name) {
+                    // Check if the verbs have the same content (everything except the name)
+                    if !verbs_differ(baseline_verb, local_verb) {
+                        // Check if the names have any overlapping elements (e.g. "look examine" vs "look inspect")
+                        // This helps confirm it's a rename vs coincidental identical code
+                        let has_overlap = verb_names_overlap(deleted_name, added_name);
+                        
+                        // Accept the rename if:
+                        // 1. Names have overlapping aliases, OR
+                        // 2. Names are similar enough (could add Levenshtein distance check here)
+                        // For now, we'll accept any exact content match as a rename
+                        if has_overlap || true {
+                            // This is a rename!
+                            renames_to_apply.push((deleted_name.clone(), added_name.clone()));
+                            break; // Each deleted verb can only match one added verb
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Apply the renames: remove from added/deleted, add to renamed
+    for (old_name, new_name) in renames_to_apply {
+        object_change.verbs_deleted.remove(&old_name);
+        object_change.verbs_added.remove(&new_name);
+        object_change.verbs_renamed.insert(old_name, new_name);
+    }
+}
+
+/// Check if two verb names have any overlapping elements when split by spaces
+/// For example, "look examine" and "look inspect" overlap on "look"
+fn verb_names_overlap(name1: &str, name2: &str) -> bool {
+    // Split both names by spaces and check for any common elements
+    let names1: HashSet<&str> = name1.split_whitespace().collect();
+    let names2: HashSet<&str> = name2.split_whitespace().collect();
+    
+    // If either name has no elements after splitting, fall back to exact comparison
+    if names1.is_empty() || names2.is_empty() {
+        return name1 == name2;
+    }
+    
+    // Check if there's any intersection
+    !names1.is_disjoint(&names2)
+}
+
+/// Detect property definition renames by finding deleted properties that match added properties in content
+/// Skip rename detection for properties with falsy values (empty strings, lists, maps) to avoid false positives
+fn detect_property_renames(
+    baseline_props: &HashMap<String, &moor_compiler::ObjPropDef>,
+    local_props: &HashMap<String, &moor_compiler::ObjPropDef>,
+    object_change: &mut ObjectChange,
+) {
+    let mut renames_to_apply = Vec::new();
+
+    for deleted_name in &object_change.props_deleted.clone() {
+        if let Some(baseline_prop) = baseline_props.get(deleted_name) {
+            // Skip rename detection if the property value is falsy (empty/default)
+            if let Some(value) = &baseline_prop.value {
+                if is_property_value_falsy(value) {
+                    continue;
+                }
+            }
+            
+            // Check if there's an added property with the same content
+            for added_name in &object_change.props_added.clone() {
+                if let Some(local_prop) = local_props.get(added_name) {
+                    // Skip if the new property value is also falsy
+                    if let Some(value) = &local_prop.value {
+                        if is_property_value_falsy(value) {
+                            continue;
+                        }
+                    }
+                    
+                    // Check if the properties have the same content (everything except the name)
+                    if !property_definitions_differ(baseline_prop, local_prop) {
+                        // This is a rename!
+                        renames_to_apply.push((deleted_name.clone(), added_name.clone()));
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    // Apply the renames
+    for (old_name, new_name) in renames_to_apply {
+        object_change.props_deleted.remove(&old_name);
+        object_change.props_added.remove(&new_name);
+        object_change.props_renamed.insert(old_name, new_name);
+    }
+}
+
+/// Detect property override renames by finding deleted overrides that match added overrides in content
+/// Skip rename detection for properties with falsy values (empty strings, lists, maps) to avoid false positives
+fn detect_property_override_renames(
+    baseline_overrides: &HashMap<String, &moor_compiler::ObjPropOverride>,
+    local_overrides: &HashMap<String, &moor_compiler::ObjPropOverride>,
+    object_change: &mut ObjectChange,
+) {
+    let mut renames_to_apply = Vec::new();
+
+    for deleted_name in &object_change.props_deleted.clone() {
+        if let Some(baseline_override) = baseline_overrides.get(deleted_name) {
+            // Skip rename detection if the property value is falsy (empty/default)
+            if let Some(value) = &baseline_override.value {
+                if is_property_value_falsy(value) {
+                    continue;
+                }
+            }
+            
+            // Check if there's an added property override with the same content
+            for added_name in &object_change.props_added.clone() {
+                if let Some(local_override) = local_overrides.get(added_name) {
+                    // Skip if the new property value is also falsy
+                    if let Some(value) = &local_override.value {
+                        if is_property_value_falsy(value) {
+                            continue;
+                        }
+                    }
+                    
+                    // Check if the property overrides have the same content (everything except the name)
+                    if !property_overrides_differ(baseline_override, local_override) {
+                        // This is a rename!
+                        renames_to_apply.push((deleted_name.clone(), added_name.clone()));
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    // Apply the renames
+    for (old_name, new_name) in renames_to_apply {
+        object_change.props_deleted.remove(&old_name);
+        object_change.props_added.remove(&new_name);
+        object_change.props_renamed.insert(old_name, new_name);
+    }
+}
+
+/// Check if a property value is "falsy" (empty/default) to avoid false positives in rename detection
+fn is_property_value_falsy(value: &moor_var::Var) -> bool {
+    use moor_var::Variant;
+    
+    match value.variant() {
+        Variant::Str(s) => s.is_empty(),
+        Variant::List(l) => l.is_empty(),
+        Variant::Map(m) => m.is_empty(),
+        Variant::Int(i) => *i == 0,
+        Variant::Float(f) => *f == 0.0,
+        Variant::None => true,
+        _ => false,
     }
 }
 
