@@ -1,5 +1,6 @@
 use crate::config::Config;
 use crate::database::DatabaseRef;
+use crate::providers::index::IndexProvider;
 use crate::providers::objects::ObjectsProvider;
 use crate::providers::refs::RefsProvider;
 use crate::types::{ObjectInfo, VcsObjectType};
@@ -44,19 +45,20 @@ fn perform_git_backup(database: DatabaseRef, config: Config) -> Result<(), Strin
 
     info!("Git repository ready at: {:?}", work_dir);
 
-    // Get all current MOO objects from refs
-    let all_refs = database
-        .refs()
-        .get_all_refs()
-        .map_err(|e| format!("Failed to get all refs: {}", e))?;
+    // Get the computed object list from the working index (not all refs)
+    // This gives us the current state of objects after applying all changes chronologically
+    let all_objects = database
+        .index()
+        .compute_complete_object_list()
+        .map_err(|e| format!("Failed to compute complete object list: {}", e))?;
 
     // Filter to only MOO objects (not meta objects)
-    let moo_objects: Vec<&ObjectInfo> = all_refs
-        .keys()
+    let moo_objects: Vec<&ObjectInfo> = all_objects
+        .iter()
         .filter(|obj_info| obj_info.object_type == VcsObjectType::MooObject)
         .collect();
 
-    info!("Found {} MOO objects to backup", moo_objects.len());
+    info!("Found {} MOO objects to backup from working index", moo_objects.len());
 
     // Track which files we've written
     let mut written_files = HashSet::new();
@@ -179,12 +181,12 @@ fn dump_object_to_file(
 ) -> Result<String, String> {
     let object_name = &obj_info.name;
 
-    // Get the object SHA256 from refs
+    // Get the object SHA256 from refs using the specific version from the working index
     let sha256 = database
         .refs()
-        .get_ref(VcsObjectType::MooObject, object_name, None)
-        .map_err(|e| format!("Failed to get ref for '{}': {}", object_name, e))?
-        .ok_or_else(|| format!("Object '{}' not found in refs", object_name))?;
+        .get_ref(VcsObjectType::MooObject, object_name, Some(obj_info.version))
+        .map_err(|e| format!("Failed to get ref for '{}' version {}: {}", object_name, obj_info.version, e))?
+        .ok_or_else(|| format!("Object '{}' version {} not found in refs", object_name, obj_info.version))?;
 
     // Get the object content (it's already in objdef format)
     let obj_content = database
