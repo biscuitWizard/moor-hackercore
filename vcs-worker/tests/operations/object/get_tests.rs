@@ -519,3 +519,391 @@ async fn test_get_object_multiple_versions() {
 
     println!("\n✅ Test passed: Get returns latest version");
 }
+
+#[tokio::test]
+async fn test_get_object_at_specific_change_id() {
+    let server = TestServer::start()
+        .await
+        .expect("Failed to start test server");
+    let client = server.client();
+    let db = server.db_assertions();
+
+    println!("Test: Getting an object at a specific historical change ID");
+
+    // Step 1: Create and approve version 1
+    println!("\nStep 1: Creating version 1...");
+    client
+        .change_create("change1", "test_author", None)
+        .await
+        .expect("Failed to create change");
+
+    client
+        .object_update_from_file("test_historical", "test_object.moo")
+        .await
+        .expect("Failed to create object");
+
+    let (change_id1, _) = db.require_top_change();
+    client
+        .change_approve(&change_id1)
+        .await
+        .expect("Failed to approve")
+        .assert_success("Approve");
+
+    println!("✅ Version 1 approved with change ID: {}", change_id1);
+
+    // Step 2: Create and approve version 2
+    println!("\nStep 2: Creating version 2...");
+    client
+        .change_create("change2", "test_author", None)
+        .await
+        .expect("Failed to create change");
+
+    client
+        .object_update_from_file("test_historical", "detailed_test_object.moo")
+        .await
+        .expect("Failed to update object");
+
+    let (change_id2, _) = db.require_top_change();
+    client
+        .change_approve(&change_id2)
+        .await
+        .expect("Failed to approve")
+        .assert_success("Approve");
+
+    println!("✅ Version 2 approved with change ID: {}", change_id2);
+
+    // Step 3: Get current version (should be version 2)
+    println!("\nStep 3: Getting current version...");
+    let response_current = client
+        .object_get("test_historical")
+        .await
+        .expect("Failed to get object");
+
+    response_current.assert_success("Get current object");
+    let content_current = response_current.require_result_str("Get current object");
+    assert!(
+        content_current.contains("Detailed Test Object"),
+        "Current version should contain v2 content"
+    );
+    println!("✅ Current version retrieved (v2)");
+
+    // Step 4: Get version at change_id1 (should be version 1)
+    println!("\nStep 4: Getting object at change ID 1...");
+    let response_v1 = client
+        .object_get_at_change("test_historical", &change_id1)
+        .await
+        .expect("Failed to get object at change");
+
+    response_v1.assert_success("Get object at change");
+    let content_v1 = response_v1.require_result_str("Get object at change");
+    assert!(
+        content_v1.contains("Test Object"),
+        "Historical version should contain v1 content"
+    );
+    assert!(
+        !content_v1.contains("Detailed Test Object"),
+        "Historical version should not contain v2 content"
+    );
+    println!("✅ Historical version retrieved (v1)");
+
+    println!("\n✅ Test passed: Can get object at specific change ID");
+}
+
+#[tokio::test]
+async fn test_get_object_at_short_change_id() {
+    let server = TestServer::start()
+        .await
+        .expect("Failed to start test server");
+    let client = server.client();
+    let db = server.db_assertions();
+
+    println!("Test: Getting an object using a short (abbreviated) change ID");
+
+    // Step 1: Create and approve an object
+    println!("\nStep 1: Creating and approving object...");
+    client
+        .change_create("short_id_test", "test_author", None)
+        .await
+        .expect("Failed to create change");
+
+    client
+        .object_update_from_file("test_short_id", "test_object.moo")
+        .await
+        .expect("Failed to create object");
+
+    let (full_change_id, _) = db.require_top_change();
+    client
+        .change_approve(&full_change_id)
+        .await
+        .expect("Failed to approve")
+        .assert_success("Approve");
+
+    println!("✅ Object approved with change ID: {}", full_change_id);
+
+    // Step 2: Get object using short change ID (first 8 characters)
+    let short_change_id = &full_change_id[..8];
+    println!(
+        "\nStep 2: Getting object with short change ID: {}...",
+        short_change_id
+    );
+
+    let response = client
+        .object_get_at_change("test_short_id", short_change_id)
+        .await
+        .expect("Failed to get object with short ID");
+
+    response.assert_success("Get object with short ID");
+    let content = response.require_result_str("Get object with short ID");
+    assert!(
+        content.contains("Test Object"),
+        "Should retrieve object using short change ID"
+    );
+    println!("✅ Object retrieved using short change ID");
+
+    println!("\n✅ Test passed: Can get object using short change ID");
+}
+
+#[tokio::test]
+async fn test_get_object_at_invalid_change_id() {
+    let server = TestServer::start()
+        .await
+        .expect("Failed to start test server");
+    let client = server.client();
+    let db = server.db_assertions();
+
+    println!("Test: Getting an object at an invalid change ID should fail");
+
+    // Step 1: Create and approve an object
+    println!("\nStep 1: Creating and approving object...");
+    client
+        .change_create("valid_change", "test_author", None)
+        .await
+        .expect("Failed to create change");
+
+    client
+        .object_update_from_file("test_invalid_id", "test_object.moo")
+        .await
+        .expect("Failed to create object");
+
+    let (change_id, _) = db.require_top_change();
+    client
+        .change_approve(&change_id)
+        .await
+        .expect("Failed to approve")
+        .assert_success("Approve");
+
+    println!("✅ Object approved");
+
+    // Step 2: Try to get object at invalid change ID
+    println!("\nStep 2: Attempting to get object with invalid change ID...");
+    let response = client
+        .object_get_at_change("test_invalid_id", "invalid_change_id_12345")
+        .await
+        .expect("Request should complete");
+
+    // Should fail with error
+    let result_str = response.get_result_str().unwrap_or("");
+    assert!(
+        result_str.contains("Error") || result_str.contains("not found"),
+        "Should indicate change ID not found, got: {}",
+        result_str
+    );
+    println!("✅ Get failed with appropriate error: {}", result_str);
+
+    println!("\n✅ Test passed: Cannot get object with invalid change ID");
+}
+
+#[tokio::test]
+async fn test_get_object_not_in_specified_change() {
+    let server = TestServer::start()
+        .await
+        .expect("Failed to start test server");
+    let client = server.client();
+    let db = server.db_assertions();
+
+    println!("Test: Getting an object that doesn't exist in the specified change should fail");
+
+    // Step 1: Create and approve change 1 with object A
+    println!("\nStep 1: Creating change 1 with object A...");
+    client
+        .change_create("change1", "test_author", None)
+        .await
+        .expect("Failed to create change");
+
+    client
+        .object_update_from_file("object_a", "test_object.moo")
+        .await
+        .expect("Failed to create object");
+
+    let (change_id1, _) = db.require_top_change();
+    client
+        .change_approve(&change_id1)
+        .await
+        .expect("Failed to approve")
+        .assert_success("Approve");
+
+    println!("✅ Change 1 approved with object A");
+
+    // Step 2: Create and approve change 2 with object B
+    println!("\nStep 2: Creating change 2 with object B...");
+    client
+        .change_create("change2", "test_author", None)
+        .await
+        .expect("Failed to create change");
+
+    client
+        .object_update_from_file("object_b", "detailed_test_object.moo")
+        .await
+        .expect("Failed to create object");
+
+    let (change_id2, _) = db.require_top_change();
+    client
+        .change_approve(&change_id2)
+        .await
+        .expect("Failed to approve")
+        .assert_success("Approve");
+
+    println!("✅ Change 2 approved with object B");
+
+    // Step 3: Try to get object B at change_id1 (should fail)
+    println!("\nStep 3: Attempting to get object B at change 1 (where it doesn't exist)...");
+    let response = client
+        .object_get_at_change("object_b", &change_id1)
+        .await
+        .expect("Request should complete");
+
+    // Should fail because object B wasn't in change 1
+    let result_str = response.get_result_str().unwrap_or("");
+    assert!(
+        result_str.contains("Error") || result_str.contains("not found"),
+        "Should indicate object not found in change, got: {}",
+        result_str
+    );
+    println!("✅ Get failed with appropriate error: {}", result_str);
+
+    println!("\n✅ Test passed: Cannot get object that doesn't exist in specified change");
+}
+
+#[tokio::test]
+async fn test_get_object_multiple_changes_historical() {
+    let server = TestServer::start()
+        .await
+        .expect("Failed to start test server");
+    let client = server.client();
+    let db = server.db_assertions();
+
+    println!("Test: Getting an object at different points in history shows correct versions");
+
+    // Step 1: Create and approve version 1
+    println!("\nStep 1: Creating version 1...");
+    client
+        .change_create("v1", "test_author", None)
+        .await
+        .expect("Failed to create change");
+
+    client
+        .object_update_from_file("test_history", "test_object.moo")
+        .await
+        .expect("Failed to create object");
+
+    let (change_id_v1, _) = db.require_top_change();
+    client
+        .change_approve(&change_id_v1)
+        .await
+        .expect("Failed to approve")
+        .assert_success("Approve");
+
+    println!("✅ Version 1 approved: {}", change_id_v1);
+
+    // Step 2: Create and approve version 2
+    println!("\nStep 2: Creating version 2...");
+    client
+        .change_create("v2", "test_author", None)
+        .await
+        .expect("Failed to create change");
+
+    client
+        .object_update_from_file("test_history", "detailed_test_object.moo")
+        .await
+        .expect("Failed to update object");
+
+    let (change_id_v2, _) = db.require_top_change();
+    client
+        .change_approve(&change_id_v2)
+        .await
+        .expect("Failed to approve")
+        .assert_success("Approve");
+
+    println!("✅ Version 2 approved: {}", change_id_v2);
+
+    // Step 3: Create and approve version 3 (using test_object.moo again)
+    println!("\nStep 3: Creating version 3...");
+    client
+        .change_create("v3", "test_author", None)
+        .await
+        .expect("Failed to create change");
+
+    client
+        .object_update_from_file("test_history", "test_object.moo")
+        .await
+        .expect("Failed to update object");
+
+    let (change_id_v3, _) = db.require_top_change();
+    client
+        .change_approve(&change_id_v3)
+        .await
+        .expect("Failed to approve")
+        .assert_success("Approve");
+
+    println!("✅ Version 3 approved: {}", change_id_v3);
+
+    // Step 4: Verify we can get each version
+    println!("\nStep 4: Getting version 1...");
+    let response_v1 = client
+        .object_get_at_change("test_history", &change_id_v1)
+        .await
+        .expect("Failed to get v1");
+    response_v1.assert_success("Get v1");
+    let content_v1 = response_v1.require_result_str("Get v1");
+    assert!(
+        content_v1.contains("Test Object") && !content_v1.contains("Detailed"),
+        "Should be v1"
+    );
+
+    println!("\nStep 5: Getting version 2...");
+    let response_v2 = client
+        .object_get_at_change("test_history", &change_id_v2)
+        .await
+        .expect("Failed to get v2");
+    response_v2.assert_success("Get v2");
+    let content_v2 = response_v2.require_result_str("Get v2");
+    assert!(content_v2.contains("Detailed Test Object"), "Should be v2");
+
+    println!("\nStep 6: Getting version 3...");
+    let response_v3 = client
+        .object_get_at_change("test_history", &change_id_v3)
+        .await
+        .expect("Failed to get v3");
+    response_v3.assert_success("Get v3");
+    let content_v3 = response_v3.require_result_str("Get v3");
+    assert!(
+        content_v3.contains("Test Object") && !content_v3.contains("Detailed"),
+        "Should be v3"
+    );
+
+    println!("\nStep 7: Getting current (should be v3)...");
+    let response_current = client
+        .object_get("test_history")
+        .await
+        .expect("Failed to get current");
+    response_current.assert_success("Get current");
+    let content_current = response_current.require_result_str("Get current");
+    assert!(
+        content_current.contains("Test Object") && !content_current.contains("Detailed"),
+        "Current should be v3"
+    );
+
+    println!("✅ All historical versions retrieved correctly");
+
+    println!("\n✅ Test passed: Historical versions are accurate");
+}

@@ -69,6 +69,22 @@ impl VcsTestClient {
             .await
     }
 
+    /// Get an object by name at a specific change ID
+    pub async fn object_get_at_change(
+        &self,
+        name: &str,
+        change_id: &str,
+    ) -> Result<Value, Box<dyn std::error::Error>> {
+        self.rpc_call(
+            "object/get",
+            vec![
+                Value::String(name.to_string()),
+                Value::String(change_id.to_string()),
+            ],
+        )
+        .await
+    }
+
     /// Delete an object by name
     pub async fn object_delete(&self, name: &str) -> Result<Value, Box<dyn std::error::Error>> {
         self.rpc_call("object/delete", vec![Value::String(name.to_string())])

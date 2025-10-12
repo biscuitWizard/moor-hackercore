@@ -17,6 +17,7 @@ use moor_var::{E_INVARG, v_error};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ObjectGetRequest {
     pub object_name: String,
+    pub change_id: Option<String>,
 }
 
 /// Object get operation that retrieves a stored object definition by name
@@ -33,32 +34,85 @@ impl ObjectGetOperation {
 
     /// Process the object get request
     fn process_object_get(&self, request: ObjectGetRequest) -> Result<String, ObjectsTreeError> {
-        info!("Retrieving object '{}'", request.object_name);
+        // If change_id is provided, resolve it and get object state at that change
+        let (sha256_key, meta_version) = if let Some(ref change_id_str) = request.change_id {
+            // Resolve short or full hash to full hash
+            let resolved_change_id = self.database.resolve_change_id(change_id_str)?;
+            info!(
+                "Retrieving object '{}' at change ID '{}'",
+                request.object_name, resolved_change_id
+            );
 
-        // Use the index provider to resolve the current state of the object
-        let sha256_key = match self
-            .database
-            .index()
-            .resolve_object_current_state(&request.object_name, |obj_name| {
-                self.database
-                    .refs()
-                    .get_ref(VcsObjectType::MooObject, obj_name, None)
-                    .map_err(|e| crate::providers::ProviderError::SerializationError(e.to_string()))
-            })
-            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
-        {
-            Some(key) => key,
-            None => {
-                // Object is deleted or doesn't exist
-                error!(
-                    "Object '{}' not found or has been deleted",
-                    request.object_name
-                );
-                return Err(ObjectsTreeError::SerializationError(format!(
-                    "Object '{}' not found",
-                    request.object_name
-                )));
-            }
+            // Get the change to find the object version at that point
+            let change = self
+                .database
+                .index()
+                .get_change(&resolved_change_id)
+                .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
+                .ok_or_else(|| {
+                    ObjectsTreeError::SerializationError(format!(
+                        "Change '{}' not found",
+                        resolved_change_id
+                    ))
+                })?;
+
+            // Find the object in the change's modified or added objects
+            let object_info = change
+                .modified_objects
+                .iter()
+                .chain(change.added_objects.iter())
+                .find(|obj| {
+                    obj.object_type == VcsObjectType::MooObject && obj.name == request.object_name
+                })
+                .ok_or_else(|| {
+                    ObjectsTreeError::SerializationError(format!(
+                        "Object '{}' not found in change '{}'",
+                        request.object_name, resolved_change_id
+                    ))
+                })?;
+
+            // Get the SHA256 for this specific version
+            let sha256 = self
+                .database
+                .refs()
+                .get_ref(
+                    VcsObjectType::MooObject,
+                    &request.object_name,
+                    Some(object_info.version),
+                )
+                .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
+                .ok_or_else(|| {
+                    ObjectsTreeError::SerializationError(format!(
+                        "Object '{}' version {} not found in refs",
+                        request.object_name, object_info.version
+                    ))
+                })?;
+
+            (sha256, Some(object_info.version))
+        } else {
+            info!("Retrieving object '{}'", request.object_name);
+
+            // Use the index provider to resolve the current state of the object
+            let sha256 = self
+                .database
+                .index()
+                .resolve_object_current_state(&request.object_name, |obj_name| {
+                    self.database
+                        .refs()
+                        .get_ref(VcsObjectType::MooObject, obj_name, None)
+                        .map_err(|e| {
+                            crate::providers::ProviderError::SerializationError(e.to_string())
+                        })
+                })
+                .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
+                .ok_or_else(|| {
+                    ObjectsTreeError::SerializationError(format!(
+                        "Object '{}' not found",
+                        request.object_name
+                    ))
+                })?;
+
+            (sha256, None)
         };
 
         // Object exists - get its content
@@ -78,7 +132,7 @@ impl ObjectGetOperation {
         let meta = match self
             .database
             .refs()
-            .get_ref(VcsObjectType::MooMetaObject, &request.object_name, None)
+            .get_ref(VcsObjectType::MooMetaObject, &request.object_name, meta_version)
             .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
         {
             Some(meta_sha256) => {
@@ -195,12 +249,20 @@ impl Operation for ObjectGetOperation {
     }
 
     fn parameters(&self) -> Vec<OperationParameter> {
-        vec![OperationParameter {
-            name: "object_name".to_string(),
-            description: "The name of the MOO object to retrieve (e.g., '$player', '#123')"
-                .to_string(),
-            required: true,
-        }]
+        vec![
+            OperationParameter {
+                name: "object_name".to_string(),
+                description: "The name of the MOO object to retrieve (e.g., '$player', '#123')"
+                    .to_string(),
+                required: true,
+            },
+            OperationParameter {
+                name: "change_id".to_string(),
+                description: "Optional change ID to retrieve the object state at a specific commit"
+                    .to_string(),
+                required: false,
+            },
+        ]
     }
 
     fn examples(&self) -> Vec<OperationExample> {
@@ -217,6 +279,14 @@ impl Operation for ObjectGetOperation {
                 description: "Retrieve an object by object number".to_string(),
                 moocode: "objdef = worker_request(\"vcs\", {\"object/get\", \"#123\"});\n// Returns the object definition for object #123".to_string(),
                 http_curl: None,
+            },
+            OperationExample {
+                description: "Retrieve an object at a specific change ID".to_string(),
+                moocode: r#"objdef = worker_request("vcs", {"object/get", "$player", "abc123def456"});
+// Returns the object definition at the specified commit"#.to_string(),
+                http_curl: Some(r#"curl -X POST http://localhost:8081/api/object/get \
+  -H "Content-Type: application/json" \
+  -d '{"operation": "object/get", "args": ["$player", "abc123def456"]}'"#.to_string()),
             }
         ]
     }
@@ -269,6 +339,7 @@ end""#,
     fn execute(&self, args: Vec<String>, _user: &User) -> moor_var::Var {
         // For RPC calls, we expect the args to contain:
         // args[0] = object_name
+        // args[1] = change_id (optional)
 
         if args.is_empty() {
             error!("Object get operation requires object name");
@@ -276,8 +347,16 @@ end""#,
         }
 
         let object_name = args[0].clone();
+        let change_id = if args.len() > 1 {
+            Some(args[1].clone())
+        } else {
+            None
+        };
 
-        let request = ObjectGetRequest { object_name };
+        let request = ObjectGetRequest {
+            object_name,
+            change_id,
+        };
 
         match self.process_object_get(request) {
             Ok(result) => {
