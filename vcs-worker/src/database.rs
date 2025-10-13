@@ -28,7 +28,6 @@ pub enum ObjectsTreeError {
 
 /// Database coordinator that aggregates providers for different subsystems
 pub struct Database {
-    #[allow(dead_code)]
     keyspace: Keyspace,
 
     // Provider instances
@@ -208,6 +207,15 @@ impl Database {
     /// Get the game name
     pub fn game_name(&self) -> &str {
         &self.game_name
+    }
+
+    /// Flush all pending writes to disk synchronously
+    /// This ensures all database changes are persisted before returning
+    pub fn flush(&self) -> Result<(), ObjectsTreeError> {
+        info!("Flushing database to disk");
+        self.keyspace.persist(PersistMode::SyncAll)?;
+        info!("Database flush completed");
+        Ok(())
     }
 
     /// Get the data size of a partition by iterating through all entries

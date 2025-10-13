@@ -208,6 +208,12 @@ impl ChangeApproveOperation {
             );
         }
 
+        // Flush database to ensure all writes are persisted before git backup
+        // This prevents race conditions where git backup reads before writes are committed
+        self.database
+            .flush()
+            .map_err(|e| ObjectsTreeError::SerializationError(format!("Failed to flush database: {}", e)))?;
+
         // Trigger git backup in background (non-blocking)
         git_backup::trigger_git_backup(self.database.clone(), self.config.clone());
 
