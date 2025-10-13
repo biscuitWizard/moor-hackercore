@@ -10,10 +10,12 @@
 //! - rename_edge_cases_tests: Edge case tests for object/rename operation
 //! - rename_modified_object_refs_test: Tests for refs handling when renaming modified/added objects
 //! - rename_workflow_advanced_tests: Advanced rename workflow tests (rename→modify, rename→approve, etc.)
+//! - hint_tests: Tests for verb and property rename hints system
 
 mod crud;
 mod delete_tests;
 mod get_tests;
+mod hint_tests;
 mod history_tests;
 mod lifecycle;
 mod list;

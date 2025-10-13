@@ -1,7 +1,7 @@
-/// Integration tests for the hint system
-/// 
-/// These tests verify that verb and property rename hints work correctly.
-/// Hints are kept permanently and never wiped.
+//! Integration tests for the hint system
+//! 
+//! These tests verify that verb and property rename hints work correctly.
+//! Hints are kept permanently and never wiped.
 
 use moor_vcs_worker::{Config, create_registry_with_config};
 use moor_vcs_worker::providers::index::IndexProvider;
@@ -348,3 +348,4 @@ async fn test_hints_allowed_for_modified_objects() {
     assert_eq!(retrieved.added_objects.len(), 0); // Not in added_objects
     assert_eq!(retrieved.modified_objects[0].name, "$existingobj");
 }
+
