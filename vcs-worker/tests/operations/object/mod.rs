@@ -11,6 +11,7 @@
 //! - rename_modified_object_refs_test: Tests for refs handling when renaming modified/added objects
 //! - rename_workflow_advanced_tests: Advanced rename workflow tests (rename→modify, rename→approve, etc.)
 //! - hint_tests: Tests for verb and property rename hints system
+//! - switch_tests: Tests for object/switch operation (moving objects between changes)
 
 mod crud;
 mod delete_tests;
@@ -23,3 +24,4 @@ mod rename_edge_cases_tests;
 mod rename_modified_object_refs_test;
 mod rename_update_integration;
 mod rename_workflow_advanced_tests;
+mod switch_tests;

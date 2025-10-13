@@ -200,6 +200,14 @@ pub struct ObjectDeleteRequest {
     pub object_name: String,
 }
 
+/// Request structure for object switch operations
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ObjectSwitchRequest {
+    pub object_name: String,
+    pub change_id: String,
+    pub force: Option<bool>,
+}
+
 /// Request structure for index list operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IndexListRequest {

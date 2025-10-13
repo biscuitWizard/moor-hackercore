@@ -113,6 +113,25 @@ impl VcsTestClient {
         .await
     }
 
+    /// Switch an object to a different change
+    pub async fn object_switch(
+        &self,
+        object_name: &str,
+        change_id: &str,
+        force: Option<bool>,
+    ) -> Result<Value, Box<dyn std::error::Error>> {
+        let mut args = vec![
+            Value::String(object_name.to_string()),
+            Value::String(change_id.to_string()),
+        ];
+        
+        if let Some(force_val) = force {
+            args.push(Value::String(force_val.to_string()));
+        }
+        
+        self.rpc_call("object/switch", args).await
+    }
+
     /// List all objects with optional filter
     pub async fn object_list(
         &self,
