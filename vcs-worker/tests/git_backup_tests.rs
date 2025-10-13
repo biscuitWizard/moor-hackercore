@@ -32,38 +32,14 @@ fn setup_git_repo() -> TempDir {
     git_dir
 }
 
-/// Helper to configure git backup via environment variables
-fn set_git_backup_env(repo_path: &str, token: Option<&str>) {
-    unsafe {
-        std::env::set_var("VCS_GIT_BACKUP_REPO", repo_path);
-        if let Some(t) = token {
-            std::env::set_var("VCS_GIT_BACKUP_TOKEN", t);
-        } else {
-            std::env::remove_var("VCS_GIT_BACKUP_TOKEN");
-        }
-    }
-}
-
-/// Helper to clean up git backup env vars
-fn clear_git_backup_env() {
-    unsafe {
-        std::env::remove_var("VCS_GIT_BACKUP_REPO");
-        std::env::remove_var("VCS_GIT_BACKUP_TOKEN");
-    }
-}
 
 #[test]
 fn test_config_git_backup_fields() {
     let temp_db = TempDir::new().unwrap();
     
-    // Test with git backup configured
-    unsafe {
-        std::env::set_var("VCS_DB_PATH", temp_db.path().to_str().unwrap());
-        std::env::set_var("VCS_GIT_BACKUP_REPO", "https://github.com/test/repo.git");
-        std::env::set_var("VCS_GIT_BACKUP_TOKEN", "test_token_123");
-    }
-    
-    let config = moor_vcs_worker::Config::new();
+    // Test with git backup configured using builder methods
+    let config = moor_vcs_worker::Config::with_db_path(temp_db.path().to_path_buf())
+        .with_git_backup("https://github.com/test/repo.git".to_string(), Some("test_token_123".to_string()));
     
     assert_eq!(
         config.git_backup_repo,
@@ -72,28 +48,22 @@ fn test_config_git_backup_fields() {
     assert_eq!(config.git_backup_token, Some("test_token_123".to_string()));
     
     // Test with git backup not configured
-    unsafe {
-        std::env::remove_var("VCS_GIT_BACKUP_REPO");
-        std::env::remove_var("VCS_GIT_BACKUP_TOKEN");
-    }
-    
-    let config2 = moor_vcs_worker::Config::new();
+    let config2 = moor_vcs_worker::Config::with_db_path(temp_db.path().to_path_buf());
     
     assert_eq!(config2.git_backup_repo, None);
     assert_eq!(config2.git_backup_token, None);
-    
-    // Clean up
-    clear_git_backup_env();
 }
 
 #[tokio::test]
 async fn test_git_backup_with_local_repo() {
     let git_dir = setup_git_repo();
+    let temp_db = TempDir::new().unwrap();
     
-    // Set up git backup environment
-    set_git_backup_env(git_dir.path().to_str().unwrap(), None);
+    // Create config with git backup configured
+    let config = moor_vcs_worker::Config::with_db_path(temp_db.path().to_path_buf())
+        .with_git_backup(git_dir.path().to_str().unwrap().to_string(), None);
     
-    let server = TestServer::start().await.expect("Failed to start server");
+    let server = TestServer::start_with_config(config).await.expect("Failed to start server");
     let client = server.client();
     
     // Create a test object
@@ -156,17 +126,18 @@ async fn test_git_backup_with_local_repo() {
     
     let log = String::from_utf8_lossy(&log_output.stdout);
     assert!(log.contains("VCS backup:"), "Expected commit message not found in git log");
-    
-    // Clean up
-    clear_git_backup_env();
 }
 
 #[tokio::test]
 async fn test_git_backup_with_meta_filtering() {
     let git_dir = setup_git_repo();
-    set_git_backup_env(git_dir.path().to_str().unwrap(), None);
+    let temp_db = TempDir::new().unwrap();
     
-    let server = TestServer::start().await.expect("Failed to start server");
+    // Create config with git backup configured
+    let config = moor_vcs_worker::Config::with_db_path(temp_db.path().to_path_buf())
+        .with_git_backup(git_dir.path().to_str().unwrap().to_string(), None);
+    
+    let server = TestServer::start_with_config(config).await.expect("Failed to start server");
     let client = server.client();
     
     // Create an object
@@ -237,21 +208,22 @@ async fn test_git_backup_with_meta_filtering() {
     // Ignored items should NOT be present
     assert!(!content.contains("ignored_prop"));
     assert!(!content.contains("ignored_verb"));
-    
-    clear_git_backup_env();
 }
 
 #[tokio::test]
 async fn test_git_backup_cleanup_old_files() {
     let git_dir = setup_git_repo();
+    let temp_db = TempDir::new().unwrap();
     
     // Create a stale .moo file that should be cleaned up
     let stale_file = git_dir.path().join("stale_object.moo");
     fs::write(&stale_file, "object #999\nendobject").unwrap();
     
-    set_git_backup_env(git_dir.path().to_str().unwrap(), None);
+    // Create config with git backup configured
+    let config = moor_vcs_worker::Config::with_db_path(temp_db.path().to_path_buf())
+        .with_git_backup(git_dir.path().to_str().unwrap().to_string(), None);
     
-    let server = TestServer::start().await.expect("Failed to start server");
+    let server = TestServer::start_with_config(config).await.expect("Failed to start server");
     let client = server.client();
     
     // Create a real object
@@ -287,15 +259,11 @@ async fn test_git_backup_cleanup_old_files() {
     
     // Check that the stale file was removed
     assert!(!stale_file.exists(), "Stale file should have been removed");
-    
-    clear_git_backup_env();
 }
 
 #[tokio::test]
 async fn test_git_backup_disabled_by_default() {
-    // Ensure git backup env vars are not set
-    clear_git_backup_env();
-    
+    // Start server without git backup configured (default TestServer::start() doesn't configure it)
     let server = TestServer::start().await.expect("Failed to start server");
     let client = server.client();
     
@@ -329,9 +297,13 @@ async fn test_git_backup_disabled_by_default() {
 #[tokio::test]
 async fn test_git_backup_with_special_characters_in_object_name() {
     let git_dir = setup_git_repo();
-    set_git_backup_env(git_dir.path().to_str().unwrap(), None);
+    let temp_db = TempDir::new().unwrap();
     
-    let server = TestServer::start().await.expect("Failed to start server");
+    // Create config with git backup configured
+    let config = moor_vcs_worker::Config::with_db_path(temp_db.path().to_path_buf())
+        .with_git_backup(git_dir.path().to_str().unwrap().to_string(), None);
+    
+    let server = TestServer::start_with_config(config).await.expect("Failed to start server");
     let client = server.client();
     
     // Create an object with special characters in the name
@@ -368,8 +340,6 @@ async fn test_git_backup_with_special_characters_in_object_name() {
         expected_file.exists(),
         "Expected sanitized filename 'player.moo' to exist"
     );
-    
-    clear_git_backup_env();
 }
 
 #[test]

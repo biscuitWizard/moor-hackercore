@@ -41,7 +41,7 @@ fn perform_git_backup(database: DatabaseRef, config: Config) -> Result<(), Strin
     info!("Starting git backup to: {}", repo_path);
 
     // Set up the git repository (clone or use existing)
-    let work_dir = setup_git_repo(repo_path, &config.git_backup_token)?;
+    let work_dir = setup_git_repo(repo_path, &config)?;
 
     info!("Git repository ready at: {:?}", work_dir);
 
@@ -89,14 +89,18 @@ fn perform_git_backup(database: DatabaseRef, config: Config) -> Result<(), Strin
 }
 
 /// Set up the git repository (clone or init)
-fn setup_git_repo(repo_path: &str, token: &Option<String>) -> Result<PathBuf, String> {
+fn setup_git_repo(repo_path: &str, config: &Config) -> Result<PathBuf, String> {
     // Determine if this is a remote URL or local path
     let is_remote = repo_path.starts_with("http://") || repo_path.starts_with("https://");
 
-    // Use a temporary directory for the working copy
+    // Determine the working directory
     let work_dir = if is_remote {
-        PathBuf::from("/tmp/vcs-git-backup")
+        // For remote repos, use configured work dir or default
+        config.git_backup_work_dir
+            .clone()
+            .unwrap_or_else(|| PathBuf::from("/tmp/vcs-git-backup"))
     } else {
+        // For local repos, use the repo path itself
         PathBuf::from(repo_path)
     };
 
@@ -115,7 +119,7 @@ fn setup_git_repo(repo_path: &str, token: &Option<String>) -> Result<PathBuf, St
             // Clone the repository
             info!("Cloning git repository: {}", repo_path);
 
-            let clone_url = if let Some(tok) = token {
+            let clone_url = if let Some(ref tok) = config.git_backup_token {
                 // Insert token into URL for authentication
                 inject_token_into_url(repo_path, tok)
             } else {

@@ -14,6 +14,8 @@ pub struct Config {
     pub git_backup_repo: Option<String>,
     /// Git backup authentication token (optional)
     pub git_backup_token: Option<String>,
+    /// Git backup working directory (for temp clones)
+    pub git_backup_work_dir: Option<PathBuf>,
 }
 
 impl Config {
@@ -24,6 +26,7 @@ impl Config {
         let game_name = Self::get_game_name();
         let git_backup_repo = Self::get_git_backup_repo();
         let git_backup_token = Self::get_git_backup_token();
+        let git_backup_work_dir = Self::get_git_backup_work_dir();
         tracing::info!("VCS database path: {:?}", db_path);
         tracing::info!(
             "Wizard API key configured: {}",
@@ -48,6 +51,7 @@ impl Config {
             game_name,
             git_backup_repo,
             git_backup_token,
+            git_backup_work_dir,
         }
     }
 
@@ -58,6 +62,8 @@ impl Config {
         let game_name = Self::get_game_name();
         let git_backup_repo = Self::get_git_backup_repo();
         let git_backup_token = Self::get_git_backup_token();
+        // For testing, don't set a default work dir - let it be auto-generated per-instance
+        let git_backup_work_dir = None;
         tracing::info!("VCS database path (explicit): {:?}", db_path);
         tracing::info!(
             "Wizard API key configured: {}",
@@ -82,6 +88,7 @@ impl Config {
             game_name,
             git_backup_repo,
             git_backup_token,
+            git_backup_work_dir,
         }
     }
 
@@ -116,6 +123,33 @@ impl Config {
     /// Get the git backup token from environment (optional)
     fn get_git_backup_token() -> Option<String> {
         env::var("VCS_GIT_BACKUP_TOKEN").ok().filter(|s| !s.is_empty())
+    }
+
+    /// Get the git backup working directory from environment (optional)
+    fn get_git_backup_work_dir() -> Option<PathBuf> {
+        env::var("VCS_GIT_BACKUP_WORK_DIR")
+            .ok()
+            .filter(|s| !s.is_empty())
+            .map(PathBuf::from)
+            .or_else(|| {
+                // Default to /tmp/vcs-git-backup for production (backward compatible)
+                Some(PathBuf::from("/tmp/vcs-git-backup"))
+            })
+    }
+
+    /// Builder method to set git backup configuration
+    #[allow(dead_code)]
+    pub fn with_git_backup(mut self, repo: String, token: Option<String>) -> Self {
+        self.git_backup_repo = Some(repo);
+        self.git_backup_token = token;
+        self
+    }
+
+    /// Builder method to set git backup working directory
+    #[allow(dead_code)]
+    pub fn with_git_work_dir(mut self, path: PathBuf) -> Self {
+        self.git_backup_work_dir = Some(path);
+        self
     }
 }
 

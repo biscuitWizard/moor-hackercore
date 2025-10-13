@@ -29,6 +29,7 @@ pub use moor_vcs_worker::types::User;
 pub struct TestServer {
     port: u16,
     temp_dir: TempDir,
+    git_work_dir: Option<TempDir>,
     database: DatabaseRef,
     _shutdown_tx: tokio::sync::oneshot::Sender<()>,
 }
@@ -39,8 +40,12 @@ impl TestServer {
         // Create temporary directory for database
         let temp_dir = TempDir::new()?;
 
-        // Create config with test database path
-        let config = Config::with_db_path(temp_dir.path().to_path_buf());
+        // Create temporary directory for git working directory (ensures isolation)
+        let git_work_dir = TempDir::new()?;
+
+        // Create config with test database path and isolated git work dir
+        let mut config = Config::with_db_path(temp_dir.path().to_path_buf());
+        config.git_backup_work_dir = Some(git_work_dir.path().to_path_buf());
 
         // Create operation registry and get database reference
         let (registry, database) = create_registry_with_config(config)?;
@@ -78,6 +83,70 @@ impl TestServer {
         Ok(Self {
             port,
             temp_dir,
+            git_work_dir: Some(git_work_dir),
+            database,
+            _shutdown_tx: shutdown_tx,
+        })
+    }
+
+    /// Start a new test server with a custom config
+    #[allow(dead_code)]
+    pub async fn start_with_config(config: Config) -> Result<Self, Box<dyn std::error::Error>> {
+        // Create temporary directory for database (even if config has db_path, we own the TempDir)
+        let temp_dir = TempDir::new()?;
+        
+        // Create temporary directory for git working directory if not specified in config
+        let git_work_dir = if config.git_backup_work_dir.is_none() {
+            Some(TempDir::new()?)
+        } else {
+            None
+        };
+
+        // Use the provided config, but ensure git work dir is set for isolation
+        let mut final_config = config;
+        if final_config.git_backup_work_dir.is_none() {
+            if let Some(ref gwd) = git_work_dir {
+                final_config.git_backup_work_dir = Some(gwd.path().to_path_buf());
+            }
+        }
+
+        // Create operation registry and get database reference
+        let (registry, database) = create_registry_with_config(final_config)?;
+        let registry = Arc::new(registry);
+
+        // Find an available port
+        let listener = TcpListener::bind("127.0.0.1:0").await?;
+        let port = listener.local_addr()?.port();
+
+        // Create router
+        let router = create_http_router(registry);
+
+        // Create shutdown channel
+        let (shutdown_tx, mut shutdown_rx) = tokio::sync::oneshot::channel();
+
+        // Spawn server in background
+        tokio::spawn(async move {
+            let server = axum::serve(listener, router.into_make_service());
+
+            tokio::select! {
+                result = server => {
+                    if let Err(e) = result {
+                        eprintln!("Server error: {}", e);
+                    }
+                }
+                _ = &mut shutdown_rx => {
+                    // Shutdown requested
+                }
+            }
+        });
+
+        // Wait for server to be ready
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        Ok(Self {
+            port,
+            temp_dir,
+            git_work_dir,
             database,
             _shutdown_tx: shutdown_tx,
         })
@@ -91,6 +160,12 @@ impl TestServer {
     /// Get the database path
     pub fn db_path(&self) -> std::path::PathBuf {
         self.temp_dir.path().to_path_buf()
+    }
+
+    /// Get the git working directory path
+    #[allow(dead_code)]
+    pub fn git_work_dir(&self) -> Option<std::path::PathBuf> {
+        self.git_work_dir.as_ref().map(|d| d.path().to_path_buf())
     }
 
     /// Get the database reference for direct state inspection
