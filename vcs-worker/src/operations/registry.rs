@@ -30,12 +30,6 @@ impl OperationRegistry {
         self.operations.insert(name, Box::new(operation));
     }
 
-    /// Check if an operation is registered
-    #[allow(dead_code)]
-    pub fn is_registered(&self, name: &str) -> bool {
-        self.operations.contains_key(name)
-    }
-
     /// List all registered operation names
     pub fn list_operations(&self) -> Vec<String> {
         self.operations.keys().cloned().collect()

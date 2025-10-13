@@ -198,12 +198,6 @@ impl Database {
         &self.workspace_provider
     }
 
-    /// Get the database path
-    #[allow(dead_code)]
-    pub fn db_path(&self) -> &std::path::Path {
-        &self.db_path
-    }
-
     /// Get the game name
     pub fn game_name(&self) -> &str {
         &self.game_name

@@ -84,14 +84,12 @@ pub trait IndexProvider: Send + Sync {
 
     // ===== EXTERNAL USER METHODS =====
     /// Get the external user API key for outbound requests
-    #[allow(dead_code)]
     fn get_external_user_api_key(&self) -> ProviderResult<Option<String>>;
 
     /// Set the external user API key for outbound requests
     fn set_external_user_api_key(&self, key: &str) -> ProviderResult<()>;
 
     /// Get the external user ID
-    #[allow(dead_code)]
     fn get_external_user_id(&self) -> ProviderResult<Option<String>>;
 
     /// Set the external user ID

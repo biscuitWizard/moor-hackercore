@@ -98,24 +98,10 @@ impl OperationResponse {
         Self::new(400, description, example)
     }
 
-    #[allow(dead_code)]
-    pub fn forbidden(description: impl Into<String>, example: impl Into<String>) -> Self {
-        Self::new(403, description, example)
-    }
-
-    #[allow(dead_code)]
-    pub fn not_found(description: impl Into<String>, example: impl Into<String>) -> Self {
-        Self::new(404, description, example)
-    }
-
     pub fn internal_error(description: impl Into<String>, example: impl Into<String>) -> Self {
         Self::new(500, description, example)
     }
 }
-
-// Keep ErrorResponse as an alias for backwards compatibility during transition
-#[allow(dead_code)]
-pub type ErrorResponse = OperationResponse;
 
 pub trait Operation: Send + Sync {
     /// The name of the operation (used for RPC)
@@ -164,16 +150,6 @@ pub trait Operation: Send + Sync {
         ]
     }
 
-    /// Error responses that this operation can return
-    /// DEPRECATED: Use responses() instead for complete documentation
-    /// This is kept for backwards compatibility during transition
-    #[allow(dead_code)]
-    fn error_responses(&self) -> Vec<ErrorResponse> {
-        self.responses()
-            .into_iter()
-            .filter(|r| r.status_code >= 400)
-            .collect()
-    }
 }
 
 /// Create the default registry with built-in operations

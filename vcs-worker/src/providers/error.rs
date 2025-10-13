@@ -16,12 +16,6 @@ pub enum ProviderError {
     #[error("Object not found: {0}")]
     #[allow(dead_code)]
     ObjectNotFound(String),
-    #[error("Change not found: {0}")]
-    #[allow(dead_code)]
-    ChangeNotFound(String),
-    #[error("Invalid version: expected at least 1, got {0}")]
-    #[allow(dead_code)]
-    InvalidVersion(u64),
     #[error("Invalid operation: {0}")]
     InvalidOperation(String),
 }

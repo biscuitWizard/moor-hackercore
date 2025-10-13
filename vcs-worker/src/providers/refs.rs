@@ -70,10 +70,6 @@ pub trait RefsProvider: Send + Sync {
         object_name: &str,
     ) -> ProviderResult<Option<u64>>;
 
-    /// Check if a SHA256 is referenced by any ref
-    #[allow(dead_code)]
-    fn is_sha256_referenced(&self, sha256: &str) -> ProviderResult<bool>;
-
     /// Check if a SHA256 is referenced by any ref excluding a specific object:version
     fn is_sha256_referenced_excluding(
         &self,
@@ -248,19 +244,6 @@ impl RefsProvider for RefsProviderImpl {
             .max();
 
         Ok(latest_version)
-    }
-
-    fn is_sha256_referenced(&self, sha256: &str) -> ProviderResult<bool> {
-        let storage = self.load_refs_storage()?;
-
-        // Check if any ref points to this SHA256
-        for ref_sha256 in storage.refs.values() {
-            if ref_sha256 == sha256 {
-                return Ok(true);
-            }
-        }
-
-        Ok(false)
     }
 
     fn is_sha256_referenced_excluding(

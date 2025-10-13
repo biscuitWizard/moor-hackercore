@@ -373,17 +373,6 @@ pub fn compare_object_versions(
     Ok(object_change)
 }
 
-/// Compare two ObjectDefinitions and populate the ObjectChange with detailed differences
-/// If database and obj_name are provided, ignored properties/verbs from meta are excluded from deleted lists
-#[allow(dead_code)]
-pub fn compare_object_definitions(
-    baseline: &ObjectDefinition,
-    local: &ObjectDefinition,
-    object_change: &mut ObjectChange,
-) {
-    compare_object_definitions_with_meta(baseline, local, object_change, None, None, None, None);
-}
-
 /// Apply hints to convert added/deleted verbs/properties to renames
 fn apply_hints_to_object_change(
     object_change: &mut ObjectChange,

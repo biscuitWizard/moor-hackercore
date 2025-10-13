@@ -11,8 +11,7 @@ use moor_var::{E_INVARG, Var, v_error, v_list, v_str};
 /// Request structure for object list operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ObjectListRequest {
-    #[allow(dead_code)]
-    pub include_deleted: bool, // For future use - whether to include deleted objects
+    // Currently no parameters needed, but kept as a struct for future extensibility
 }
 
 /// Object list operation that walks through the entire change history chronologically
@@ -31,7 +30,6 @@ impl ObjectListOperation {
     /// Process the object list request by delegating to IndexProvider
     fn process_object_list(
         &self,
-        _request: ObjectListRequest,
     ) -> Result<Vec<ObjectInfo>, ObjectsTreeError> {
         info!("Requesting complete object list from IndexProvider");
 
@@ -112,11 +110,9 @@ endfor"##
     fn execute(&self, args: Vec<String>, _user: &User) -> Var {
         info!("Executing object list operation with {} args", args.len());
 
-        let request = ObjectListRequest {
-            include_deleted: false, // For now, don't include deleted objects
-        };
+        let _request = ObjectListRequest {};
 
-        match self.process_object_list(request) {
+        match self.process_object_list() {
             Ok(object_list) => {
                 info!(
                     "Object list operation completed successfully with {} objects",
