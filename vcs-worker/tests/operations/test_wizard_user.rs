@@ -58,6 +58,10 @@ async fn test_wizard_user_exists_with_all_permissions() {
         "Wizard should have DisableUser permission"
     );
     assert!(
+        wizard_user.has_permission(&Permission::DeleteUser),
+        "Wizard should have DeleteUser permission"
+    );
+    assert!(
         wizard_user.has_permission(&Permission::ManagePermissions),
         "Wizard should have ManagePermissions permission"
     );
@@ -66,7 +70,7 @@ async fn test_wizard_user_exists_with_all_permissions() {
         "Wizard should have ManageApiKeys permission"
     );
 
-    println!("✅ Wizard has all permissions: ApproveChanges, SubmitChanges, Clone, CreateUser, DisableUser, ManagePermissions, ManageApiKeys");
+    println!("✅ Wizard has all permissions: ApproveChanges, SubmitChanges, Clone, CreateUser, DisableUser, DeleteUser, ManagePermissions, ManageApiKeys");
 
     // Step 3: Verify Wizard has the default API key
     println!("\nStep 3: Verifying Wizard has the API key...");

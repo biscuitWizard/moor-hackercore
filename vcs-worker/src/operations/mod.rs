@@ -30,8 +30,8 @@ pub use registry::OperationRegistry;
 pub use system::StatusOperation;
 pub use user::{
     StatOperation, UserAddPermissionOperation, UserCreateOperation, UserDeleteApiKeyOperation,
-    UserDisableOperation, UserEnableOperation, UserGenerateApiKeyOperation, UserListOperation,
-    UserRemovePermissionOperation,
+    UserDeleteOperation, UserDisableOperation, UserEnableOperation, UserGenerateApiKeyOperation,
+    UserListOperation, UserRemovePermissionOperation,
 };
 pub use workspace::{WorkspaceListOperation, WorkspaceSubmitOperation};
 
@@ -231,6 +231,7 @@ pub fn create_registry_with_config(
     registry.register(UserCreateOperation::new(database.users().clone()));
     registry.register(UserDisableOperation::new(database.users().clone()));
     registry.register(UserEnableOperation::new(database.users().clone()));
+    registry.register(UserDeleteOperation::new(database.users().clone()));
     registry.register(UserAddPermissionOperation::new(database.users().clone()));
     registry.register(UserRemovePermissionOperation::new(database.users().clone()));
     registry.register(UserGenerateApiKeyOperation::new(database.users().clone()));

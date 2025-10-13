@@ -24,6 +24,7 @@ impl UserAddPermissionOperation {
             "Clone" => Ok(Permission::Clone),
             "CreateUser" | "Create_User" => Ok(Permission::CreateUser),
             "DisableUser" | "Disable_User" => Ok(Permission::DisableUser),
+            "DeleteUser" | "Delete_User" => Ok(Permission::DeleteUser),
             "ManagePermissions" | "Manage_Permissions" => Ok(Permission::ManagePermissions),
             "ManageApiKeys" | "Manage_Api_Keys" => Ok(Permission::ManageApiKeys),
             _ => Err(format!("Unknown permission: {perm_str}")),
@@ -48,8 +49,8 @@ impl Operation for UserAddPermissionOperation {
         "Grants a specific permission to a user account. Permissions control what operations a user \
         can perform in the system. Available permissions include: ApproveChanges (approve code reviews), \
         SubmitChanges (submit changes for review), Clone (clone repositories), CreateUser (create new users), \
-        DisableUser (disable/enable users), ManagePermissions (grant/revoke permissions), and ManageApiKeys \
-        (manage API keys for other users). This operation requires the ManagePermissions permission."
+        DisableUser (disable/enable users), DeleteUser (delete users), ManagePermissions (grant/revoke permissions), \
+        and ManageApiKeys (manage API keys for other users). This operation requires the ManagePermissions permission."
     }
 
     fn parameters(&self) -> Vec<OperationParameter> {

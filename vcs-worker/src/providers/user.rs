@@ -162,6 +162,7 @@ impl UserProviderImpl {
         user.add_permission(Permission::Clone);
         user.add_permission(Permission::CreateUser);
         user.add_permission(Permission::DisableUser);
+        user.add_permission(Permission::DeleteUser);
         user.add_permission(Permission::ManagePermissions);
         user.add_permission(Permission::ManageApiKeys);
         user
@@ -386,6 +387,7 @@ impl UserProvider for UserProviderImpl {
                     wizard_user.add_permission(Permission::Clone);
                     wizard_user.add_permission(Permission::CreateUser);
                     wizard_user.add_permission(Permission::DisableUser);
+                    wizard_user.add_permission(Permission::DeleteUser);
                     wizard_user.add_permission(Permission::ManagePermissions);
                     wizard_user.add_permission(Permission::ManageApiKeys);
                     // Ensure it's marked as a system user

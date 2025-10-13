@@ -231,6 +231,7 @@ pub enum Permission {
     Clone,
     CreateUser,
     DisableUser,
+    DeleteUser,
     ManagePermissions,
     ManageApiKeys,
 }
@@ -243,6 +244,7 @@ impl std::fmt::Display for Permission {
             Permission::Clone => "Clone",
             Permission::CreateUser => "Create_User",
             Permission::DisableUser => "Disable_User",
+            Permission::DeleteUser => "Delete_User",
             Permission::ManagePermissions => "Manage_Permissions",
             Permission::ManageApiKeys => "Manage_Api_Keys",
         };

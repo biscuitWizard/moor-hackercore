@@ -24,6 +24,7 @@ impl UserRemovePermissionOperation {
             "Clone" => Ok(Permission::Clone),
             "CreateUser" | "Create_User" => Ok(Permission::CreateUser),
             "DisableUser" | "Disable_User" => Ok(Permission::DisableUser),
+            "DeleteUser" | "Delete_User" => Ok(Permission::DeleteUser),
             "ManagePermissions" | "Manage_Permissions" => Ok(Permission::ManagePermissions),
             "ManageApiKeys" | "Manage_Api_Keys" => Ok(Permission::ManageApiKeys),
             _ => Err(format!("Unknown permission: {perm_str}")),
