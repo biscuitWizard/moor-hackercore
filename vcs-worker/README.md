@@ -395,7 +395,7 @@ Lists all objects modified in the current change.
 ```json
 {
   "change_id": "abc-123-def", 
-  "change_name": "Fix bug in MyObject",
+  "change_message": "Fix bug in MyObject",
   "added": ["new_object"],
   "modified": ["MyObject", "OtherObject"],
   "deleted": ["old_object"],

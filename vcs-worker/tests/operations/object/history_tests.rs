@@ -96,9 +96,9 @@ async fn test_history_newly_created_object() {
         "Change ID should match"
     );
     assert_eq!(
-        entry["change_name"].as_str().unwrap(),
+        entry["change_message"].as_str().unwrap(),
         "initial_change",
-        "Change name should match"
+        "Change message should match"
     );
     assert_eq!(
         entry["author"].as_str().unwrap(),
@@ -480,15 +480,15 @@ async fn test_history_multiple_changes() {
     let entry3 = history[2].as_object().expect("Entry 3 should be a map");
     
     assert_eq!(entry1["change_id"].as_str().unwrap(), change_id1);
-    assert_eq!(entry1["change_name"].as_str().unwrap(), "change1");
+    assert_eq!(entry1["change_message"].as_str().unwrap(), "change1");
     assert_eq!(entry1["author"].as_str().unwrap(), "author1");
     
     assert_eq!(entry2["change_id"].as_str().unwrap(), change_id2);
-    assert_eq!(entry2["change_name"].as_str().unwrap(), "change2");
+    assert_eq!(entry2["change_message"].as_str().unwrap(), "change2");
     assert_eq!(entry2["author"].as_str().unwrap(), "author2");
     
     assert_eq!(entry3["change_id"].as_str().unwrap(), change_id3);
-    assert_eq!(entry3["change_name"].as_str().unwrap(), "change3");
+    assert_eq!(entry3["change_message"].as_str().unwrap(), "change3");
     assert_eq!(entry3["author"].as_str().unwrap(), "author3");
     
     // Verify timestamps are in order (each should be >= previous)
