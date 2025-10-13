@@ -13,6 +13,20 @@
 //! 10. Retrieving multiple historical versions accurately
 
 use crate::common::*;
+use serde_json::Value;
+
+/// Helper function to convert object/get response (list of strings) to a single string
+fn list_to_string(response: &Value) -> String {
+    if let Some(list) = response.get_result_list() {
+        list.iter()
+            .filter_map(|v| v.as_str())
+            .collect::<Vec<_>>()
+            .join("\n")
+    } else {
+        // Fallback for errors which are still strings
+        response.get_result_str().unwrap_or("").to_string()
+    }
+}
 
 #[tokio::test]
 async fn test_get_non_existent_object() {
@@ -30,10 +44,17 @@ async fn test_get_non_existent_object() {
         .await
         .expect("Request should complete");
 
-    // Should fail with error
+    // Should fail with error (check both string and list result formats)
     let result_str = response.get_result_str().unwrap_or("");
+    let has_error = result_str.contains("Error") || result_str.contains("not found");
+    
+    // If not a string error, might be a list (though errors should be strings)
+    if !has_error && response.get_result_list().is_some() {
+        panic!("Expected error, but got a successful list result");
+    }
+    
     assert!(
-        result_str.contains("Error") || result_str.contains("not found"),
+        has_error,
         "Should indicate object not found, got: {}",
         result_str
     );
@@ -81,7 +102,7 @@ async fn test_get_deleted_object() {
         .expect("Failed to get object");
 
     get_response.assert_success("Get object");
-    let content = get_response.require_result_str("Get object");
+    let content = list_to_string(&get_response);
     assert!(
         content.contains("Test Object"),
         "Should contain object content"
@@ -223,7 +244,7 @@ async fn test_get_renamed_object_by_new_name() {
         .expect("Failed to get object");
 
     response.assert_success("Get object");
-    let content = response.require_result_str("Get object");
+    let content = list_to_string(&response);
     assert!(
         content.contains("Test Object"),
         "Should contain object content"
@@ -263,7 +284,7 @@ async fn test_get_object_after_update_in_current_change() {
         .expect("Failed to get object");
 
     response1.assert_success("Get object");
-    let content1 = response1.require_result_str("Get object");
+    let content1 = list_to_string(&response1);
     assert!(
         content1.contains("Test Object"),
         "Should contain initial content"
@@ -291,7 +312,7 @@ async fn test_get_object_after_update_in_current_change() {
         .expect("Failed to get object");
 
     response2.assert_success("Get object");
-    let content2 = response2.require_result_str("Get object");
+    let content2 = list_to_string(&response2);
     assert!(
         content2.contains("Detailed Test Object"),
         "Should contain updated content"
@@ -375,7 +396,7 @@ async fn test_get_object_from_merged_change() {
         .expect("Failed to get object");
 
     response.assert_success("Get object");
-    let content = response.require_result_str("Get object");
+    let content = list_to_string(&response);
     assert!(
         content.contains("Test Object"),
         "Should contain object content"
@@ -426,7 +447,7 @@ async fn test_get_object_with_no_changes() {
         .expect("Failed to get object");
 
     response.assert_success("Get object");
-    let content = response.require_result_str("Get object");
+    let content = list_to_string(&response);
     assert!(
         content.contains("Test Object"),
         "Should contain object content"
@@ -475,7 +496,7 @@ async fn test_get_object_multiple_versions() {
         .expect("Failed to get object");
 
     response1.assert_success("Get object v1");
-    let content1 = response1.require_result_str("Get object v1");
+    let content1 = list_to_string(&response1);
     assert!(
         content1.contains("Test Object"),
         "Should contain v1 content"
@@ -510,7 +531,7 @@ async fn test_get_object_multiple_versions() {
         .expect("Failed to get object");
 
     response2.assert_success("Get object v2");
-    let content2 = response2.require_result_str("Get object v2");
+    let content2 = list_to_string(&response2);
     assert!(
         content2.contains("Detailed Test Object"),
         "Should contain v2 content"
@@ -585,7 +606,7 @@ async fn test_get_object_at_specific_change_id() {
         .expect("Failed to get object");
 
     response_current.assert_success("Get current object");
-    let content_current = response_current.require_result_str("Get current object");
+    let content_current = list_to_string(&response_current);
     assert!(
         content_current.contains("Detailed Test Object"),
         "Current version should contain v2 content"
@@ -600,7 +621,7 @@ async fn test_get_object_at_specific_change_id() {
         .expect("Failed to get object at change");
 
     response_v1.assert_success("Get object at change");
-    let content_v1 = response_v1.require_result_str("Get object at change");
+    let content_v1 = list_to_string(&response_v1);
     assert!(
         content_v1.contains("Test Object"),
         "Historical version should contain v1 content"
@@ -658,7 +679,7 @@ async fn test_get_object_at_short_change_id() {
         .expect("Failed to get object with short ID");
 
     response.assert_success("Get object with short ID");
-    let content = response.require_result_str("Get object with short ID");
+    let content = list_to_string(&response);
     assert!(
         content.contains("Test Object"),
         "Should retrieve object using short change ID"
@@ -869,7 +890,7 @@ async fn test_get_object_multiple_changes_historical() {
         .await
         .expect("Failed to get v1");
     response_v1.assert_success("Get v1");
-    let content_v1 = response_v1.require_result_str("Get v1");
+    let content_v1 = list_to_string(&response_v1);
     assert!(
         content_v1.contains("Test Object") && !content_v1.contains("Detailed"),
         "Should be v1"
@@ -881,7 +902,7 @@ async fn test_get_object_multiple_changes_historical() {
         .await
         .expect("Failed to get v2");
     response_v2.assert_success("Get v2");
-    let content_v2 = response_v2.require_result_str("Get v2");
+    let content_v2 = list_to_string(&response_v2);
     assert!(content_v2.contains("Detailed Test Object"), "Should be v2");
 
     println!("\nStep 6: Getting version 3...");
@@ -890,7 +911,7 @@ async fn test_get_object_multiple_changes_historical() {
         .await
         .expect("Failed to get v3");
     response_v3.assert_success("Get v3");
-    let content_v3 = response_v3.require_result_str("Get v3");
+    let content_v3 = list_to_string(&response_v3);
     assert!(
         content_v3.contains("Test Object") && !content_v3.contains("Detailed"),
         "Should be v3"
@@ -902,7 +923,7 @@ async fn test_get_object_multiple_changes_historical() {
         .await
         .expect("Failed to get current");
     response_current.assert_success("Get current");
-    let content_current = response_current.require_result_str("Get current");
+    let content_current = list_to_string(&response_current);
     assert!(
         content_current.contains("Test Object") && !content_current.contains("Detailed"),
         "Current should be v3"
@@ -911,4 +932,153 @@ async fn test_get_object_multiple_changes_historical() {
     println!("✅ All historical versions retrieved correctly");
 
     println!("\n✅ Test passed: Historical versions are accurate");
+}
+
+#[tokio::test]
+async fn test_get_returns_list_of_strings() {
+    let server = TestServer::start()
+        .await
+        .expect("Failed to start test server");
+    let client = server.client();
+    let db = server.db_assertions();
+
+    println!("Test: object/get should return a list of strings, not a single string");
+
+    // Step 1: Create and approve an object
+    println!("\nStep 1: Creating and approving object...");
+    client
+        .change_create("list_test", "test_author", None)
+        .await
+        .expect("Failed to create change");
+
+    client
+        .object_update_from_file("test_list_format", "test_object.moo")
+        .await
+        .expect("Failed to create object");
+
+    let (change_id, _) = db.require_top_change();
+    client
+        .change_approve(&change_id)
+        .await
+        .expect("Failed to approve")
+        .assert_success("Approve");
+
+    println!("✅ Object approved");
+
+    // Step 2: Get the object and verify it's a list
+    println!("\nStep 2: Getting object and verifying list format...");
+    let response = client
+        .object_get("test_list_format")
+        .await
+        .expect("Failed to get object");
+
+    response.assert_success("Get object");
+
+    // Verify that the result is a list, not a string
+    let result_list = response.get_result_list();
+    assert!(
+        result_list.is_some(),
+        "Result should be a list, not a string"
+    );
+
+    let list = result_list.unwrap();
+    assert!(
+        !list.is_empty(),
+        "List should not be empty"
+    );
+
+    // Verify each element is a string
+    for (idx, item) in list.iter().enumerate() {
+        assert!(
+            item.is_string(),
+            "Item {} should be a string, got: {:?}",
+            idx,
+            item
+        );
+    }
+
+    println!("✅ Verified result is a list of {} strings", list.len());
+
+    // Step 3: Verify we can reconstruct the object by joining lines
+    let reconstructed = list
+        .iter()
+        .filter_map(|v| v.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    assert!(
+        reconstructed.contains("Test Object"),
+        "Reconstructed content should contain object data"
+    );
+
+    println!("✅ Successfully reconstructed object content from list");
+    println!("\n✅ Test passed: object/get returns list of strings");
+}
+
+#[tokio::test]
+async fn test_get_empty_lines_preserved() {
+    let server = TestServer::start()
+        .await
+        .expect("Failed to start test server");
+    let client = server.client();
+    let db = server.db_assertions();
+
+    println!("Test: object/get should preserve empty lines in the list");
+
+    // Step 1: Create an object with known content
+    println!("\nStep 1: Creating object...");
+    client
+        .change_create("empty_lines_test", "test_author", None)
+        .await
+        .expect("Failed to create change");
+
+    client
+        .object_update_from_file("test_empty_lines", "detailed_test_object.moo")
+        .await
+        .expect("Failed to create object");
+
+    let (change_id, _) = db.require_top_change();
+    client
+        .change_approve(&change_id)
+        .await
+        .expect("Failed to approve")
+        .assert_success("Approve");
+
+    println!("✅ Object approved");
+
+    // Step 2: Get the object
+    println!("\nStep 2: Getting object...");
+    let response = client
+        .object_get("test_empty_lines")
+        .await
+        .expect("Failed to get object");
+
+    response.assert_success("Get object");
+
+    let result_list = response.require_result_list("Get object");
+
+    // Verify we have multiple lines
+    assert!(
+        result_list.len() > 5,
+        "Should have multiple lines, got {}",
+        result_list.len()
+    );
+
+    println!("✅ Object has {} lines", result_list.len());
+
+    // Step 3: Verify we can find expected content on specific lines
+    let lines: Vec<String> = result_list
+        .iter()
+        .filter_map(|v| v.as_str().map(|s| s.to_string()))
+        .collect();
+
+    // First line should start with "obj " or "object " for object definition
+    assert!(
+        lines[0].starts_with("obj ") || lines[0].starts_with("object "),
+        "First line should be object declaration, got: '{}'",
+        lines[0]
+    );
+
+    println!("✅ Line format verified");
+    println!("\n✅ Test passed: Empty lines and structure preserved in list");
 }

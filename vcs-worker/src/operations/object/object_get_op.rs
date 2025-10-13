@@ -11,7 +11,7 @@ use crate::providers::refs::RefsProvider;
 use crate::types::{User, VcsObjectType};
 use moor_compiler::{CompileOptions, ObjFileContext, compile_object_definitions};
 use moor_objdef::dump_object;
-use moor_var::{E_INVARG, v_error};
+use moor_var::{E_INVARG, v_error, v_list, v_str, Var};
 
 /// Request structure for object get operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -336,7 +336,7 @@ end""#,
         ]
     }
 
-    fn execute(&self, args: Vec<String>, _user: &User) -> moor_var::Var {
+    fn execute(&self, args: Vec<String>, _user: &User) -> Var {
         // For RPC calls, we expect the args to contain:
         // args[0] = object_name
         // args[1] = change_id (optional)
@@ -361,7 +361,12 @@ end""#,
         match self.process_object_get(request) {
             Ok(result) => {
                 info!("Object get operation completed successfully");
-                moor_var::v_str(&result)
+                // Split the result by newlines and convert to a list of v_str
+                let lines: Vec<Var> = result
+                    .lines()
+                    .map(|line| v_str(line))
+                    .collect();
+                v_list(&lines)
             }
             Err(e) => {
                 error!("Object get operation failed: {}", e);

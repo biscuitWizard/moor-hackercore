@@ -1,6 +1,20 @@
 //! Tests for filtering ignored properties and verbs during object get operations
 
 use crate::common::*;
+use serde_json::Value;
+
+/// Helper function to convert object/get response (list of strings) to a single string
+fn list_to_string(response: &Value) -> String {
+    if let Some(list) = response.get_result_list() {
+        list.iter()
+            .filter_map(|v| v.as_str())
+            .collect::<Vec<_>>()
+            .join("\n")
+    } else {
+        // Fallback for errors which are still strings
+        response.get_result_str().unwrap_or("").to_string()
+    }
+}
 
 #[tokio::test]
 async fn test_object_get_filters_ignored_properties() {
@@ -22,7 +36,7 @@ async fn test_object_get_filters_ignored_properties() {
         .expect("Failed to get object");
 
     get_response_before.assert_success("Get object");
-    let content_before = get_response_before.require_result_str("Get object");
+    let content_before = list_to_string(&get_response_before);
 
     // The object should contain 'test_property' in property definitions
     assert!(
@@ -43,7 +57,7 @@ async fn test_object_get_filters_ignored_properties() {
         .expect("Failed to get object");
 
     get_response_after.assert_success("Get object after adding meta");
-    let content_after = get_response_after.require_result_str("Get object");
+    let content_after = list_to_string(&get_response_after);
 
     // The filtered object should NOT contain 'test_property'
     assert!(
@@ -71,7 +85,7 @@ async fn test_object_get_filters_ignored_verbs() {
         .await
         .expect("Failed to get object");
 
-    let content_before = get_response_before.require_result_str("Get object");
+    let content_before = list_to_string(&get_response_before);
 
     // The object should contain 'test_verb' in verb definitions
     assert!(
@@ -91,7 +105,7 @@ async fn test_object_get_filters_ignored_verbs() {
         .await
         .expect("Failed to get object");
 
-    let content_after = get_response_after.require_result_str("Get object");
+    let content_after = list_to_string(&get_response_after);
 
     // The filtered object should NOT contain 'test_verb'
     assert!(
@@ -131,7 +145,7 @@ async fn test_object_get_filters_multiple_properties_and_verbs() {
         .expect("Failed to get object");
 
     get_response.assert_success("Get object");
-    let content = get_response.require_result_str("Get object");
+    let content = list_to_string(&get_response);
 
     // Verify both property and verb are filtered out
     assert!(
