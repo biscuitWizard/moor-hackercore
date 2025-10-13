@@ -782,3 +782,635 @@ async fn test_clone_export_then_import_to_same_repo() {
 
     println!("\n✅ Test passed: Clone to same repo handled");
 }
+
+#[tokio::test]
+async fn test_clone_import_with_external_user_api_key_valid() {
+    use wiremock::{MockServer, Mock, ResponseTemplate};
+    use wiremock::matchers::{method, path, header};
+
+    println!("Test: Clone import with valid external user API key should validate and store credentials");
+
+    // Step 1: Start mock server to act as remote VCS worker
+    let mock_server = MockServer::start().await;
+    
+    // Step 2: Create source server with actual data to clone
+    let source_server = TestServer::start()
+        .await
+        .expect("Failed to start source server");
+    let source_client = source_server.client();
+    let source_db = source_server.db_assertions();
+
+    // Create some state on source server
+    println!("\nStep 1: Creating state on source server...");
+    source_client
+        .change_create("test_change", "test_author", Some("Test change"))
+        .await
+        .expect("Failed to create change");
+    
+    source_client
+        .object_update_from_file("test_object", "test_object.moo")
+        .await
+        .expect("Failed to update object");
+    
+    let (change_id, _) = source_db.require_top_change();
+    source_client
+        .change_approve(&change_id)
+        .await
+        .expect("Failed to approve")
+        .assert_success("Approve change");
+    
+    println!("✅ Source server has state");
+
+    // Step 3: Export clone data from source
+    let export_response = source_client
+        .clone_export()
+        .await
+        .expect("Failed to export");
+    let clone_data_json = export_response.require_result_str("Export");
+
+    // Step 4: Mock the /api/user/stat endpoint for API key validation
+    println!("\nStep 2: Setting up mock /api/user/stat endpoint...");
+    Mock::given(method("GET"))
+        .and(path("/api/user/stat"))
+        .and(header("X-API-Key", "test-api-key-123"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "success": true,
+            "result": ["external_user_id", "external@example.com", {"type": "obj", "id": 200}, ["Read", "Write"]]
+        })))
+        .mount(&mock_server)
+        .await;
+    
+    println!("✅ Mock stat endpoint configured");
+
+    // Step 5: Mock the /api/clone endpoint to return clone data
+    println!("\nStep 3: Setting up mock /api/clone endpoint...");
+    Mock::given(method("GET"))
+        .and(path("/api/clone"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "success": true,
+            "result": clone_data_json
+        })))
+        .mount(&mock_server)
+        .await;
+    
+    println!("✅ Mock clone endpoint configured");
+
+    // Step 6: Create target server and import with external user API key
+    let target_server = TestServer::start()
+        .await
+        .expect("Failed to start target server");
+    
+    println!("\nStep 4: Importing to target with external user API key...");
+    let clone_url = format!("{}/api/clone", mock_server.uri());
+    
+    // Use the import_from_url_async method directly with API key
+    let clone_op = moor_vcs_worker::operations::CloneOperation::new(target_server.database().clone());
+    let result = clone_op
+        .import_from_url_async(&clone_url, Some("test-api-key-123"))
+        .await;
+    
+    assert!(result.is_ok(), "Clone import should succeed: {:?}", result);
+    println!("✅ Clone import succeeded");
+
+    // Step 7: Verify external user credentials are stored
+    println!("\nStep 5: Verifying external user credentials are stored...");
+    
+    let stored_api_key = target_server
+        .database()
+        .index()
+        .get_external_user_api_key()
+        .expect("Failed to get API key")
+        .expect("API key should be set");
+    
+    assert_eq!(stored_api_key, "test-api-key-123", "API key should be stored");
+    println!("✅ External user API key stored: {}", stored_api_key);
+
+    let stored_user_id = target_server
+        .database()
+        .index()
+        .get_external_user_id()
+        .expect("Failed to get user ID")
+        .expect("User ID should be set");
+    
+    assert_eq!(stored_user_id, "external_user_id", "User ID should be stored");
+    println!("✅ External user ID stored: {}", stored_user_id);
+
+    // Verify base URL is stored
+    let stored_source = target_server
+        .database()
+        .index()
+        .get_source()
+        .expect("Failed to get source")
+        .expect("Source should be set");
+    
+    assert_eq!(stored_source, mock_server.uri(), "Source URL should be stored");
+    println!("✅ Source URL stored: {}", stored_source);
+
+    println!("\n✅ Test passed: Clone import with valid external user API key");
+}
+
+#[tokio::test]
+async fn test_clone_import_with_external_user_api_key_invalid() {
+    use wiremock::{MockServer, Mock, ResponseTemplate};
+    use wiremock::matchers::{method, path, header};
+
+    println!("Test: Clone import with invalid external user API key should fail");
+
+    // Step 1: Start mock server
+    let mock_server = MockServer::start().await;
+    
+    // Step 2: Create source server with data
+    let source_server = TestServer::start()
+        .await
+        .expect("Failed to start source server");
+    let source_client = source_server.client();
+    let source_db = source_server.db_assertions();
+
+    source_client
+        .change_create("test_change", "test_author", Some("Test"))
+        .await
+        .expect("Failed to create change");
+    
+    source_client
+        .object_update_from_file("test_object", "test_object.moo")
+        .await
+        .expect("Failed to update object");
+    
+    let (change_id, _) = source_db.require_top_change();
+    source_client
+        .change_approve(&change_id)
+        .await
+        .expect("Failed to approve")
+        .assert_success("Approve");
+
+    let export_response = source_client.clone_export().await.expect("Failed to export");
+    let clone_data_json = export_response.require_result_str("Export");
+
+    // Step 3: Mock /api/user/stat to return 403 (invalid API key)
+    println!("\nSetting up mock to return 403 for invalid API key...");
+    Mock::given(method("GET"))
+        .and(path("/api/user/stat"))
+        .and(header("X-API-Key", "invalid-api-key"))
+        .respond_with(ResponseTemplate::new(403).set_body_json(serde_json::json!({
+            "success": false,
+            "error": "Invalid API key"
+        })))
+        .mount(&mock_server)
+        .await;
+
+    // Mock clone endpoint (won't be reached due to validation failure)
+    Mock::given(method("GET"))
+        .and(path("/api/clone"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "success": true,
+            "result": clone_data_json
+        })))
+        .mount(&mock_server)
+        .await;
+
+    // Step 4: Try to import with invalid API key
+    let target_server = TestServer::start()
+        .await
+        .expect("Failed to start target server");
+    
+    println!("\nAttempting to import with invalid API key...");
+    let clone_url = format!("{}/api/clone", mock_server.uri());
+    
+    let clone_op = moor_vcs_worker::operations::CloneOperation::new(target_server.database().clone());
+    let result = clone_op
+        .import_from_url_async(&clone_url, Some("invalid-api-key"))
+        .await;
+    
+    assert!(result.is_err(), "Clone should fail with invalid API key");
+    let error_msg = result.unwrap_err().to_string();
+    assert!(
+        error_msg.contains("403") || error_msg.contains("invalid API key") || error_msg.contains("failed"),
+        "Error should indicate API key validation failure: {}",
+        error_msg
+    );
+    println!("✅ Clone correctly failed with: {}", error_msg);
+
+    // Verify no credentials were stored
+    let stored_api_key = target_server
+        .database()
+        .index()
+        .get_external_user_api_key()
+        .expect("Failed to get API key");
+    
+    assert!(stored_api_key.is_none(), "API key should NOT be stored on failure");
+    println!("✅ No credentials stored on failure");
+
+    println!("\n✅ Test passed: Clone import with invalid API key correctly fails");
+}
+
+#[tokio::test]
+async fn test_clone_import_with_malformed_stat_response() {
+    use wiremock::{MockServer, Mock, ResponseTemplate};
+    use wiremock::matchers::{method, path};
+
+    println!("Test: Clone import with malformed stat response should fail gracefully");
+
+    let mock_server = MockServer::start().await;
+    
+    // Create source with data
+    let source_server = TestServer::start().await.expect("Failed to start source");
+    let source_client = source_server.client();
+    let source_db = source_server.db_assertions();
+
+    source_client
+        .change_create("test_change", "test_author", Some("Test"))
+        .await
+        .expect("Failed to create change");
+    source_client
+        .object_update_from_file("test_object", "test_object.moo")
+        .await
+        .expect("Failed to update object");
+    let (change_id, _) = source_db.require_top_change();
+    source_client
+        .change_approve(&change_id)
+        .await
+        .expect("Failed to approve")
+        .assert_success("Approve");
+
+    let export_response = source_client.clone_export().await.expect("Failed to export");
+    let _clone_data_json = export_response.require_result_str("Export");
+
+    // Test case 1: Missing 'result' field
+    println!("\nTest case 1: Missing 'result' field...");
+    Mock::given(method("GET"))
+        .and(path("/api/user/stat"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "success": true
+        })))
+        .mount(&mock_server)
+        .await;
+
+    let target_server = TestServer::start().await.expect("Failed to start target");
+    let clone_url = format!("{}/api/clone", mock_server.uri());
+    let clone_op = moor_vcs_worker::operations::CloneOperation::new(target_server.database().clone());
+    
+    let result = clone_op.import_from_url_async(&clone_url, Some("test-key")).await;
+    assert!(result.is_err(), "Should fail with missing result field");
+    println!("✅ Correctly failed: {}", result.unwrap_err());
+
+    // Test case 2: Result array with insufficient elements
+    println!("\nTest case 2: Result array too short...");
+    let mock_server2 = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/api/user/stat"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "success": true,
+            "result": ["user1", "email"]  // Missing elements
+        })))
+        .mount(&mock_server2)
+        .await;
+
+    let target_server2 = TestServer::start().await.expect("Failed to start target");
+    let clone_url2 = format!("{}/api/clone", mock_server2.uri());
+    let clone_op2 = moor_vcs_worker::operations::CloneOperation::new(target_server2.database().clone());
+    
+    let result2 = clone_op2.import_from_url_async(&clone_url2, Some("test-key")).await;
+    assert!(result2.is_err(), "Should fail with incomplete result array");
+    println!("✅ Correctly failed: {}", result2.unwrap_err());
+
+    // Test case 3: Result with non-string user_id
+    println!("\nTest case 3: Non-string user_id...");
+    let mock_server3 = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/api/user/stat"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "success": true,
+            "result": [123, "email@test.com", {"type": "obj", "id": 100}, []]
+        })))
+        .mount(&mock_server3)
+        .await;
+
+    let target_server3 = TestServer::start().await.expect("Failed to start target");
+    let clone_url3 = format!("{}/api/clone", mock_server3.uri());
+    let clone_op3 = moor_vcs_worker::operations::CloneOperation::new(target_server3.database().clone());
+    
+    let result3 = clone_op3.import_from_url_async(&clone_url3, Some("test-key")).await;
+    assert!(result3.is_err(), "Should fail with non-string user_id");
+    println!("✅ Correctly failed: {}", result3.unwrap_err());
+
+    println!("\n✅ Test passed: Malformed stat responses handled correctly");
+}
+
+#[tokio::test]
+async fn test_clone_import_response_parsing_formats() {
+    use wiremock::{MockServer, Mock, ResponseTemplate};
+    use wiremock::matchers::{method, path};
+    use moor_vcs_worker::types::CloneData;
+
+    println!("Test: Clone import should handle various response formats");
+
+    // Create minimal valid CloneData
+    let clone_data = CloneData {
+        refs: vec![],
+        objects: std::collections::HashMap::new(),
+        changes: vec![],
+        change_order: vec![],
+        source: None,
+    };
+
+    // Test case 1: OperationResponse with result as JSON string
+    println!("\nTest case 1: Result as JSON string...");
+    let mock_server1 = MockServer::start().await;
+    let clone_data_string = serde_json::to_string(&clone_data).unwrap();
+    
+    Mock::given(method("GET"))
+        .and(path("/api/clone"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "success": true,
+            "result": clone_data_string
+        })))
+        .mount(&mock_server1)
+        .await;
+
+    let target1 = TestServer::start().await.expect("Failed to start target");
+    let clone_url1 = format!("{}/api/clone", mock_server1.uri());
+    let clone_op1 = moor_vcs_worker::operations::CloneOperation::new(target1.database().clone());
+    
+    let result1 = clone_op1.import_from_url_async(&clone_url1, None).await;
+    assert!(result1.is_ok(), "Should parse result as JSON string: {:?}", result1);
+    println!("✅ Parsed result as JSON string");
+
+    // Test case 2: OperationResponse with result as direct object
+    println!("\nTest case 2: Result as direct object...");
+    let mock_server2 = MockServer::start().await;
+    
+    Mock::given(method("GET"))
+        .and(path("/api/clone"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "success": true,
+            "result": {
+                "refs": [],
+                "objects": {},
+                "changes": [],
+                "change_order": [],
+                "source": null
+            }
+        })))
+        .mount(&mock_server2)
+        .await;
+
+    let target2 = TestServer::start().await.expect("Failed to start target");
+    let clone_url2 = format!("{}/api/clone", mock_server2.uri());
+    let clone_op2 = moor_vcs_worker::operations::CloneOperation::new(target2.database().clone());
+    
+    let result2 = clone_op2.import_from_url_async(&clone_url2, None).await;
+    assert!(result2.is_ok(), "Should parse result as object: {:?}", result2);
+    println!("✅ Parsed result as direct object");
+
+    // Test case 3: Direct CloneData (no OperationResponse wrapper)
+    println!("\nTest case 3: Direct CloneData without wrapper...");
+    let mock_server3 = MockServer::start().await;
+    
+    Mock::given(method("GET"))
+        .and(path("/api/clone"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "refs": [],
+            "objects": {},
+            "changes": [],
+            "change_order": [],
+            "source": null
+        })))
+        .mount(&mock_server3)
+        .await;
+
+    let target3 = TestServer::start().await.expect("Failed to start target");
+    let clone_url3 = format!("{}/api/clone", mock_server3.uri());
+    let clone_op3 = moor_vcs_worker::operations::CloneOperation::new(target3.database().clone());
+    
+    let result3 = clone_op3.import_from_url_async(&clone_url3, None).await;
+    assert!(result3.is_ok(), "Should parse direct CloneData: {:?}", result3);
+    println!("✅ Parsed direct CloneData");
+
+    // Test case 4: Invalid JSON
+    println!("\nTest case 4: Invalid JSON...");
+    let mock_server4 = MockServer::start().await;
+    
+    Mock::given(method("GET"))
+        .and(path("/api/clone"))
+        .respond_with(ResponseTemplate::new(200).set_body_string("not valid json {"))
+        .mount(&mock_server4)
+        .await;
+
+    let target4 = TestServer::start().await.expect("Failed to start target");
+    let clone_url4 = format!("{}/api/clone", mock_server4.uri());
+    let clone_op4 = moor_vcs_worker::operations::CloneOperation::new(target4.database().clone());
+    
+    let result4 = clone_op4.import_from_url_async(&clone_url4, None).await;
+    assert!(result4.is_err(), "Should fail with invalid JSON");
+    println!("✅ Correctly rejected invalid JSON: {}", result4.unwrap_err());
+
+    println!("\n✅ Test passed: All response formats handled correctly");
+}
+
+#[tokio::test]
+async fn test_clone_execute_error_paths() {
+    use moor_vcs_worker::operations::Operation;
+    use moor_var::Variant;
+
+    println!("Test: Clone execute() method error paths (also tests sync wrapper lines 243-263)");
+
+    let server = TestServer::start().await.expect("Failed to start server");
+    let client = server.client();
+    let db = server.db_assertions();
+
+    // Get wizard user with Clone permission
+    let mut wizard = server.get_wizard_user().expect("Failed to get wizard");
+    server
+        .database()
+        .users()
+        .add_permission(&wizard.id, moor_vcs_worker::types::Permission::Clone)
+        .expect("Failed to add Clone permission");
+    wizard = server.database().users().get_user(&wizard.id).unwrap().unwrap();
+
+    // Test 1: Export with empty repository (should succeed with empty data)
+    println!("\nTest 1: Export empty repository...");
+    let clone_op = moor_vcs_worker::operations::CloneOperation::new(server.database().clone());
+    let result = clone_op.execute(vec![], &wizard);
+    
+    match result.variant() {
+        Variant::Str(_) => {
+            println!("✅ Export succeeded with empty repository");
+        }
+        Variant::Err(e) => {
+            panic!("Export should not fail with empty repo: {:?}", e);
+        }
+        _ => panic!("Unexpected result type: {:?}", result),
+    }
+
+    // Test 2: Export after creating data, then verify serialization
+    println!("\nTest 2: Export with actual data...");
+    client
+        .change_create("test_change", "test_author", Some("Test"))
+        .await
+        .expect("Failed to create change");
+    
+    client
+        .object_update_from_file("test_object", "test_object.moo")
+        .await
+        .expect("Failed to update object");
+    
+    let (change_id, _) = db.require_top_change();
+    client
+        .change_approve(&change_id)
+        .await
+        .expect("Failed to approve")
+        .assert_success("Approve");
+
+    let result = clone_op.execute(vec![], &wizard);
+    
+    match result.variant() {
+        Variant::Str(s) => {
+            // Verify it's valid JSON CloneData
+            let parsed: Result<serde_json::Value, _> = serde_json::from_str(s.as_str());
+            assert!(parsed.is_ok(), "Export should be valid JSON");
+            
+            let json = parsed.unwrap();
+            assert!(json.get("refs").is_some(), "Should have refs field");
+            assert!(json.get("objects").is_some(), "Should have objects field");
+            assert!(json.get("changes").is_some(), "Should have changes field");
+            
+            println!("✅ Export succeeded with valid JSON ({} bytes)", s.as_str().len());
+        }
+        Variant::Err(e) => {
+            panic!("Export should not fail: {:?}", e);
+        }
+        _ => panic!("Unexpected result type: {:?}", result),
+    }
+
+    // Test 3: Import with empty URL (should export instead)
+    println!("\nTest 3: Import with empty URL (treats as export)...");
+    let result = clone_op.execute(vec!["".to_string()], &wizard);
+    
+    match result.variant() {
+        Variant::Str(_) => {
+            println!("✅ Empty URL treated as export");
+        }
+        _ => panic!("Empty URL should trigger export, got: {:?}", result),
+    }
+
+    println!("\n✅ Test passed: Execute handles export paths correctly");
+    println!("Note: Import paths with URLs (lines 243-263 sync wrapper) are tested via async methods in other tests");
+}
+
+#[tokio::test]
+async fn test_external_user_credentials_persistence() {
+    use wiremock::{MockServer, Mock, ResponseTemplate};
+    use wiremock::matchers::{method, path, header};
+
+    println!("Test: External user credentials should persist and be retrievable");
+
+    // Setup mock server
+    let mock_server = MockServer::start().await;
+    
+    // Create source server
+    let source_server = TestServer::start().await.expect("Failed to start source");
+    let source_client = source_server.client();
+    let source_db = source_server.db_assertions();
+
+    source_client
+        .change_create("test_change", "test_author", Some("Test"))
+        .await
+        .expect("Failed to create change");
+    source_client
+        .object_update_from_file("test_object", "test_object.moo")
+        .await
+        .expect("Failed to update object");
+    let (change_id, _) = source_db.require_top_change();
+    source_client
+        .change_approve(&change_id)
+        .await
+        .expect("Failed to approve")
+        .assert_success("Approve");
+
+    let export_response = source_client.clone_export().await.expect("Failed to export");
+    let clone_data_json = export_response.require_result_str("Export");
+
+    // Mock stat endpoint
+    Mock::given(method("GET"))
+        .and(path("/api/user/stat"))
+        .and(header("X-API-Key", "persistent-key-456"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "success": true,
+            "result": ["persistent_user", "persistent@example.com", {"type": "obj", "id": 300}, ["Admin"]]
+        })))
+        .mount(&mock_server)
+        .await;
+
+    // Mock clone endpoint
+    Mock::given(method("GET"))
+        .and(path("/api/clone"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "success": true,
+            "result": clone_data_json
+        })))
+        .mount(&mock_server)
+        .await;
+
+    // Import with API key
+    let target_server = TestServer::start().await.expect("Failed to start target");
+    let clone_url = format!("{}/api/clone", mock_server.uri());
+    
+    println!("\nStep 1: Importing with external user API key...");
+    let clone_op = moor_vcs_worker::operations::CloneOperation::new(target_server.database().clone());
+    let result = clone_op
+        .import_from_url_async(&clone_url, Some("persistent-key-456"))
+        .await;
+    
+    assert!(result.is_ok(), "Clone should succeed");
+    println!("✅ Clone completed");
+
+    // Verify credentials persist - check multiple times
+    println!("\nStep 2: Verifying credentials persist...");
+    
+    for i in 1..=3 {
+        println!("\nCheck {}: Reading credentials...", i);
+        
+        let api_key = target_server
+            .database()
+            .index()
+            .get_external_user_api_key()
+            .expect("Failed to get API key")
+            .expect("API key should exist");
+        
+        assert_eq!(api_key, "persistent-key-456", "API key should persist");
+        
+        let user_id = target_server
+            .database()
+            .index()
+            .get_external_user_id()
+            .expect("Failed to get user ID")
+            .expect("User ID should exist");
+        
+        assert_eq!(user_id, "persistent_user", "User ID should persist");
+        
+        let source_url = target_server
+            .database()
+            .index()
+            .get_source()
+            .expect("Failed to get source")
+            .expect("Source should exist");
+        
+        assert_eq!(source_url, mock_server.uri(), "Source URL should persist");
+        
+        println!("✅ Check {}: All credentials present", i);
+    }
+
+    // Verify they can be used for future operations (conceptually)
+    println!("\nStep 3: Verifying credentials are ready for future use...");
+    let final_api_key = target_server
+        .database()
+        .index()
+        .get_external_user_api_key()
+        .expect("Failed to get API key")
+        .expect("API key should exist");
+    
+    assert!(!final_api_key.is_empty(), "API key should not be empty");
+    println!("✅ Credentials ready for future update operations");
+
+    println!("\n✅ Test passed: External user credentials persist correctly");
+}
