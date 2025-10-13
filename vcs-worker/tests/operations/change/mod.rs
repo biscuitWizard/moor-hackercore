@@ -8,6 +8,7 @@
 //! - submit_tests: Tests for submitting changes (remote vs local behavior)
 
 mod abandon_tests;
+mod abandon_diff_inversion_tests;
 mod approve_tests;
 mod create_tests;
 mod stash_tests;

@@ -63,6 +63,40 @@ impl ObjectChange {
         }
     }
 
+    /// Invert this ObjectChange to create the reverse operations needed to undo it
+    /// 
+    /// This is used when abandoning a change - we need to return the inverse operations
+    /// so the MOO database can undo the changes. For example:
+    /// - verbs_added becomes verbs_deleted (to undo an addition, we delete)
+    /// - verbs_deleted becomes verbs_added (to undo a deletion, we add back)
+    /// - verbs_renamed is reversed (old->new becomes new->old)
+    /// - verbs_modified stays the same (modifications need to be reverted)
+    pub fn invert(&self) -> ObjectChange {
+        ObjectChange {
+            obj_id: self.obj_id.clone(),
+            // Modifications are symmetric - still need to modify to revert
+            verbs_modified: self.verbs_modified.clone(),
+            // Swap added ↔ deleted to invert the operation
+            verbs_added: self.verbs_deleted.clone(),
+            verbs_deleted: self.verbs_added.clone(),
+            // Reverse rename direction (old->new becomes new->old)
+            verbs_renamed: self
+                .verbs_renamed
+                .iter()
+                .map(|(k, v)| (v.clone(), k.clone()))
+                .collect(),
+            // Properties follow the same pattern
+            props_modified: self.props_modified.clone(),
+            props_added: self.props_deleted.clone(),
+            props_deleted: self.props_added.clone(),
+            props_renamed: self
+                .props_renamed
+                .iter()
+                .map(|(k, v)| (v.clone(), k.clone()))
+                .collect(),
+        }
+    }
+
     /// Convert this ObjectChange to a MOO v_map
     pub fn to_moo_var(&self) -> Var {
         let mut pairs = Vec::new();
@@ -746,6 +780,10 @@ pub fn build_abandon_diff_from_change(
     // Get object name mappings for better display names
     let object_names = get_object_names_for_change(change);
 
+    // Use hints from the change for proper rename tracking
+    let verb_hints_ref = Some(change.verb_rename_hints.as_slice());
+    let prop_hints_ref = Some(change.property_rename_hints.as_slice());
+
     // Process added objects - to undo, we need to delete them (filter to only MooObject types)
     for added_obj in change
         .added_objects
@@ -756,7 +794,21 @@ pub fn build_abandon_diff_from_change(
             &added_obj.name,
             object_names.get(&added_obj.name).map(|s| s.as_str()),
         );
-        undo_delta.add_object_deleted(object_name);
+        undo_delta.add_object_deleted(object_name.clone());
+
+        // Get the detailed changes for this added object, then invert them
+        // This gives us the verb/property details for the deletion
+        let object_change = compare_object_versions(
+            database,
+            &object_name,
+            added_obj.version,
+            verb_hints_ref,
+            prop_hints_ref,
+        )?;
+        
+        // Invert the change to show what needs to be deleted/undone
+        let inverted_change = object_change.invert();
+        undo_delta.add_object_change(inverted_change);
     }
 
     // Process deleted objects - to undo, we need to add them back (filter to only MooObject types)
@@ -769,7 +821,43 @@ pub fn build_abandon_diff_from_change(
             &deleted_obj.name,
             object_names.get(&deleted_obj.name).map(|s| s.as_str()),
         );
-        undo_delta.add_object_added(object_name);
+        undo_delta.add_object_added(object_name.clone());
+
+        // For deleted objects, we need to get the baseline version (the version before deletion)
+        // and show what needs to be added back
+        // The deleted_obj.version represents the last version before deletion
+        let baseline_version = deleted_obj.version;
+        
+        // Get the baseline object to see what needs to be re-added
+        if let Ok(Some(baseline_sha256)) = database.refs().get_ref(
+            VcsObjectType::MooObject,
+            &deleted_obj.name,
+            Some(baseline_version),
+        ) {
+            if let Ok(Some(baseline_content)) = database.objects().get(&baseline_sha256) {
+                if let Ok(baseline_def) = database.objects().parse_object_dump(&baseline_content) {
+                    // Create an ObjectChange showing what needs to be added back
+                    let mut object_change = ObjectChange::new(object_name);
+                    
+                    // Mark all verbs as needing to be added back
+                    for verb in &baseline_def.verbs {
+                        for verb_name in &verb.names {
+                            object_change.verbs_added.insert(verb_name.as_string());
+                        }
+                    }
+                    
+                    // Mark all properties as needing to be added back
+                    for prop_def in &baseline_def.property_definitions {
+                        object_change.props_added.insert(prop_def.name.as_string());
+                    }
+                    for prop_override in &baseline_def.property_overrides {
+                        object_change.props_added.insert(prop_override.name.as_string());
+                    }
+                    
+                    undo_delta.add_object_change(object_change);
+                }
+            }
+        }
     }
 
     // Process renamed objects - to undo, we need to rename them back (filter to only MooObject types)
@@ -785,11 +873,11 @@ pub fn build_abandon_diff_from_change(
             &renamed.to.name,
             object_names.get(&renamed.to.name).map(|s| s.as_str()),
         );
+        // Reverse the rename direction for undo
         undo_delta.add_object_renamed(to_name, from_name);
     }
 
-    // Process modified objects - to undo, we need to mark them as modified
-    // and create basic ObjectChange entries (filter to only MooObject types)
+    // Process modified objects - get detailed changes and invert them (filter to only MooObject types)
     for modified_obj in change
         .modified_objects
         .iter()
@@ -801,11 +889,20 @@ pub fn build_abandon_diff_from_change(
         );
         undo_delta.add_object_modified(object_name.clone());
 
-        // Create a basic ObjectChange for modified objects
-        // In a real implementation, you'd want to track what specifically changed
-        let mut object_change = ObjectChange::new(object_name);
-        object_change.props_modified.insert("content".to_string());
-        undo_delta.add_object_change(object_change);
+        // Get the detailed changes by comparing versions
+        let object_change = compare_object_versions(
+            database,
+            &object_name,
+            modified_obj.version,
+            verb_hints_ref,
+            prop_hints_ref,
+        )?;
+        
+        // INVERT the change to get the undo operations
+        // If a verb was added in the change, we need to delete it to undo
+        // If a verb was deleted in the change, we need to add it back to undo
+        let inverted_change = object_change.invert();
+        undo_delta.add_object_change(inverted_change);
     }
 
     Ok(undo_delta)
