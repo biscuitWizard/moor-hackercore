@@ -160,6 +160,10 @@ impl UserProviderImpl {
         user.add_permission(Permission::ApproveChanges);
         user.add_permission(Permission::SubmitChanges);
         user.add_permission(Permission::Clone);
+        user.add_permission(Permission::CreateUser);
+        user.add_permission(Permission::DisableUser);
+        user.add_permission(Permission::ManagePermissions);
+        user.add_permission(Permission::ManageApiKeys);
         user
     }
 }
@@ -380,6 +384,10 @@ impl UserProvider for UserProviderImpl {
                     wizard_user.add_permission(Permission::ApproveChanges);
                     wizard_user.add_permission(Permission::SubmitChanges);
                     wizard_user.add_permission(Permission::Clone);
+                    wizard_user.add_permission(Permission::CreateUser);
+                    wizard_user.add_permission(Permission::DisableUser);
+                    wizard_user.add_permission(Permission::ManagePermissions);
+                    wizard_user.add_permission(Permission::ManageApiKeys);
                     // Ensure it's marked as a system user
                     wizard_user.is_system_user = true;
                     self.save_user_storage(&storage)?;
