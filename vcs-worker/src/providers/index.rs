@@ -471,6 +471,8 @@ impl IndexProvider for IndexProviderImpl {
             deleted_objects: Vec::new(),
             renamed_objects: Vec::new(),
             index_change_id: None,
+            verb_rename_hints: Vec::new(),
+            property_rename_hints: Vec::new(),
         };
 
         self.store_change(&change)?;

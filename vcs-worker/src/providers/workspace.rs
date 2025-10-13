@@ -261,6 +261,8 @@ impl WorkspaceProvider for WorkspaceProviderImpl {
             deleted_objects: Vec::new(),
             renamed_objects: Vec::new(),
             index_change_id: Some(index_change_id.to_string()),
+            verb_rename_hints: Vec::new(),
+            property_rename_hints: Vec::new(),
         };
 
         self.store_workspace_change(&new_change)?;

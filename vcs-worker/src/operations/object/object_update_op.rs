@@ -382,6 +382,70 @@ impl ObjectUpdateOperation {
             );
         }
 
+        // Clean up hints for verbs/properties that no longer exist in the updated object
+        // Get all verb names from the object definition
+        let current_verb_names: std::collections::HashSet<String> = object_def
+            .verbs
+            .iter()
+            .flat_map(|v| v.names.iter().map(|name| name.as_string()))
+            .collect();
+
+        // Get all property names (definitions and overrides)
+        let current_prop_names: std::collections::HashSet<String> = object_def
+            .property_definitions
+            .iter()
+            .map(|p| p.name.as_string())
+            .chain(
+                object_def
+                    .property_overrides
+                    .iter()
+                    .map(|p| p.name.as_string()),
+            )
+            .collect();
+
+        // Remove verb rename hints where either from_verb or to_verb no longer exists
+        let initial_verb_hint_count = current_change.verb_rename_hints.len();
+        current_change.verb_rename_hints.retain(|hint| {
+            if hint.object_name != request.object_name {
+                return true; // Keep hints for other objects
+            }
+            let keep = current_verb_names.contains(&hint.from_verb)
+                && current_verb_names.contains(&hint.to_verb);
+            if !keep {
+                info!(
+                    "Removing invalid verb rename hint for object '{}': '{}' -> '{}' (verb(s) no longer exist)",
+                    request.object_name, hint.from_verb, hint.to_verb
+                );
+            }
+            keep
+        });
+
+        // Remove property rename hints where either from_prop or to_prop no longer exists
+        let initial_prop_hint_count = current_change.property_rename_hints.len();
+        current_change.property_rename_hints.retain(|hint| {
+            if hint.object_name != request.object_name {
+                return true; // Keep hints for other objects
+            }
+            let keep = current_prop_names.contains(&hint.from_prop)
+                && current_prop_names.contains(&hint.to_prop);
+            if !keep {
+                info!(
+                    "Removing invalid property rename hint for object '{}': '{}' -> '{}' (property(ies) no longer exist)",
+                    request.object_name, hint.from_prop, hint.to_prop
+                );
+            }
+            keep
+        });
+
+        let removed_verb_hints = initial_verb_hint_count - current_change.verb_rename_hints.len();
+        let removed_prop_hints = initial_prop_hint_count - current_change.property_rename_hints.len();
+        if removed_verb_hints > 0 || removed_prop_hints > 0 {
+            info!(
+                "Cleaned up {} verb hint(s) and {} property hint(s) for object '{}'",
+                removed_verb_hints, removed_prop_hints, request.object_name
+            );
+        }
+
         // Update the change in the database
         self.database
             .index()

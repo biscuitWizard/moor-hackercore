@@ -658,6 +658,27 @@ impl ObjectRenameOperation {
             );
         }
 
+        // Update all hints that reference the old object name to use the new name
+        for hint in current_change.verb_rename_hints.iter_mut() {
+            if hint.object_name == request.from_name {
+                hint.object_name = request.to_name.clone();
+                info!(
+                    "Updated verb rename hint for verb '{}' -> '{}' to use new object name '{}'",
+                    hint.from_verb, hint.to_verb, request.to_name
+                );
+            }
+        }
+
+        for hint in current_change.property_rename_hints.iter_mut() {
+            if hint.object_name == request.from_name {
+                hint.object_name = request.to_name.clone();
+                info!(
+                    "Updated property rename hint for property '{}' -> '{}' to use new object name '{}'",
+                    hint.from_prop, hint.to_prop, request.to_name
+                );
+            }
+        }
+
         // Update the change in the database
         self.database
             .index()

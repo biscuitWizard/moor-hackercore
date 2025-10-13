@@ -44,6 +44,22 @@ pub struct RenamedObject {
     pub to: ObjectInfo,
 }
 
+/// Represents a verb rename hint for tracking renamed verbs in diffs
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub struct VerbRenameHint {
+    pub object_name: String,
+    pub from_verb: String,
+    pub to_verb: String,
+}
+
+/// Represents a property rename hint for tracking renamed properties in diffs
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub struct PropertyRenameHint {
+    pub object_name: String,
+    pub from_prop: String,
+    pub to_prop: String,
+}
+
 /// Represents a change in the version control system
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Change {
@@ -59,6 +75,11 @@ pub struct Change {
     pub renamed_objects: Vec<RenamedObject>,
     // Workspace-specific fields
     pub index_change_id: Option<String>, // The indexed change this workspace change is based on
+    // Verb/property rename hints for tracking renames in diffs
+    #[serde(default)]
+    pub verb_rename_hints: Vec<VerbRenameHint>,
+    #[serde(default)]
+    pub property_rename_hints: Vec<PropertyRenameHint>,
 }
 
 /// Request structure for operations

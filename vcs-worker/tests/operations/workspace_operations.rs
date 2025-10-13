@@ -70,6 +70,8 @@ async fn test_workspace_submit_and_list() {
         deleted_objects: vec![],
         renamed_objects: vec![],
         index_change_id: None,
+        verb_rename_hints: vec![],
+        property_rename_hints: vec![],
     };
 
     let change_json = serde_json::to_string(&change).expect("Failed to serialize change");
@@ -174,6 +176,8 @@ async fn test_workspace_list_filter_by_status() {
         deleted_objects: vec![],
         renamed_objects: vec![],
         index_change_id: None,
+        verb_rename_hints: vec![],
+        property_rename_hints: vec![],
     };
 
     // Create Idle status change
@@ -192,6 +196,8 @@ async fn test_workspace_list_filter_by_status() {
         deleted_objects: vec![],
         renamed_objects: vec![],
         index_change_id: None,
+        verb_rename_hints: vec![],
+        property_rename_hints: vec![],
     };
 
     // Submit both changes
@@ -398,6 +404,8 @@ async fn test_workspace_submit_multiple_changes() {
             deleted_objects: vec![],
             renamed_objects: vec![],
             index_change_id: None,
+            verb_rename_hints: vec![],
+            property_rename_hints: vec![],
         };
 
         change_ids.push(change.id.clone());
@@ -494,6 +502,8 @@ async fn test_workspace_change_with_objects() {
         }],
         renamed_objects: vec![],
         index_change_id: Some("base_change_123".to_string()),
+        verb_rename_hints: vec![],
+        property_rename_hints: vec![],
     };
 
     // Submit the change
@@ -592,6 +602,8 @@ async fn test_workspace_list_structure() {
         deleted_objects: vec![],
         renamed_objects: vec![],
         index_change_id: None,
+        verb_rename_hints: vec![],
+        property_rename_hints: vec![],
     };
 
     let idle_change = Change {
@@ -606,6 +618,8 @@ async fn test_workspace_list_structure() {
         deleted_objects: vec![],
         renamed_objects: vec![],
         index_change_id: None,
+        verb_rename_hints: vec![],
+        property_rename_hints: vec![],
     };
 
     for change in [review_change.clone(), idle_change.clone()] {
@@ -732,6 +746,8 @@ async fn test_workspace_operations_persistence() {
         deleted_objects: vec![],
         renamed_objects: vec![],
         index_change_id: None,
+        verb_rename_hints: vec![],
+        property_rename_hints: vec![],
     };
 
     let change_id = change.id.clone();

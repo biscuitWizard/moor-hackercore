@@ -75,6 +75,8 @@ impl ChangeCreateOperation {
             deleted_objects: Vec::new(),
             renamed_objects: Vec::new(),
             index_change_id: None,
+            verb_rename_hints: Vec::new(),
+            property_rename_hints: Vec::new(),
         };
 
         // Store the change

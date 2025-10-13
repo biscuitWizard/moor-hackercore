@@ -23,7 +23,8 @@ pub use meta::{
 };
 pub use object::{
     ObjectDeleteOperation, ObjectGetOperation, ObjectHistoryOperation, ObjectListOperation,
-    ObjectRenameOperation, ObjectUpdateOperation,
+    ObjectRenameOperation, ObjectUpdateOperation, ObjectVerbRenameOperation, 
+    ObjectPropertyRenameOperation,
 };
 pub use registry::OperationRegistry;
 pub use system::StatusOperation;
@@ -214,6 +215,8 @@ pub fn create_registry_with_config(
     registry.register(ObjectRenameOperation::new(database.clone()));
     registry.register(ObjectDeleteOperation::new(database.clone()));
     registry.register(ObjectListOperation::new(database.clone()));
+    registry.register(ObjectVerbRenameOperation::new(database.clone()));
+    registry.register(ObjectPropertyRenameOperation::new(database.clone()));
     registry.register(ChangeCreateOperation::new(database.clone()));
     registry.register(ChangeAbandonOperation::new(database.clone()));
     registry.register(ChangeStatusOperation::new(database.clone()));

@@ -180,6 +180,8 @@ impl ObjectHistoryOperation {
                             &self.database,
                             comparison_name,
                             obj_info.version,
+                            Some(&change.verb_rename_hints),
+                            Some(&change.property_rename_hints),
                         ) {
                             Ok(change) => Some(change),
                             Err(e) => {
