@@ -199,7 +199,7 @@ impl ObjectHistoryOperation {
 
                 history.push(HistoryEntry {
                     change_id: change.id.clone(),
-                    change_name: change.name.clone(),
+                    change_message: change.name.clone(),
                     change_description: change.description.clone(),
                     author: change.author.clone(),
                     timestamp: change.timestamp,
@@ -226,7 +226,7 @@ impl ObjectHistoryOperation {
 #[derive(Debug, Clone)]
 struct HistoryEntry {
     change_id: String,
-    change_name: String,
+    change_message: String,
     change_description: Option<String>,
     author: String,
     timestamp: u64,
@@ -244,7 +244,7 @@ impl HistoryEntry {
 
         // Basic change information
         pairs.push((v_str("change_id"), v_str(&self.change_id)));
-        pairs.push((v_str("change_name"), v_str(&self.change_name)));
+        pairs.push((v_str("change_message"), v_str(&self.change_message)));
 
         if let Some(desc) = &self.change_description {
             pairs.push((v_str("change_description"), v_str(desc)));
@@ -313,12 +313,12 @@ impl Operation for ObjectHistoryOperation {
                 moocode: r#"history = worker_request("vcs", {"object/history", "$player"});
 // Returns a list of maps, each containing:
 // - change_id: the change ID
-// - change_name: the name of the change
+// - change_message: the message of the change
 // - author: who made the change
 // - timestamp: when the change was made
 // - details: map of detailed changes (verbs_added, verbs_modified, props_added, etc.)
 for entry in (history)
-    player:tell("Change: ", entry["change_name"], " by ", entry["author"]);
+    player:tell("Change: ", entry["change_message"], " by ", entry["author"]);
     if ("details" in entry)
         details = entry["details"];
         player:tell("  Verbs modified: ", toliteral(details["verbs_modified"]));
@@ -338,7 +338,7 @@ endfor"#
                 moocode: r##"history = worker_request("vcs", {"object/history", "$room"});
 if (length(history) > 0)
     last_change = history[$];
-    player:tell("Last modified in change: ", last_change["change_name"]);
+    player:tell("Last modified in change: ", last_change["change_message"]);
     player:tell("By: ", last_change["author"], " at ", ctime(last_change["timestamp"]));
 endif"##
                     .to_string(),
@@ -349,7 +349,7 @@ endif"##
                 moocode: r#"history = worker_request("vcs", {"object/history", "$player"});
 for entry in (history)
     if ("details" in entry && "look" in entry["details"]["verbs_added"])
-        player:tell("Verb 'look' was added in: ", entry["change_name"]);
+        player:tell("Verb 'look' was added in: ", entry["change_message"]);
         break;
     endif
 endfor"#
@@ -375,7 +375,7 @@ endfor"#
                 r#"[
   {
     "change_id": "abc123def456...",
-    "change_name": "Add player object",
+    "change_message": "Add player object",
     "author": "wizard",
     "timestamp": 1234567890,
     "object_added": 1,
@@ -387,7 +387,7 @@ endfor"#
   },
   {
     "change_id": "def456ghi789...",
-    "change_name": "Update player verbs",
+    "change_message": "Update player verbs",
     "author": "developer",
     "timestamp": 1234567900,
     "details": {
