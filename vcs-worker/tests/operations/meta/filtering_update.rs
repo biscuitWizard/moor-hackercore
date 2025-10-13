@@ -1,6 +1,20 @@
 //! Tests for filtering ignored properties and verbs during object update operations
 
 use crate::common::*;
+use serde_json::Value;
+
+/// Helper function to convert object/get response (list of strings) to a single string
+fn list_to_string(response: &Value) -> String {
+    if let Some(list) = response.get_result_list() {
+        list.iter()
+            .filter_map(|v| v.as_str())
+            .collect::<Vec<_>>()
+            .join("\n")
+    } else {
+        // Fallback for errors which are still strings
+        response.get_result_str().unwrap_or("").to_string()
+    }
+}
 
 #[tokio::test]
 async fn test_object_update_filters_ignored_properties() {
@@ -34,7 +48,7 @@ async fn test_object_update_filters_ignored_properties() {
         .await
         .expect("Failed to get object");
 
-    let content = get_response.require_result_str("Get object");
+    let content = list_to_string(&get_response);
 
     // Verify test_property was filtered out during update
     assert!(
@@ -81,7 +95,7 @@ async fn test_object_update_filters_ignored_verbs() {
         .await
         .expect("Failed to get object");
 
-    let content = get_response.require_result_str("Get object");
+    let content = list_to_string(&get_response);
 
     // Verify test_verb was filtered out during update
     assert!(
@@ -132,7 +146,7 @@ async fn test_object_update_preserves_non_ignored_items() {
         .await
         .expect("Failed to get object");
 
-    let content = get_response.require_result_str("Get object");
+    let content = list_to_string(&get_response);
 
     // Verify ignored items are not present
     assert!(
