@@ -197,8 +197,12 @@ impl ObjectHistoryOperation {
                     None
                 };
 
+                // Create short change ID (first 8 characters)
+                let short_id = change.id.chars().take(8).collect::<String>();
+                
                 history.push(HistoryEntry {
                     change_id: change.id.clone(),
+                    short_change_id: short_id,
                     change_message: change.name.clone(),
                     change_description: change.description.clone(),
                     author: change.author.clone(),
@@ -226,6 +230,7 @@ impl ObjectHistoryOperation {
 #[derive(Debug, Clone)]
 struct HistoryEntry {
     change_id: String,
+    short_change_id: String,
     change_message: String,
     change_description: Option<String>,
     author: String,
@@ -244,6 +249,7 @@ impl HistoryEntry {
 
         // Basic change information
         pairs.push((v_str("change_id"), v_str(&self.change_id)));
+        pairs.push((v_str("short_change_id"), v_str(&self.short_change_id)));
         pairs.push((v_str("change_message"), v_str(&self.change_message)));
 
         if let Some(desc) = &self.change_description {
@@ -312,7 +318,8 @@ impl Operation for ObjectHistoryOperation {
                 description: "Get the complete history of an object".to_string(),
                 moocode: r#"history = worker_request("vcs", {"object/history", "$player"});
 // Returns a list of maps, each containing:
-// - change_id: the change ID
+// - change_id: the full change ID
+// - short_change_id: abbreviated change ID (first 8 chars)
 // - change_message: the message of the change
 // - author: who made the change
 // - timestamp: when the change was made
@@ -375,6 +382,7 @@ endfor"#
                 r#"[
   {
     "change_id": "abc123def456...",
+    "short_change_id": "abc123de",
     "change_message": "Add player object",
     "author": "wizard",
     "timestamp": 1234567890,
@@ -387,6 +395,7 @@ endfor"#
   },
   {
     "change_id": "def456ghi789...",
+    "short_change_id": "def456gh",
     "change_message": "Update player verbs",
     "author": "developer",
     "timestamp": 1234567900,
