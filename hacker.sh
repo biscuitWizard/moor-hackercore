@@ -271,10 +271,17 @@ check_game_directory() {
     print_info "Checking for game directory..."
     cd "$SCRIPT_DIR"
     
+    # Create game directory if it doesn't exist
     if [[ ! -d "game" ]]; then
-        print_warning "game/ directory not found, cloning repository..."
-        if git clone git@github.com:biscuitWizard/moor-hackercore-core.git game; then
-            print_success "Successfully cloned game repository to game/ directory!"
+        print_info "Creating game/ directory..."
+        mkdir -p game
+    fi
+    
+    # Clone hackercore-core into game/objects if it doesn't exist
+    if [[ ! -d "game/objects" ]]; then
+        print_warning "game/objects/ directory not found, cloning repository..."
+        if git clone git@github.com:biscuitWizard/moor-hackercore-core.git game/objects; then
+            print_success "Successfully cloned game repository to game/objects/ directory!"
         else
             print_error "Failed to clone game repository!"
             print_info "Please check your SSH key setup and network connection."
@@ -282,7 +289,7 @@ check_game_directory() {
             exit 1
         fi
     else
-        print_info "game/ directory already exists"
+        print_info "game/objects/ directory already exists"
     fi
 }
 
