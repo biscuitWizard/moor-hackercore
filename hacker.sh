@@ -280,12 +280,12 @@ check_game_directory() {
     # Clone hackercore-core into game/objects if it doesn't exist
     if [[ ! -d "game/objects" ]]; then
         print_warning "game/objects/ directory not found, cloning repository..."
-        if git clone git@github.com:biscuitWizard/moor-hackercore-core.git game/objects; then
+        if git clone https://github.com/biscuitWizard/moor-hackercore-core.git game/objects; then
             print_success "Successfully cloned game repository to game/objects/ directory!"
         else
             print_error "Failed to clone game repository!"
-            print_info "Please check your SSH key setup and network connection."
-            print_info "Make sure you have access to git@github.com:biscuitWizard/moor-hackercore-core.git"
+            print_info "Please check your network connection."
+            print_info "Make sure you have access to https://github.com/biscuitWizard/moor-hackercore-core.git"
             exit 1
         fi
     else
