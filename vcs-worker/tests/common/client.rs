@@ -144,6 +144,38 @@ impl VcsTestClient {
         self.rpc_call("object/list", args).await
     }
 
+    /// Diff an object between two commits
+    pub async fn object_diff(
+        &self,
+        object_name: &str,
+        change_id: &str,
+        baseline_change_id: Option<&str>,
+    ) -> Result<moor_var::Var, Box<dyn std::error::Error>> {
+        // Call object/diff operation directly through the database
+        if let Some(ref db) = self.database {
+            let diff_op = moor_vcs_worker::operations::ObjectDiffOperation::new(db.clone());
+            let wizard_user = moor_vcs_worker::types::User::new_system_user(
+                "wizard".to_string(),
+                "wizard@localhost".to_string(),
+                moor_var::Obj::mk_id(0),
+            );
+            
+            let mut args = vec![
+                object_name.to_string(),
+                change_id.to_string(),
+            ];
+            
+            if let Some(baseline) = baseline_change_id {
+                args.push(baseline.to_string());
+            }
+            
+            let result = diff_op.execute(args, &wizard_user);
+            return Ok(result);
+        }
+
+        Err("Database not available".into())
+    }
+
     // ==================== Change Operations ====================
 
     /// Create a new change

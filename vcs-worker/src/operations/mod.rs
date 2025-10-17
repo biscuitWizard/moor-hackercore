@@ -22,8 +22,8 @@ pub use meta::{
     MetaRemoveIgnoredPropertyOperation, MetaRemoveIgnoredVerbOperation,
 };
 pub use object::{
-    ObjectDeleteOperation, ObjectGetOperation, ObjectHistoryOperation, ObjectListOperation,
-    ObjectRenameOperation, ObjectUpdateOperation, ObjectVerbRenameOperation, 
+    ObjectDeleteOperation, ObjectDiffOperation, ObjectGetOperation, ObjectHistoryOperation,
+    ObjectListOperation, ObjectRenameOperation, ObjectUpdateOperation, ObjectVerbRenameOperation, 
     ObjectPropertyRenameOperation, ObjectSwitchOperation,
 };
 pub use registry::OperationRegistry;
@@ -187,6 +187,7 @@ pub fn create_registry_with_config(
     registry.register(HelloOperation);
     registry.register(ObjectUpdateOperation::new(database.clone()));
     registry.register(ObjectGetOperation::new(database.clone()));
+    registry.register(ObjectDiffOperation::new(database.clone()));
     registry.register(ObjectHistoryOperation::new(database.clone()));
     registry.register(ObjectRenameOperation::new(database.clone()));
     registry.register(ObjectDeleteOperation::new(database.clone()));

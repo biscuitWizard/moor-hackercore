@@ -19,6 +19,7 @@ mod index_operations;
 mod index_update_tests;
 mod meta;
 mod object;
+mod object_diff_operation_tests;
 mod system_status_tests;
 mod test_wizard_user;
 mod user;
