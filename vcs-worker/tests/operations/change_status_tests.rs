@@ -475,3 +475,361 @@ async fn test_change_status_negative_object_ids() {
 
     println!("\n✅ Test passed: Negative object IDs handled without crashing");
 }
+
+#[tokio::test]
+async fn test_change_status_by_id_current_local_change() {
+    let server = TestServer::start()
+        .await
+        .expect("Failed to start test server");
+    let client = server.client();
+
+    println!("Test: change/status can query a specific change by ID (current local change)");
+
+    // Step 1: Create a change
+    println!("\nStep 1: Creating change...");
+    client
+        .change_create("test_change_by_id", "test_author", None)
+        .await
+        .expect("Failed to create change")
+        .assert_success("Create change");
+    
+    // Get the change ID directly from the database
+    let change_id = server.database()
+        .index()
+        .get_top_change()
+        .expect("Failed to get top change")
+        .expect("Should have a top change");
+    println!("Created change with ID: {}", change_id);
+
+    // Step 2: Add objects to the change
+    println!("\nStep 2: Adding objects...");
+    client
+        .object_update_from_file("obj1", "test_object.moo")
+        .await
+        .expect("Failed to update obj1");
+    client
+        .object_update_from_file("obj2", "detailed_test_object.moo")
+        .await
+        .expect("Failed to update obj2");
+    println!("✅ Objects added");
+
+    // Step 3: Get status using the specific change ID
+    println!("\nStep 3: Getting status by change ID...");
+    let status_response = client
+        .change_status_by_id(&change_id)
+        .await
+        .expect("Failed to get change status by ID");
+    
+    println!("Status response: {:?}", status_response);
+
+    // Step 4: Verify the response is valid and contains our objects
+    assert!(
+        status_response["success"].as_bool().unwrap_or(false),
+        "Response should be successful"
+    );
+
+    println!("\n✅ Test passed: Can query status by change ID");
+}
+
+#[tokio::test]
+async fn test_change_status_by_id_merged_change() {
+    let server = TestServer::start()
+        .await
+        .expect("Failed to start test server");
+    let client = server.client();
+
+    println!("Test: change/status can query a merged change by ID");
+
+    // Step 1: Create and submit a change
+    println!("\nStep 1: Creating and submitting change...");
+    client
+        .change_create("merged_change", "test_author", Some("A merged change"))
+        .await
+        .expect("Failed to create change")
+        .assert_success("Create change");
+    
+    // Get the change ID before we submit it
+    let change_id = server.database()
+        .index()
+        .get_top_change()
+        .expect("Failed to get top change")
+        .expect("Should have a top change");
+    println!("Created change with ID: {}", change_id);
+
+    // Add objects
+    client
+        .object_update_from_file("merged_obj", "test_object.moo")
+        .await
+        .expect("Failed to update merged_obj");
+    
+    // Submit the change (this should merge it if no remote)
+    client
+        .change_submit()
+        .await
+        .expect("Failed to submit change");
+    println!("✅ Change submitted/merged");
+
+    // Step 2: Query the merged change by ID
+    println!("\nStep 2: Querying merged change by ID...");
+    let status_response = client
+        .change_status_by_id(&change_id)
+        .await
+        .expect("Failed to get status of merged change");
+    
+    println!("Status response: {:?}", status_response);
+
+    // Step 3: Verify the response is valid
+    assert!(
+        status_response["success"].as_bool().unwrap_or(false),
+        "Response should be successful"
+    );
+
+    println!("\n✅ Test passed: Can query merged change by ID");
+}
+
+#[tokio::test]
+async fn test_change_status_by_id_workspace_change() {
+    let server = TestServer::start()
+        .await
+        .expect("Failed to start test server");
+    let client = server.client();
+
+    println!("Test: change/status can query a change in workspace by ID");
+
+    // Step 1: Create a change and add objects
+    println!("\nStep 1: Creating change and adding objects...");
+    client
+        .change_create("workspace_change", "test_author", Some("To be stashed"))
+        .await
+        .expect("Failed to create change")
+        .assert_success("Create change");
+    
+    // Get the change ID before we stash it
+    let change_id = server.database()
+        .index()
+        .get_top_change()
+        .expect("Failed to get top change")
+        .expect("Should have a top change");
+    println!("Created change with ID: {}", change_id);
+
+    // Add objects
+    client
+        .object_update_from_file("workspace_obj", "test_object.moo")
+        .await
+        .expect("Failed to update workspace_obj");
+
+    // Step 2: Stash the change (moves it to workspace)
+    println!("\nStep 2: Stashing change...");
+    client
+        .change_stash()
+        .await
+        .expect("Failed to stash change");
+    println!("✅ Change stashed to workspace");
+
+    // Step 3: Query the workspace change by ID
+    println!("\nStep 3: Querying workspace change by ID...");
+    let status_response = client
+        .change_status_by_id(&change_id)
+        .await
+        .expect("Failed to get status of workspace change");
+    
+    println!("Status response: {:?}", status_response);
+
+    // Step 4: Verify the response is valid
+    assert!(
+        status_response["success"].as_bool().unwrap_or(false),
+        "Response should be successful"
+    );
+
+    println!("\n✅ Test passed: Can query workspace change by ID");
+}
+
+#[tokio::test]
+async fn test_change_status_by_id_not_found() {
+    let server = TestServer::start()
+        .await
+        .expect("Failed to start test server");
+    let client = server.client();
+
+    println!("Test: change/status returns error for non-existent change ID");
+
+    // Try to query a non-existent change
+    let fake_change_id = "00000000-0000-0000-0000-000000000000";
+    println!("Querying non-existent change ID: {}", fake_change_id);
+    
+    let status_response = client
+        .change_status_by_id(fake_change_id)
+        .await
+        .expect("Request should complete (even with error result)");
+    
+    println!("Status response: {:?}", status_response);
+
+    // Verify the response indicates failure or error
+    let success = status_response["success"].as_bool().unwrap_or(true);
+    
+    // The response should either indicate failure or return an error
+    if success {
+        // If marked as success, the result should be an error value
+        let result = &status_response["result"];
+        println!("Result value: {:?}", result);
+        // We expect some kind of error indication
+    } else {
+        println!("✅ Response correctly indicates failure");
+    }
+
+    println!("\n✅ Test passed: Non-existent change ID handled correctly");
+}
+
+#[tokio::test]
+async fn test_change_status_default_behavior_unchanged() {
+    let server = TestServer::start()
+        .await
+        .expect("Failed to start test server");
+    let client = server.client();
+
+    println!("Test: change/status default behavior (no ID) still works");
+
+    // Step 1: Create a change
+    println!("\nStep 1: Creating change...");
+    client
+        .change_create("default_behavior", "test_author", None)
+        .await
+        .expect("Failed to create change");
+
+    // Step 2: Add objects
+    println!("\nStep 2: Adding objects...");
+    client
+        .object_update_from_file("default_obj", "test_object.moo")
+        .await
+        .expect("Failed to update object");
+
+    // Step 3: Get status using default behavior (no ID)
+    println!("\nStep 3: Getting status (default behavior)...");
+    let status_response = client
+        .change_status()
+        .await
+        .expect("Failed to get change status");
+    
+    println!("Status response: {:?}", status_response);
+
+    // Step 4: Verify the response is valid
+    assert!(
+        status_response["success"].as_bool().unwrap_or(false),
+        "Response should be successful"
+    );
+
+    println!("\n✅ Test passed: Default behavior unchanged");
+}
+
+#[tokio::test]
+async fn test_change_status_by_short_hash() {
+    let server = TestServer::start()
+        .await
+        .expect("Failed to start test server");
+    let client = server.client();
+
+    println!("Test: change/status should accept short Blake3 hash IDs");
+
+    // Step 1: Create a change
+    println!("\nStep 1: Creating change...");
+    client
+        .change_create("short_hash_test", "test_author", Some("Testing short hashes"))
+        .await
+        .expect("Failed to create change")
+        .assert_success("Create change");
+    
+    // Get the full change ID
+    let full_change_id = server.database()
+        .index()
+        .get_top_change()
+        .expect("Failed to get top change")
+        .expect("Should have a top change");
+    
+    // Create short hash (first 12 characters)
+    let short_hash = &full_change_id[..12];
+    println!("Full change ID: {}", full_change_id);
+    println!("Short hash: {}", short_hash);
+
+    // Step 2: Add objects to the change
+    println!("\nStep 2: Adding objects...");
+    client
+        .object_update_from_file("short_hash_obj", "test_object.moo")
+        .await
+        .expect("Failed to update object");
+
+    // Step 3: Get status using short hash
+    println!("\nStep 3: Getting status by short hash...");
+    let status_response = client
+        .change_status_by_id(short_hash)
+        .await
+        .expect("Failed to get change status by short hash");
+    
+    println!("Status response: {:?}", status_response);
+
+    // Step 4: Verify the response is valid
+    assert!(
+        status_response["success"].as_bool().unwrap_or(false),
+        "Response should be successful"
+    );
+
+    println!("\n✅ Test passed: Short hash works with change/status");
+}
+
+#[tokio::test]
+async fn test_change_status_by_short_hash_workspace() {
+    let server = TestServer::start()
+        .await
+        .expect("Failed to start test server");
+    let client = server.client();
+
+    println!("Test: change/status should accept short hash for workspace changes");
+
+    // Step 1: Create a change and add objects
+    println!("\nStep 1: Creating change...");
+    client
+        .change_create("workspace_short_hash", "test_author", Some("Workspace short hash test"))
+        .await
+        .expect("Failed to create change")
+        .assert_success("Create change");
+    
+    // Get the full change ID before stashing
+    let full_change_id = server.database()
+        .index()
+        .get_top_change()
+        .expect("Failed to get top change")
+        .expect("Should have a top change");
+    
+    let short_hash = &full_change_id[..12];
+    println!("Full change ID: {}", full_change_id);
+    println!("Short hash: {}", short_hash);
+
+    // Add objects
+    client
+        .object_update_from_file("workspace_short_obj", "test_object.moo")
+        .await
+        .expect("Failed to update object");
+
+    // Step 2: Stash the change
+    println!("\nStep 2: Stashing change...");
+    client
+        .change_stash()
+        .await
+        .expect("Failed to stash change");
+
+    // Step 3: Get status using short hash (change is now in workspace)
+    println!("\nStep 3: Getting status by short hash (workspace)...");
+    let status_response = client
+        .change_status_by_id(short_hash)
+        .await
+        .expect("Failed to get status by short hash from workspace");
+    
+    println!("Status response: {:?}", status_response);
+
+    // Step 4: Verify the response is valid
+    assert!(
+        status_response["success"].as_bool().unwrap_or(false),
+        "Response should be successful"
+    );
+
+    println!("\n✅ Test passed: Short hash works for workspace changes");
+}

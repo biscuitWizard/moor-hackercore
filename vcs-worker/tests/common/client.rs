@@ -166,8 +166,14 @@ impl VcsTestClient {
     }
 
     /// Get change status
+    /// Get the status of the current change (or a specific change by ID)
     pub async fn change_status(&self) -> Result<Value, Box<dyn std::error::Error>> {
         self.rpc_call("change/status", vec![]).await
+    }
+
+    /// Get the status of a specific change by ID
+    pub async fn change_status_by_id(&self, change_id: &str) -> Result<Value, Box<dyn std::error::Error>> {
+        self.rpc_call("change/status", vec![Value::String(change_id.to_string())]).await
     }
 
     /// Submit/commit a change
