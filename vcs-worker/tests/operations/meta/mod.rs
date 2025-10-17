@@ -8,6 +8,7 @@
 //! - filtering_get: Tests for filtering during object get operations
 //! - filtering_update: Tests for filtering during object update operations
 //! - diff: Tests for diff behavior with ignored properties/verbs
+//! - meta_tracking: Tests for meta change tracking in change/status and object/history
 
 mod add;
 mod clear;
@@ -15,4 +16,5 @@ mod diff;
 mod filtering_get;
 mod filtering_update;
 mod lifecycle;
+mod meta_tracking;
 mod remove;

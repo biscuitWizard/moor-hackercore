@@ -30,6 +30,14 @@ pub struct ObjectChange {
     pub props_renamed: HashMap<String, String>,
     /// Properties that were deleted
     pub props_deleted: HashSet<String>,
+    /// Meta: Properties that became ignored in this change
+    pub meta_ignored_properties: HashSet<String>,
+    /// Meta: Verbs that became ignored in this change
+    pub meta_ignored_verbs: HashSet<String>,
+    /// Meta: Properties that were unignored in this change
+    pub meta_unignored_properties: HashSet<String>,
+    /// Meta: Verbs that were unignored in this change
+    pub meta_unignored_verbs: HashSet<String>,
 }
 
 /// Represents a complete set of object changes/deltas for communication to MOO
@@ -60,6 +68,10 @@ impl ObjectChange {
             props_added: HashSet::new(),
             props_renamed: HashMap::new(),
             props_deleted: HashSet::new(),
+            meta_ignored_properties: HashSet::new(),
+            meta_ignored_verbs: HashSet::new(),
+            meta_unignored_properties: HashSet::new(),
+            meta_unignored_verbs: HashSet::new(),
         }
     }
 
@@ -94,6 +106,11 @@ impl ObjectChange {
                 .iter()
                 .map(|(k, v)| (v.clone(), k.clone()))
                 .collect(),
+            // Meta changes invert: ignored ↔ unignored
+            meta_ignored_properties: self.meta_unignored_properties.clone(),
+            meta_ignored_verbs: self.meta_unignored_verbs.clone(),
+            meta_unignored_properties: self.meta_ignored_properties.clone(),
+            meta_unignored_verbs: self.meta_ignored_verbs.clone(),
         }
     }
 
@@ -155,6 +172,61 @@ impl ObjectChange {
             v_str("props_deleted"),
             moor_var::v_list(&props_deleted_list),
         ));
+
+        // Build meta map if any meta changes exist
+        if !self.meta_ignored_properties.is_empty()
+            || !self.meta_ignored_verbs.is_empty()
+            || !self.meta_unignored_properties.is_empty()
+            || !self.meta_unignored_verbs.is_empty()
+        {
+            let mut meta_pairs = Vec::new();
+
+            // meta_ignored_properties
+            let meta_ignored_props_list: Vec<Var> = self
+                .meta_ignored_properties
+                .iter()
+                .map(|v| v_str(v))
+                .collect();
+            meta_pairs.push((
+                v_str("ignored_properties"),
+                moor_var::v_list(&meta_ignored_props_list),
+            ));
+
+            // meta_ignored_verbs
+            let meta_ignored_verbs_list: Vec<Var> = self
+                .meta_ignored_verbs
+                .iter()
+                .map(|v| v_str(v))
+                .collect();
+            meta_pairs.push((
+                v_str("ignored_verbs"),
+                moor_var::v_list(&meta_ignored_verbs_list),
+            ));
+
+            // meta_unignored_properties
+            let meta_unignored_props_list: Vec<Var> = self
+                .meta_unignored_properties
+                .iter()
+                .map(|v| v_str(v))
+                .collect();
+            meta_pairs.push((
+                v_str("unignored_properties"),
+                moor_var::v_list(&meta_unignored_props_list),
+            ));
+
+            // meta_unignored_verbs
+            let meta_unignored_verbs_list: Vec<Var> = self
+                .meta_unignored_verbs
+                .iter()
+                .map(|v| v_str(v))
+                .collect();
+            meta_pairs.push((
+                v_str("unignored_verbs"),
+                moor_var::v_list(&meta_unignored_verbs_list),
+            ));
+
+            pairs.push((v_str("meta"), v_map(&meta_pairs)));
+        }
 
         v_map(&pairs)
     }
@@ -404,7 +476,127 @@ pub fn compare_object_versions(
         }
     }
 
+    // Add meta changes to the object change
+    compare_meta_versions(database, obj_name, &mut object_change)?;
+
     Ok(object_change)
+}
+
+/// Compare meta object versions to determine what meta changes occurred
+/// Updates the object_change with meta_ignored_* and meta_unignored_* fields
+pub fn compare_meta_versions(
+    database: &DatabaseRef,
+    obj_name: &str,
+    object_change: &mut ObjectChange,
+) -> Result<(), ObjectsTreeError> {
+    // Get current meta version
+    let current_meta = if let Some(meta_sha256) = database
+        .refs()
+        .get_ref(VcsObjectType::MooMetaObject, obj_name, None)
+        .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
+    {
+        let yaml = database
+            .objects()
+            .get(&meta_sha256)
+            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
+            .ok_or_else(|| {
+                ObjectsTreeError::SerializationError(format!(
+                    "Meta SHA256 '{meta_sha256}' not found"
+                ))
+            })?;
+        Some(
+            database
+                .objects()
+                .parse_meta_dump(&yaml)
+                .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?,
+        )
+    } else {
+        None
+    };
+
+    // Get baseline meta version by finding the previous meta version
+    // We need to find what the meta looked like before the local change
+    let baseline_meta = {
+        // Get the current version of the meta
+        let current_meta_version = database
+            .refs()
+            .get_current_version(VcsObjectType::MooMetaObject, obj_name)
+            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+
+        if let Some(current_version) = current_meta_version {
+            // Get the previous version
+            let baseline_version = current_version.saturating_sub(1);
+            if baseline_version > 0 {
+                if let Some(baseline_sha256) = database
+                    .refs()
+                    .get_ref(
+                        VcsObjectType::MooMetaObject,
+                        obj_name,
+                        Some(baseline_version),
+                    )
+                    .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
+                {
+                    let yaml = database
+                        .objects()
+                        .get(&baseline_sha256)
+                        .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
+                        .ok_or_else(|| {
+                            ObjectsTreeError::SerializationError(format!(
+                                "Baseline meta SHA256 '{baseline_sha256}' not found"
+                            ))
+                        })?;
+                    Some(
+                        database
+                            .objects()
+                            .parse_meta_dump(&yaml)
+                            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?,
+                    )
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    };
+
+    // Compare the two meta objects
+    let current_meta = current_meta.unwrap_or_default();
+    let baseline_meta = baseline_meta.unwrap_or_default();
+
+    // Find properties that became ignored
+    for prop in &current_meta.ignored_properties {
+        if !baseline_meta.ignored_properties.contains(prop) {
+            object_change.meta_ignored_properties.insert(prop.clone());
+        }
+    }
+
+    // Find properties that became unignored
+    for prop in &baseline_meta.ignored_properties {
+        if !current_meta.ignored_properties.contains(prop) {
+            object_change
+                .meta_unignored_properties
+                .insert(prop.clone());
+        }
+    }
+
+    // Find verbs that became ignored
+    for verb in &current_meta.ignored_verbs {
+        if !baseline_meta.ignored_verbs.contains(verb) {
+            object_change.meta_ignored_verbs.insert(verb.clone());
+        }
+    }
+
+    // Find verbs that became unignored
+    for verb in &baseline_meta.ignored_verbs {
+        if !current_meta.ignored_verbs.contains(verb) {
+            object_change.meta_unignored_verbs.insert(verb.clone());
+        }
+    }
+
+    Ok(())
 }
 
 /// Apply hints to convert added/deleted verbs/properties to renames
@@ -751,6 +943,53 @@ pub fn process_change_for_diff(
             prop_hints_ref,
         )?;
         diff_model.add_object_change(object_change);
+    }
+
+    // Process meta-only changes (meta objects that were added/modified without MOO object changes)
+    // We need to check for meta objects that have changes but their corresponding MOO object
+    // wasn't in the added/modified lists
+    let mut processed_objects = std::collections::HashSet::new();
+    
+    // Collect all MOO object names we've already processed
+    for obj_info in change.added_objects.iter()
+        .chain(change.modified_objects.iter())
+        .filter(|o| o.object_type == VcsObjectType::MooObject)
+    {
+        processed_objects.insert(obj_info.name.clone());
+    }
+
+    // Now look for meta objects whose MOO objects weren't processed
+    for obj_info in change
+        .added_objects
+        .iter()
+        .chain(change.modified_objects.iter())
+        .filter(|o| o.object_type == VcsObjectType::MooMetaObject)
+    {
+        // Only process if the corresponding MOO object wasn't already processed
+        if !processed_objects.contains(&obj_info.name) {
+            let obj_name = obj_id_to_object_name(&obj_info.name, Some(&obj_info.name));
+            
+            // Create an ObjectChange with just meta tracking
+            let mut object_change = ObjectChange::new(obj_name);
+            
+            // Compare meta versions to populate meta fields
+            if let Err(e) = compare_meta_versions(database, &obj_info.name, &mut object_change) {
+                tracing::warn!(
+                    "Failed to compare meta versions for '{}': {}",
+                    obj_info.name,
+                    e
+                );
+            }
+            
+            // Only add if there are actual meta changes
+            if !object_change.meta_ignored_properties.is_empty()
+                || !object_change.meta_ignored_verbs.is_empty()
+                || !object_change.meta_unignored_properties.is_empty()
+                || !object_change.meta_unignored_verbs.is_empty()
+            {
+                diff_model.add_object_change(object_change);
+            }
+        }
     }
 
     Ok(())
