@@ -1912,6 +1912,7 @@ dependencies = [
  "paste",
  "planus",
  "rand",
+ "semver",
  "serde",
  "tempfile",
  "thiserror 2.0.17",
