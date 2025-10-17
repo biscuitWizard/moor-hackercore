@@ -1,4 +1,4 @@
-use crate::object_diff::compare_object_versions;
+use crate::object_diff::{compare_object_versions, ObjectChange};
 use crate::operations::{Operation, OperationExample, OperationParameter, OperationRoute};
 use axum::http::Method;
 use serde::{Deserialize, Serialize};
@@ -158,42 +158,91 @@ impl ObjectHistoryOperation {
                 }
             }
 
+            // Check for meta-only changes (meta objects that were added/modified without MOO object changes)
+            let mut meta_only_affected = false;
+            if !object_affected {
+                // Look for meta objects whose MOO objects weren't processed
+                for obj_info in change
+                    .added_objects
+                    .iter()
+                    .chain(change.modified_objects.iter())
+                    .filter(|o| o.object_type == VcsObjectType::MooMetaObject)
+                {
+                    if tracked_names.contains(&obj_info.name) {
+                        object_affected = true;
+                        meta_only_affected = true;
+                        affected_name = Some(obj_info.name.clone());
+                        break;
+                    }
+                }
+            }
+
             // If this change affected the object, add it to history
             if object_affected {
                 // Get detailed object changes
                 let object_change = if !object_deleted {
-                    // Find the object version in this change (check against all tracked names)
-                    let obj_info = change
-                        .added_objects
-                        .iter()
-                        .chain(change.modified_objects.iter())
-                        .find(|obj| {
-                            obj.object_type == VcsObjectType::MooObject
-                                && tracked_names.contains(&obj.name)
-                        });
-
-                    if let Some(obj_info) = obj_info {
-                        // Get the object name to use for comparison
-                        let comparison_name = affected_name.as_ref().unwrap_or(&request.object_name);
-
-                        match compare_object_versions(
-                            &self.database,
-                            comparison_name,
-                            obj_info.version,
-                            Some(&change.verb_rename_hints),
-                            Some(&change.property_rename_hints),
+                    if meta_only_affected {
+                        // For meta-only changes, create an ObjectChange with just meta tracking
+                        let mut object_change = ObjectChange::new(
+                            affected_name.as_ref().unwrap_or(&request.object_name).clone()
+                        );
+                        
+                        // Compare meta versions to populate meta fields
+                        if let Err(e) = crate::object_diff::compare_meta_versions(
+                            &self.database, 
+                            affected_name.as_ref().unwrap_or(&request.object_name), 
+                            &mut object_change
                         ) {
-                            Ok(change) => Some(change),
-                            Err(e) => {
-                                error!(
-                                    "Failed to get detailed changes for '{}' at version {}: {}",
-                                    comparison_name, obj_info.version, e
-                                );
-                                None
-                            }
+                            error!(
+                                "Failed to compare meta versions for '{}': {}",
+                                affected_name.as_ref().unwrap_or(&request.object_name), e
+                            );
+                        }
+                        
+                        // Only return if there are actual meta changes
+                        if !object_change.meta_ignored_properties.is_empty()
+                            || !object_change.meta_ignored_verbs.is_empty()
+                            || !object_change.meta_unignored_properties.is_empty()
+                            || !object_change.meta_unignored_verbs.is_empty()
+                        {
+                            Some(object_change)
+                        } else {
+                            None
                         }
                     } else {
-                        None
+                        // Find the object version in this change (check against all tracked names)
+                        let obj_info = change
+                            .added_objects
+                            .iter()
+                            .chain(change.modified_objects.iter())
+                            .find(|obj| {
+                                obj.object_type == VcsObjectType::MooObject
+                                    && tracked_names.contains(&obj.name)
+                            });
+
+                        if let Some(obj_info) = obj_info {
+                            // Get the object name to use for comparison
+                            let comparison_name = affected_name.as_ref().unwrap_or(&request.object_name);
+
+                            match compare_object_versions(
+                                &self.database,
+                                comparison_name,
+                                obj_info.version,
+                                Some(&change.verb_rename_hints),
+                                Some(&change.property_rename_hints),
+                            ) {
+                                Ok(change) => Some(change),
+                                Err(e) => {
+                                    error!(
+                                        "Failed to get detailed changes for '{}' at version {}: {}",
+                                        comparison_name, obj_info.version, e
+                                    );
+                                    None
+                                }
+                            }
+                        } else {
+                            None
+                        }
                     }
                 } else {
                     None
