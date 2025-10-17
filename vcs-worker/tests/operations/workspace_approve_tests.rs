@@ -51,9 +51,8 @@ async fn test_approve_change_from_workspace_adds_to_index() {
     let (change_id, _) = db.require_top_change();
     println!("✅ Change created: {}", change_id);
 
-    // Step 3: Verify change is initially NOT in index/list (only Local changes show up)
-    // Actually, Local changes should show up
-    println!("\nStep 3: Verifying change appears in index/list initially...");
+    // Step 3: Verify change is initially NOT in index/list (local changes are filtered out)
+    println!("\nStep 3: Verifying local change does NOT appear in index/list...");
     let initial_list = client
         .index_list(None, None)
         .await
@@ -62,10 +61,10 @@ async fn test_approve_change_from_workspace_adds_to_index() {
     let initial_changes = parse_change_list(&initial_list);
     assert_eq!(
         initial_changes.len(),
-        1,
-        "Should have the local change in index"
+        0,
+        "Should have no changes in index (local changes are filtered out)"
     );
-    println!("✅ Local change appears in index/list");
+    println!("✅ Local change correctly filtered out from index/list");
 
     // Step 4: Submit the change (moves to workspace with Review status, removes from index)
     println!("\nStep 4: Submitting change (moves to workspace)...");
@@ -92,8 +91,8 @@ async fn test_approve_change_from_workspace_adds_to_index() {
     );
     println!("✅ Change in workspace with Review status");
 
-    // Step 6: Verify change is REMOVED from index/list (not in change_order anymore)
-    println!("\nStep 6: Verifying change is removed from index/list...");
+    // Step 6: Verify change is still NOT in index/list (local changes filtered out)
+    println!("\nStep 6: Verifying change is still not in index/list (local changes filtered out)...");
     let list_after_submit = client
         .index_list(None, None)
         .await
@@ -103,9 +102,9 @@ async fn test_approve_change_from_workspace_adds_to_index() {
     assert_eq!(
         changes_after_submit.len(),
         0,
-        "Change should be removed from index after submit to remote"
+        "Change should still not be in index (local changes filtered out)"
     );
-    println!("✅ Change removed from index/list after submit");
+    println!("✅ Change still not in index/list (local changes filtered out)");
 
     // Step 7: Approve the change from workspace
     println!("\nStep 7: Approving change from workspace...");
@@ -120,18 +119,25 @@ async fn test_approve_change_from_workspace_adds_to_index() {
     println!("✅ Change approved from workspace");
 
     // Step 8: Verify change is now back in index with Merged status
-    println!("\nStep 8: Verifying change is back in index...");
-    let index_change = server
-        .database()
-        .index()
-        .get_change(&change_id)
-        .expect("Failed to get change from index")
-        .expect("Change should be back in index");
+    println!("\nStep 8: Verifying change is back in index with Merged status...");
+    let list_after_approve = client
+        .index_list(None, None)
+        .await
+        .expect("Failed to get index list");
 
+    let changes_after_approve = parse_change_list(&list_after_approve);
     assert_eq!(
-        index_change.status,
-        ChangeStatus::Merged,
-        "Should have Merged status in index"
+        changes_after_approve.len(),
+        1,
+        "Should have 1 merged change in index"
+    );
+    assert_eq!(
+        changes_after_approve[0].change_id, change_id,
+        "Approved change should be in index"
+    );
+    assert_eq!(
+        changes_after_approve[0].status, "merged",
+        "Approved change should have merged status"
     );
     println!("✅ Change back in index with Merged status");
 
@@ -307,8 +313,8 @@ async fn test_multiple_workspace_approvals_maintain_order() {
 
     println!("✅ Second change approved");
 
-    // Step 8: Verify both changes in index in correct order
-    println!("\nStep 8: Verifying both changes in correct chronological order...");
+    // Step 8: Verify both changes in index in reverse chronological order (newest first)
+    println!("\nStep 8: Verifying both changes in reverse chronological order (newest first)...");
     let list_after_second = client
         .index_list(None, None)
         .await
@@ -318,26 +324,27 @@ async fn test_multiple_workspace_approvals_maintain_order() {
     assert_eq!(
         changes_after_second.len(),
         2,
-        "Should have 2 changes in index"
+        "Should have 2 merged changes in index"
+    );
+    // Changes should be in reverse chronological order (newest first)
+    assert_eq!(
+        changes_after_second[0].change_id, second_change_id,
+        "Second approved should be first (newest first)"
     );
     assert_eq!(
-        changes_after_second[0].change_id, first_change_id,
-        "First approved should be first"
-    );
-    assert_eq!(
-        changes_after_second[1].change_id, second_change_id,
-        "Second approved should be second"
+        changes_after_second[1].change_id, first_change_id,
+        "First approved should be second (oldest last)"
     );
     assert_eq!(
         changes_after_second[0].status, "merged",
-        "First should be merged"
+        "Second should be merged"
     );
     assert_eq!(
         changes_after_second[1].status, "merged",
-        "Second should be merged"
+        "First should be merged"
     );
 
-    println!("✅ Both changes appear in correct chronological order");
+    println!("✅ Both changes appear in reverse chronological order (newest first)");
 
     println!("\n✅ Test passed: Multiple workspace approvals maintain order");
 }

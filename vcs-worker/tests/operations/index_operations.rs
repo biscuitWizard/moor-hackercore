@@ -1,8 +1,8 @@
 //! Integration tests for index operations (list, calc_delta, update)
 //!
 //! These tests verify:
-//! 1. index/list returns all changes in chronological order
-//! 2. index/list includes both local and merged changes
+//! 1. index/list returns merged changes in reverse chronological order (newest first)
+//! 2. index/list only shows merged changes (filters out local, review, idle)
 //! 3. Approved changes remain visible in index/list
 
 use crate::common::*;
@@ -15,7 +15,7 @@ async fn test_index_list_shows_approved_changes() {
     let client = server.client();
     let db = server.db_assertions();
 
-    println!("Test: index/list should include approved (merged) changes");
+    println!("Test: index/list should show merged changes in reverse chronological order (newest first)");
 
     // Step 1: Verify empty change list initially
     println!("\nStep 1: Verifying empty change list initially...");
@@ -60,7 +60,7 @@ async fn test_index_list_shows_approved_changes() {
 
     // Parse the list and check for the first change
     let changes = parse_change_list(&list_after_first);
-    assert_eq!(changes.len(), 1, "Should have 1 change in the list");
+    assert_eq!(changes.len(), 1, "Should have 1 merged change in the list");
     assert_eq!(
         changes[0].change_id, first_change_id,
         "First change should be in the list"
@@ -109,28 +109,28 @@ async fn test_index_list_shows_approved_changes() {
 
     // Parse the list and check for both changes
     let changes = parse_change_list(&list_after_second);
-    assert_eq!(changes.len(), 2, "Should have 2 changes in the list");
+    assert_eq!(changes.len(), 2, "Should have 2 merged changes in the list");
 
-    // Changes should be in chronological order (oldest first)
+    // Changes should be in reverse chronological order (newest first)
     assert_eq!(
-        changes[0].change_id, first_change_id,
-        "First change should be first in the list"
+        changes[0].change_id, second_change_id,
+        "Second change should be first in the list (newest first)"
     );
     assert_eq!(
         changes[0].status, "merged",
-        "First change should have merged status"
-    );
-
-    assert_eq!(
-        changes[1].change_id, second_change_id,
-        "Second change should be second in the list"
-    );
-    assert_eq!(
-        changes[1].status, "merged",
         "Second change should have merged status"
     );
 
-    println!("✅ Both changes appear in index/list in chronological order");
+    assert_eq!(
+        changes[1].change_id, first_change_id,
+        "First change should be second in the list (oldest last)"
+    );
+    assert_eq!(
+        changes[1].status, "merged",
+        "First change should have merged status"
+    );
+
+    println!("✅ Both changes appear in index/list in reverse chronological order");
 
     // Step 6: Create a third change but DON'T approve it
     println!("\nStep 6: Creating third change without approving...");
@@ -144,12 +144,12 @@ async fn test_index_list_shows_approved_changes() {
         .await
         .expect("Failed to update object");
 
-    let (third_change_id, _) = db.require_top_change();
+    let (_third_change_id, _) = db.require_top_change();
 
     println!("✅ Third change created (not approved)");
 
-    // Step 7: Verify all three changes appear in index/list (2 merged, 1 local)
-    println!("\nStep 7: Verifying all three changes appear in index/list...");
+    // Step 7: Verify only merged changes appear in index/list (local changes are filtered out)
+    println!("\nStep 7: Verifying only merged changes appear in index/list (local changes filtered out)...");
     let list_with_local = client
         .index_list(None, None)
         .await
@@ -157,39 +157,34 @@ async fn test_index_list_shows_approved_changes() {
 
     println!("List with local change: {:?}", list_with_local);
 
-    // Parse the list and check for all three changes
+    // Parse the list and check for only merged changes
     let changes = parse_change_list(&list_with_local);
     assert_eq!(
         changes.len(),
-        3,
-        "Should have 3 changes in the list (2 merged + 1 local)"
+        2,
+        "Should have 2 merged changes in the list (local changes are filtered out)"
     );
 
+    // Changes should be in reverse chronological order (newest first)
     assert_eq!(
-        changes[0].change_id, first_change_id,
-        "First change should be first"
+        changes[0].change_id, second_change_id,
+        "Second change should be first (newest first)"
     );
-    assert_eq!(changes[0].status, "merged", "First change should be merged");
+    assert_eq!(changes[0].status, "merged", "Second change should be merged");
 
     assert_eq!(
-        changes[1].change_id, second_change_id,
-        "Second change should be second"
+        changes[1].change_id, first_change_id,
+        "First change should be second (oldest last)"
     );
     assert_eq!(
         changes[1].status, "merged",
-        "Second change should be merged"
+        "First change should be merged"
     );
 
-    assert_eq!(
-        changes[2].change_id, third_change_id,
-        "Third change should be last"
-    );
-    assert_eq!(changes[2].status, "local", "Third change should be local");
-
-    println!("✅ All three changes appear in index/list (2 merged, 1 local)");
+    println!("✅ Only merged changes appear in index/list (local changes filtered out)");
 
     println!(
-        "\n✅ Test passed: index/list includes all local and merged changes in the working index"
+        "\n✅ Test passed: index/list shows only merged changes in reverse chronological order (newest first)"
     );
 }
 
