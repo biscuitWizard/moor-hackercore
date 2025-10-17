@@ -62,238 +62,6 @@ impl ObjectDiffOperation {
         Self { database }
     }
 
-    /// Get the object definition at a specific change
-    fn get_object_at_change(
-        &self,
-        object_name: &str,
-        change_id: &str,
-    ) -> Result<ObjectDefinition, ObjectsTreeError> {
-        info!(
-            "Getting object '{}' at change ID '{}'",
-            object_name, change_id
-        );
-
-        // Get the change
-        let change = self
-            .database
-            .index()
-            .get_change(change_id)
-            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
-            .ok_or_else(|| {
-                ObjectsTreeError::SerializationError(format!("Change '{}' not found", change_id))
-            })?;
-
-        // Find the object in the change's modified or added objects
-        let object_info = change
-            .modified_objects
-            .iter()
-            .chain(change.added_objects.iter())
-            .find(|obj| {
-                obj.object_type == VcsObjectType::MooObject && obj.name == object_name
-            })
-            .ok_or_else(|| {
-                ObjectsTreeError::SerializationError(format!(
-                    "Object '{}' not found in change '{}'",
-                    object_name, change_id
-                ))
-            })?;
-
-        // Get the SHA256 for this specific version
-        let sha256 = self
-            .database
-            .refs()
-            .get_ref(
-                VcsObjectType::MooObject,
-                object_name,
-                Some(object_info.version),
-            )
-            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
-            .ok_or_else(|| {
-                ObjectsTreeError::SerializationError(format!(
-                    "Object '{}' version {} not found in refs",
-                    object_name, object_info.version
-                ))
-            })?;
-
-        // Get the object content
-        let object_dump = self
-            .database
-            .objects()
-            .get(&sha256)
-            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
-            .ok_or_else(|| {
-                ObjectsTreeError::SerializationError(format!(
-                    "Object '{}' content not found",
-                    object_name
-                ))
-            })?;
-
-        // Parse the object definition
-        self.database
-            .objects()
-            .parse_object_dump(&object_dump)
-            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))
-    }
-
-    /// Compute the baseline state of an object at a specific point in history
-    /// If baseline_change_id is None, compiles up to (but not including) target_change_id
-    /// If baseline_change_id is Some, compiles up to and including baseline_change_id
-    fn get_baseline_object(
-        &self,
-        object_name: &str,
-        target_change_id: &str,
-        baseline_change_id: Option<&str>,
-    ) -> Result<Option<ObjectDefinition>, ObjectsTreeError> {
-        info!(
-            "Computing baseline state for object '{}' (target: {}, baseline: {:?})",
-            object_name, target_change_id, baseline_change_id
-        );
-
-        // Get the change order
-        let change_order = self
-            .database
-            .index()
-            .get_change_order()
-            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
-
-        // Find the position to stop at
-        let stop_position = if let Some(baseline_id) = baseline_change_id {
-            // Find the baseline change position and include it
-            change_order
-                .iter()
-                .position(|id| id == baseline_id)
-                .map(|pos| pos + 1) // +1 to include the baseline change
-                .ok_or_else(|| {
-                    ObjectsTreeError::SerializationError(format!(
-                        "Baseline change '{}' not found in change order",
-                        baseline_id
-                    ))
-                })?
-        } else {
-            // Find the target change position and exclude it
-            change_order
-                .iter()
-                .position(|id| id == target_change_id)
-                .ok_or_else(|| {
-                    ObjectsTreeError::SerializationError(format!(
-                        "Target change '{}' not found in change order",
-                        target_change_id
-                    ))
-                })?
-        };
-
-        info!("Computing baseline state up to position {}", stop_position);
-
-        // Build state up to stop_position by processing changes chronologically
-        let mut object_state: Option<(String, u64)> = None; // (name, version)
-        let mut object_exists = false;
-
-        for change_id in change_order.iter().take(stop_position) {
-            let change = self
-                .database
-                .index()
-                .get_change(change_id)
-                .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
-                .ok_or_else(|| {
-                    ObjectsTreeError::SerializationError(format!(
-                        "Change '{}' not found",
-                        change_id
-                    ))
-                })?;
-
-            // Check if object was added
-            if change
-                .added_objects
-                .iter()
-                .any(|obj| obj.object_type == VcsObjectType::MooObject && obj.name == object_name)
-            {
-                object_state = Some((object_name.to_string(), 1));
-                object_exists = true;
-                info!("Object '{}' was added in change '{}'", object_name, change_id);
-            }
-
-            // Check if object was modified
-            if let Some(obj_info) = change
-                .modified_objects
-                .iter()
-                .find(|obj| obj.object_type == VcsObjectType::MooObject && obj.name == object_name)
-            {
-                if let Some((name, version)) = &object_state {
-                    object_state = Some((name.clone(), version + 1));
-                } else {
-                    // Modified but not seen before, treat as existing
-                    object_state = Some((object_name.to_string(), obj_info.version));
-                }
-                object_exists = true;
-                info!("Object '{}' was modified in change '{}'", object_name, change_id);
-            }
-
-            // Check if object was renamed
-            if let Some(renamed) = change.renamed_objects.iter().find(|r| {
-                r.from.object_type == VcsObjectType::MooObject && r.from.name == object_name
-            }) {
-                if let Some((_, version)) = object_state {
-                    object_state = Some((renamed.to.name.clone(), version));
-                    info!(
-                        "Object '{}' was renamed to '{}' in change '{}'",
-                        object_name, renamed.to.name, change_id
-                    );
-                }
-            }
-
-            // Check if object was deleted
-            if change
-                .deleted_objects
-                .iter()
-                .any(|obj| obj.object_type == VcsObjectType::MooObject && obj.name == object_name)
-            {
-                object_state = None;
-                object_exists = false;
-                info!("Object '{}' was deleted in change '{}'", object_name, change_id);
-            }
-        }
-
-        // If object doesn't exist at this point, return None
-        if !object_exists || object_state.is_none() {
-            info!("Object '{}' does not exist in baseline state", object_name);
-            return Ok(None);
-        }
-
-        let (final_name, final_version) = object_state.unwrap();
-
-        // Get the object at this state
-        let sha256 = self
-            .database
-            .refs()
-            .get_ref(VcsObjectType::MooObject, &final_name, Some(final_version))
-            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
-            .ok_or_else(|| {
-                ObjectsTreeError::SerializationError(format!(
-                    "Baseline object '{}' version {} not found in refs",
-                    final_name, final_version
-                ))
-            })?;
-
-        let object_dump = self
-            .database
-            .objects()
-            .get(&sha256)
-            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
-            .ok_or_else(|| {
-                ObjectsTreeError::SerializationError(format!(
-                    "Baseline object '{}' content not found",
-                    final_name
-                ))
-            })?;
-
-        let object_def = self
-            .database
-            .objects()
-            .parse_object_dump(&object_dump)
-            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
-
-        Ok(Some(object_def))
-    }
 
     /// Compute verb-level diff using Myers algorithm
     fn compute_verb_diff(&self, old_lines: &[String], new_lines: &[String]) -> Vec<DiffLine> {
@@ -443,37 +211,43 @@ impl ObjectDiffOperation {
             );
         }
 
-        // Get the target object state
-        let target_obj = self.get_object_at_change(&request.object_name, &target_change_id)?;
+        // Get the change to find the object version
+        let change = self
+            .database
+            .index()
+            .get_change(&target_change_id)
+            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
+            .ok_or_else(|| {
+                ObjectsTreeError::SerializationError(format!(
+                    "Change '{}' not found",
+                    target_change_id
+                ))
+            })?;
 
-        // Get the baseline object state
-        let baseline_obj = self.get_baseline_object(
+        // Find the object in the change
+        let object_info = change
+            .modified_objects
+            .iter()
+            .chain(change.added_objects.iter())
+            .find(|obj| {
+                obj.object_type == VcsObjectType::MooObject && obj.name == request.object_name
+            })
+            .ok_or_else(|| {
+                ObjectsTreeError::SerializationError(format!(
+                    "Object '{}' not found in change '{}'",
+                    request.object_name, target_change_id
+                ))
+            })?;
+
+        // Use compare_object_versions to get the correct diff (same as change/status)
+        use crate::object_diff::compare_object_versions;
+        let object_change = compare_object_versions(
+            &self.database,
             &request.object_name,
-            &target_change_id,
-            baseline_change_id.as_deref(),
+            object_info.version,
+            Some(&change.verb_rename_hints),
+            Some(&change.property_rename_hints),
         )?;
-
-        // Use object_diff to identify which verbs changed
-        let mut object_change = ObjectChange::new(request.object_name.clone());
-        
-        if let Some(ref baseline) = baseline_obj {
-            compare_object_definitions_with_meta(
-                baseline,
-                &target_obj,
-                &mut object_change,
-                None,
-                None,
-                None,
-                None,
-            );
-        } else {
-            // No baseline - all verbs are new
-            for verb in &target_obj.verbs {
-                if let Some(first_name) = verb.names.first() {
-                    object_change.verbs_added.insert(first_name.as_string());
-                }
-            }
-        }
 
         info!(
             "Found {} modified verbs, {} added verbs, {} deleted verbs, {} renamed verbs",
@@ -482,6 +256,75 @@ impl ObjectDiffOperation {
             object_change.verbs_deleted.len(),
             object_change.verbs_renamed.len()
         );
+
+        // Get the target object definition for decompiling verbs
+        let target_sha256 = self
+            .database
+            .refs()
+            .get_ref(
+                VcsObjectType::MooObject,
+                &request.object_name,
+                Some(object_info.version),
+            )
+            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
+            .ok_or_else(|| {
+                ObjectsTreeError::SerializationError(format!(
+                    "Object '{}' version {} not found in refs",
+                    request.object_name, object_info.version
+                ))
+            })?;
+
+        let target_content = self
+            .database
+            .objects()
+            .get(&target_sha256)
+            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
+            .ok_or_else(|| {
+                ObjectsTreeError::SerializationError(format!(
+                    "Object '{}' content not found",
+                    request.object_name
+                ))
+            })?;
+
+        let target_obj = self
+            .database
+            .objects()
+            .parse_object_dump(&target_content)
+            .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+
+        // Get baseline object if there's a previous version
+        let baseline_version = object_info.version.saturating_sub(1);
+        let baseline_obj = if baseline_version > 0 {
+            let baseline_sha256 = self
+                .database
+                .refs()
+                .get_ref(VcsObjectType::MooObject, &request.object_name, Some(baseline_version))
+                .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
+
+            if let Some(sha256) = baseline_sha256 {
+                let baseline_content = self
+                    .database
+                    .objects()
+                    .get(&sha256)
+                    .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
+                    .ok_or_else(|| {
+                        ObjectsTreeError::SerializationError(format!(
+                            "Baseline object content not found"
+                        ))
+                    })?;
+
+                Some(
+                    self.database
+                        .objects()
+                        .parse_object_dump(&baseline_content)
+                        .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?,
+                )
+            } else {
+                None
+            }
+        } else {
+            None
+        };
 
         // Build the response with verb diffs
         let mut verb_changes = Vec::new();
