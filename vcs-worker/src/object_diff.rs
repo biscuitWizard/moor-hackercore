@@ -676,46 +676,66 @@ pub fn compare_object_definitions_with_meta(
         None
     };
     // Compare verbs
+    // Use a map from first verb name to the verb definition to track each verb uniquely
     let baseline_verbs: HashMap<String, &moor_compiler::ObjVerbDef> = baseline
         .verbs
         .iter()
-        .flat_map(|v| v.names.iter().map(move |name| (name.as_string(), v)))
+        .filter_map(|v| {
+            // Use the first name as the identifier for this verb
+            v.names.first().map(|name| (name.as_string(), v))
+        })
         .collect();
 
     let local_verbs: HashMap<String, &moor_compiler::ObjVerbDef> = local
         .verbs
         .iter()
-        .flat_map(|v| v.names.iter().map(move |name| (name.as_string(), v)))
+        .filter_map(|v| {
+            // Use the first name as the identifier for this verb
+            v.names.first().map(|name| (name.as_string(), v))
+        })
         .collect();
 
     // Find added, modified, and deleted verbs
-    for (verb_name, local_verb) in &local_verbs {
-        if let Some(baseline_verb) = baseline_verbs.get(verb_name) {
+    // We track which baseline verbs have been matched to avoid marking them as deleted
+    let mut matched_baseline_verbs: HashSet<String> = HashSet::new();
+
+    for (first_name, local_verb) in &local_verbs {
+        // Check if this verb exists in baseline by looking for any matching name
+        let baseline_match = baseline_verbs.iter().find(|(_, baseline_verb)| {
+            // Check if any name from baseline_verb matches any name from local_verb
+            baseline_verb.names.iter().any(|bn| 
+                local_verb.names.iter().any(|ln| bn.as_string() == ln.as_string())
+            )
+        });
+
+        if let Some((baseline_first_name, baseline_verb)) = baseline_match {
+            matched_baseline_verbs.insert(baseline_first_name.clone());
+            
             // Verb exists in both - check if it's modified
             if verbs_differ(baseline_verb, local_verb) {
-                object_change.verbs_modified.insert(verb_name.clone());
+                object_change.verbs_modified.insert(first_name.clone());
             }
         } else {
-            // Verb is new
-            object_change.verbs_added.insert(verb_name.clone());
+            // Verb is new (no matching names in baseline)
+            object_change.verbs_added.insert(first_name.clone());
         }
     }
 
-    for verb_name in baseline_verbs.keys() {
-        if !local_verbs.contains_key(verb_name) {
-            // Verb is missing - check if it's ignored before marking as deleted
-            let is_ignored = meta
-                .as_ref()
-                .map(|m| m.ignored_verbs.contains(verb_name))
-                .unwrap_or(false);
+    // Check for deleted verbs (those in baseline but not matched in local)
+    for (baseline_first_name, baseline_verb) in &baseline_verbs {
+        if !matched_baseline_verbs.contains(baseline_first_name) {
+            // Check if any name from this verb is ignored
+            let is_ignored = meta.as_ref().map(|m| {
+                baseline_verb.names.iter().any(|name| m.ignored_verbs.contains(&name.as_string()))
+            }).unwrap_or(false);
 
             if !is_ignored {
                 // Verb was actually deleted (not just ignored)
-                object_change.verbs_deleted.insert(verb_name.clone());
+                object_change.verbs_deleted.insert(baseline_first_name.clone());
             } else {
                 tracing::debug!(
                     "Verb '{}' is missing but ignored in meta, not marking as deleted",
-                    verb_name
+                    baseline_first_name
                 );
             }
         }

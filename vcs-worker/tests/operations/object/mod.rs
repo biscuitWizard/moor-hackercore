@@ -12,6 +12,7 @@
 //! - rename_workflow_advanced_tests: Advanced rename workflow tests (rename→modify, rename→approve, etc.)
 //! - hint_tests: Tests for verb and property rename hints system
 //! - switch_tests: Tests for object/switch operation (moving objects between changes)
+//! - object_diff_tests: Unit tests for object_diff module (verb counting with multiple names)
 
 mod crud;
 mod delete_tests;
@@ -20,6 +21,7 @@ mod hint_tests;
 mod history_tests;
 mod lifecycle;
 mod list;
+mod object_diff_tests;
 mod rename_edge_cases_tests;
 mod rename_modified_object_refs_test;
 mod rename_update_integration;
