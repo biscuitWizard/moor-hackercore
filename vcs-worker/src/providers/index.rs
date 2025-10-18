@@ -75,6 +75,12 @@ pub trait IndexProvider: Send + Sync {
     /// Compute complete object list by walking through all changes chronologically
     fn compute_complete_object_list(&self) -> ProviderResult<Vec<crate::types::ObjectInfo>>;
 
+    /// Compute object state at a specific change ID by walking through history up to and including that change
+    fn compute_object_state_at_change(
+        &self,
+        change_id: &str,
+    ) -> ProviderResult<std::collections::HashMap<String, u64>>;
+
     // ===== SOURCE METHODS =====
     /// Get the source URL if this is a clone
     fn get_source(&self) -> ProviderResult<Option<String>>;
@@ -659,6 +665,76 @@ impl IndexProvider for IndexProviderImpl {
         info!("Final object list contains {} objects", object_list.len());
 
         Ok(object_list)
+    }
+
+    fn compute_object_state_at_change(
+        &self,
+        change_id: &str,
+    ) -> ProviderResult<std::collections::HashMap<String, u64>> {
+        info!(
+            "Computing object state at change ID '{}'",
+            change_id
+        );
+
+        // Get all changes in chronological order
+        let changes_order = self.get_change_order_internal()?;
+
+        // Find the position of the target change in the order
+        let target_position = changes_order
+            .iter()
+            .position(|id| id == change_id)
+            .ok_or_else(|| {
+                ProviderError::SerializationError(format!(
+                    "Change '{}' not found in change order",
+                    change_id
+                ))
+            })?;
+
+        info!(
+            "Change '{}' found at position {} of {} total changes",
+            change_id,
+            target_position,
+            changes_order.len()
+        );
+
+        // Use the change operation processor to build state up to this change
+        let mut processor = Self::create_change_processor();
+
+        // Walk through changes up to and including the target change
+        for (idx, change_id_iter) in changes_order.iter().enumerate() {
+            if idx > target_position {
+                break;
+            }
+
+            match self.get_change(change_id_iter)? {
+                Some(change) => {
+                    info!(
+                        "Processing change '{}' ({}) at position {}/{}: {} added, {} modified, {} deleted, {} renamed",
+                        change.id,
+                        Self::format_change_status(&change.status),
+                        idx + 1,
+                        target_position + 1,
+                        change.added_objects.len(),
+                        change.modified_objects.len(),
+                        change.deleted_objects.len(),
+                        change.renamed_objects.len()
+                    );
+
+                    processor.process_change(&change);
+                }
+                None => {
+                    warn!("Change '{}' not found in database", change_id_iter);
+                }
+            }
+        }
+
+        info!(
+            "Computed state at change '{}' contains {} objects",
+            change_id,
+            processor.objects.len()
+        );
+
+        Ok(processor.objects)
     }
 
     fn get_source(&self) -> ProviderResult<Option<String>> {

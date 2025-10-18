@@ -43,33 +43,28 @@ impl ObjectGetOperation {
                 request.object_name, resolved_change_id
             );
 
-            // Get the change to find the object version at that point
-            let change = self
+            // Compute the complete object state at this change by walking through history
+            let object_state = self
                 .database
                 .index()
-                .get_change(&resolved_change_id)
-                .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
-                .ok_or_else(|| {
-                    ObjectsTreeError::SerializationError(format!(
-                        "Change '{}' not found",
-                        resolved_change_id
-                    ))
-                })?;
+                .compute_object_state_at_change(&resolved_change_id)
+                .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?;
 
-            // Find the object in the change's modified or added objects
-            let object_info = change
-                .modified_objects
-                .iter()
-                .chain(change.added_objects.iter())
-                .find(|obj| {
-                    obj.object_type == VcsObjectType::MooObject && obj.name == request.object_name
-                })
+            // Check if the object exists in the compiled state at this change
+            let version = object_state
+                .get(&request.object_name)
+                .copied()
                 .ok_or_else(|| {
                     ObjectsTreeError::SerializationError(format!(
-                        "Object '{}' not found in change '{}'",
+                        "Object '{}' not found in compiled state at change '{}'",
                         request.object_name, resolved_change_id
                     ))
                 })?;
+
+            info!(
+                "Object '{}' exists at change '{}' with version {}",
+                request.object_name, resolved_change_id, version
+            );
 
             // Get the SHA256 for this specific version
             let sha256 = self
@@ -78,17 +73,17 @@ impl ObjectGetOperation {
                 .get_ref(
                     VcsObjectType::MooObject,
                     &request.object_name,
-                    Some(object_info.version),
+                    Some(version),
                 )
                 .map_err(|e| ObjectsTreeError::SerializationError(e.to_string()))?
                 .ok_or_else(|| {
                     ObjectsTreeError::SerializationError(format!(
                         "Object '{}' version {} not found in refs",
-                        request.object_name, object_info.version
+                        request.object_name, version
                     ))
                 })?;
 
-            (sha256, Some(object_info.version))
+            (sha256, Some(version))
         } else {
             info!("Retrieving object '{}'", request.object_name);
 

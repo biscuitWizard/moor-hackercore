@@ -1082,3 +1082,156 @@ async fn test_get_empty_lines_preserved() {
     println!("✅ Line format verified");
     println!("\n✅ Test passed: Empty lines and structure preserved in list");
 }
+
+#[tokio::test]
+async fn test_get_object_from_compiled_state_at_change() {
+    let server = TestServer::start()
+        .await
+        .expect("Failed to start test server");
+    let client = server.client();
+    let db = server.db_assertions();
+
+    println!("Test: Getting an object at a change should work even if not modified in that change (compiled state)");
+
+    // Step 1: Create and approve object_a in change1
+    println!("\nStep 1: Creating change 1 with object_a...");
+    client
+        .change_create("change1", "test_author", None)
+        .await
+        .expect("Failed to create change");
+
+    client
+        .object_update_from_file("object_a", "test_object.moo")
+        .await
+        .expect("Failed to create object");
+
+    let (change_id1, _) = db.require_top_change();
+    client
+        .change_approve(&change_id1)
+        .await
+        .expect("Failed to approve")
+        .assert_success("Approve");
+
+    println!("✅ Change 1 approved with object_a, change ID: {}", change_id1);
+
+    // Step 2: Create and approve object_b in change2 (object_a still exists but not modified)
+    println!("\nStep 2: Creating change 2 with object_b...");
+    client
+        .change_create("change2", "test_author", None)
+        .await
+        .expect("Failed to create change");
+
+    client
+        .object_update_from_file("object_b", "detailed_test_object.moo")
+        .await
+        .expect("Failed to create object");
+
+    let (change_id2, _) = db.require_top_change();
+    client
+        .change_approve(&change_id2)
+        .await
+        .expect("Failed to approve")
+        .assert_success("Approve");
+
+    println!("✅ Change 2 approved with object_b, change ID: {}", change_id2);
+
+    // Step 3: Create and approve object_c in change3 (object_a and object_b still exist)
+    println!("\nStep 3: Creating change 3 with object_c...");
+    client
+        .change_create("change3", "test_author", None)
+        .await
+        .expect("Failed to create change");
+
+    client
+        .object_update_from_file("object_c", "test_object.moo")
+        .await
+        .expect("Failed to create object");
+
+    let (change_id3, _) = db.require_top_change();
+    client
+        .change_approve(&change_id3)
+        .await
+        .expect("Failed to approve")
+        .assert_success("Approve");
+
+    println!("✅ Change 3 approved with object_c, change ID: {}", change_id3);
+
+    // Step 4: Get object_a at change2 (should work - it exists in compiled state)
+    println!("\nStep 4: Getting object_a at change 2 (not modified in that change)...");
+    let response = client
+        .object_get_at_change("object_a", &change_id2)
+        .await
+        .expect("Failed to get object_a at change2");
+
+    response.assert_success("Get object_a at change2");
+    let content = list_to_string(&response);
+    assert!(
+        content.contains("Test Object"),
+        "Should retrieve object_a from compiled state at change2"
+    );
+    println!("✅ object_a retrieved at change 2 (compiled state)");
+
+    // Step 5: Get object_a at change3 (should work - it exists in compiled state)
+    println!("\nStep 5: Getting object_a at change 3 (not modified in that change)...");
+    let response = client
+        .object_get_at_change("object_a", &change_id3)
+        .await
+        .expect("Failed to get object_a at change3");
+
+    response.assert_success("Get object_a at change3");
+    let content = list_to_string(&response);
+    assert!(
+        content.contains("Test Object"),
+        "Should retrieve object_a from compiled state at change3"
+    );
+    println!("✅ object_a retrieved at change 3 (compiled state)");
+
+    // Step 6: Get object_b at change3 (should work - it exists in compiled state)
+    println!("\nStep 6: Getting object_b at change 3 (not modified in that change)...");
+    let response = client
+        .object_get_at_change("object_b", &change_id3)
+        .await
+        .expect("Failed to get object_b at change3");
+
+    response.assert_success("Get object_b at change3");
+    let content = list_to_string(&response);
+    assert!(
+        content.contains("Detailed Test Object"),
+        "Should retrieve object_b from compiled state at change3"
+    );
+    println!("✅ object_b retrieved at change 3 (compiled state)");
+
+    // Step 7: Try to get object_b at change1 (should fail - doesn't exist yet)
+    println!("\nStep 7: Attempting to get object_b at change 1 (before it existed)...");
+    let response = client
+        .object_get_at_change("object_b", &change_id1)
+        .await
+        .expect("Request should complete");
+
+    // Should fail because object_b didn't exist yet at change1
+    let result_str = response.get_result_str().unwrap_or("");
+    assert!(
+        result_str.contains("Error") || result_str.contains("not found"),
+        "Should indicate object not found in compiled state at change1, got: {}",
+        result_str
+    );
+    println!("✅ Get failed appropriately (object didn't exist yet)");
+
+    // Step 8: Try to get object_c at change2 (should fail - doesn't exist yet)
+    println!("\nStep 8: Attempting to get object_c at change 2 (before it existed)...");
+    let response = client
+        .object_get_at_change("object_c", &change_id2)
+        .await
+        .expect("Request should complete");
+
+    // Should fail because object_c didn't exist yet at change2
+    let result_str = response.get_result_str().unwrap_or("");
+    assert!(
+        result_str.contains("Error") || result_str.contains("not found"),
+        "Should indicate object not found in compiled state at change2, got: {}",
+        result_str
+    );
+    println!("✅ Get failed appropriately (object didn't exist yet)");
+
+    println!("\n✅ Test passed: Objects can be retrieved from compiled state at any change where they existed");
+}
